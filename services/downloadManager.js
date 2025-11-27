@@ -75,6 +75,19 @@ class DownloadManager {
 
   async downloadChapters(comicId, comicTitle, chapters, source) {
     for (const chapter of chapters) {
+      // 检查是否已下载
+      if (this.downloadedChapters.has(chapter.id)) {
+        console.log(`章节 ${chapter.title} 已下载，跳过`);
+        continue;
+      }
+      
+      // 检查是否已在队列中
+      const existingTask = this.queue.find(t => t.chapterId === chapter.id);
+      if (existingTask) {
+        console.log(`章节 ${chapter.title} 已在下载队列中，跳过`);
+        continue;
+      }
+      
       const task = {
         comicId,
         comicTitle,
@@ -148,11 +161,15 @@ class DownloadManager {
   async downloadChapter(task) {
     const { comicId, chapterId, chapterTitle, source } = task;
     
+    console.log(`开始下载章节: ${chapterTitle} (ID: ${chapterId})`);
+    
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
 
+    console.log(`调用API获取章节图片: /chapters/${chapterId}/images`);
     const imagesData = await getChapterImages(chapterId, source);
     const images = imagesData.images || [];
+    console.log(`获取到 ${images.length} 张图片`);
     
     task.totalImages = images.length;
     task.currentImage = 0;

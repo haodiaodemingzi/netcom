@@ -172,6 +172,17 @@ const ChapterList = ({
     return null;
   };
 
+  const handleSingleDownload = async (chapter) => {
+    await downloadManager.downloadChapters(
+      comicId,
+      comicTitle,
+      [chapter],
+      source
+    );
+    
+    Alert.alert('成功', `已添加 "${chapter.title}" 到下载队列`);
+  };
+
   const renderChapterCard = (item) => {
     const isActive = item.id === currentChapterId;
     const isSelected = selectedChapters.has(item.id);
@@ -265,7 +276,17 @@ const ChapterList = ({
             </TouchableOpacity>
           )}
           
-          {!selectionMode && <Text style={styles.arrowIcon}>›</Text>}
+          {!selectionMode && !downloadStatus && (
+            <TouchableOpacity 
+              style={styles.downloadIconButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleSingleDownload(item);
+              }}
+            >
+              <Text style={styles.downloadIcon}>⬇</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -638,6 +659,25 @@ const styles = StyleSheet.create({
   arrowIcon: {
     fontSize: 24,
     color: '#ccc',
+  },
+  downloadIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6200EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  downloadIcon: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 
