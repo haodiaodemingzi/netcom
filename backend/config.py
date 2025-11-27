@@ -30,6 +30,18 @@ COMIC_SOURCES = {
         'enabled': True,
         'description': '国漫8漫画网',
     },
+    'xmanhua': {
+        'name': 'X漫画',
+        'base_url': 'https://xmanhua.com',
+        'enabled': True,
+        'description': 'X漫画网',
+        'proxy': {
+            'enabled': True,
+            'host': '127.0.0.1',
+            'port': 7897,
+            'type': 'http'
+        }
+    },
 }
 
 # 默认数据源

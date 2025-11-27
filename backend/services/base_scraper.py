@@ -6,8 +6,9 @@ from abc import ABC, abstractmethod
 class BaseScraper(ABC):
     """爬虫基类,所有数据源都需要继承此类"""
     
-    def __init__(self, base_url):
+    def __init__(self, base_url, proxy_config=None):
         self.base_url = base_url
+        self.proxy_config = proxy_config
         self.headers = {
             'User-Agent': (
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -19,16 +20,28 @@ class BaseScraper(ABC):
         }
         self.session = requests.Session()
         self.session.headers.update(self.headers)
+        
+        # 配置代理
+        if proxy_config and proxy_config.get('enabled'):
+            proxy_type = proxy_config.get('type', 'http')
+            proxy_host = proxy_config.get('host', '127.0.0.1')
+            proxy_port = proxy_config.get('port', 7897)
+            proxy_url = f'{proxy_type}://{proxy_host}:{proxy_port}'
+            self.session.proxies = {
+                'http': proxy_url,
+                'https': proxy_url
+            }
+            print(f"使用代理: {proxy_url}")
 
     def _delay(self):
         """随机延迟,避免请求过快"""
         time.sleep(random.uniform(0.5, 1.5))
 
-    def _make_request(self, url):
+    def _make_request(self, url, verify_ssl=True):
         """发送HTTP请求"""
         try:
             self._delay()
-            response = self.session.get(url, timeout=10)
+            response = self.session.get(url, timeout=10, verify=verify_ssl)
             response.raise_for_status()
             return response
         except requests.RequestException as e:

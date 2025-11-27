@@ -5,6 +5,7 @@ from .scraper import (
     MockScraper
 )
 from .guoman8_scraper import Guoman8Scraper
+from .xmanhua_scraper import XmanhuaScraper
 from config import COMIC_SOURCES, DEFAULT_SOURCE
 
 class ScraperFactory:
@@ -16,6 +17,7 @@ class ScraperFactory:
         'copymanga': CopymangaScraper,
         'mock': MockScraper,
         'guoman8': Guoman8Scraper,
+        'xmanhua': XmanhuaScraper,
     }
     
     _instances = {}
@@ -38,7 +40,15 @@ class ScraperFactory:
             scraper_class = cls._scrapers.get(source)
             if not scraper_class:
                 raise ValueError(f'数据源未实现: {source}')
-            cls._instances[source] = scraper_class()
+            
+            # 获取代理配置
+            proxy_config = COMIC_SOURCES[source].get('proxy', None)
+            
+            # 创建实例，传入代理配置
+            if source == 'xmanhua':
+                cls._instances[source] = scraper_class(proxy_config)
+            else:
+                cls._instances[source] = scraper_class()
         
         return cls._instances[source]
     
