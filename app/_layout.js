@@ -1,5 +1,11 @@
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { LogBox } from 'react-native';
+
+// 忽略特定警告
+LogBox.ignoreLogs([
+  'Text strings must be rendered within a <Text> component',
+]);
 
 export default function Layout() {
   return (

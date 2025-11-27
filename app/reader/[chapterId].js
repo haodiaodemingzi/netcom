@@ -13,6 +13,7 @@ import ImageViewer from '../../components/ImageViewer';
 import ReaderToolbar from '../../components/ReaderToolbar';
 import { getChapterImages } from '../../services/api';
 import { getSettings, addHistory, getCurrentSource } from '../../services/storage';
+import downloadManager from '../../services/downloadManager';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -42,12 +43,38 @@ const ReaderScreen = () => {
       const source = await getCurrentSource();
       setCurrentSource(source);
       
-      const [imagesData, settingsData] = await Promise.all([
-        getChapterImages(chapterId, source),
-        getSettings(),
-      ]);
-      setImages(imagesData.images || []);
+      const settingsData = await getSettings();
       setSettings(settingsData);
+      
+      // 先尝试加载本地已下载的章节
+      const isDownloaded = downloadManager.isDownloaded(chapterId);
+      
+      if (isDownloaded) {
+        console.log('加载本地已下载章节:', chapterId);
+        // 从 chapterId 提取 comicId （假设格式: comicId_chapterNum 或类似）
+        // 如果无法提取，则从 downloadedChapters 中获取
+        const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
+          .find(info => info.chapterId === chapterId);
+        
+        if (downloadedInfo) {
+          const localImages = await downloadManager.getLocalChapterImages(
+            downloadedInfo.comicId,
+            chapterId
+          );
+          
+          if (localImages && localImages.length > 0) {
+            console.log(`成功加载本地章节，共 ${localImages.length} 页`);
+            setImages(localImages);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // 如果未下载或本地加载失败，则从网络加载
+      console.log('从网络加载章节:', chapterId);
+      const imagesData = await getChapterImages(chapterId, source);
+      setImages(imagesData.images || []);
     } catch (error) {
       console.error('加载章节图片失败:', error);
     } finally {

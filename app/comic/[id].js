@@ -3,7 +3,7 @@ import {
   View,
   Text,
   Image,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import ChapterList from '../../components/ChapterList';
+import DownloadProgress from '../../components/DownloadProgress';
 import { getComicDetail, getChapters } from '../../services/api';
 import { 
   isFavorite, 
@@ -80,13 +81,6 @@ const ComicDetailScreen = () => {
     }
   };
 
-  const handleDownloadChapters = async (selectedChapters) => {
-    console.log('开始下载章节:', selectedChapters.map(c => c.title));
-    // TODO: 实现章节下载逻辑
-    // 可以调用后端 API 下载图片到本地存储
-    alert(`准备下载 ${selectedChapters.length} 个章节:\n${selectedChapters.map(c => c.title).slice(0, 3).join('\n')}${selectedChapters.length > 3 ? '\n...' : ''}`);
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -103,9 +97,82 @@ const ComicDetailScreen = () => {
     );
   }
 
+  const renderHeader = () => (
+    <View>
+      <View style={styles.topSection}>
+        <Image
+          source={{ uri: comic.cover }}
+          style={styles.cover}
+          resizeMode="cover"
+        />
+        <View style={styles.info}>
+          <Text style={styles.title}>{comic.title}</Text>
+          {comic.author && (
+            <Text style={styles.author}>作者: {comic.author}</Text>
+          )}
+          <View style={styles.tags}>
+            {comic.status && (
+              <Text style={styles.statusText}>
+                {comic.status === 'completed' ? '完结' : '连载'}
+              </Text>
+            )}
+            {comic.rating && (
+              <Text style={styles.rating}>⭐ {comic.rating}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={handleStartReading}
+        >
+          <Text style={styles.primaryButtonText}>开始阅读</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.secondaryButton,
+            favorited && styles.secondaryButtonActive,
+          ]}
+          onPress={handleFavorite}
+        >
+          <Text style={[
+            styles.secondaryButtonText,
+            favorited && styles.secondaryButtonTextActive,
+          ]}>
+            {favorited ? '已收藏' : '收藏'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {comic.description && (
+        <View style={styles.descSection}>
+          <Text style={styles.sectionTitle}>简介</Text>
+          <Text 
+            style={styles.description}
+            numberOfLines={showFullDesc ? undefined : 3}
+          >
+            {comic.description}
+          </Text>
+          <TouchableOpacity 
+            onPress={() => setShowFullDesc(!showFullDesc)}
+          >
+            <Text style={styles.expandButton}>
+              {showFullDesc ? '收起' : '展开'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      <View style={styles.separator} />
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
+      <DownloadProgress />
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -116,81 +183,14 @@ const ComicDetailScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView>
-        <View style={styles.topSection}>
-          <Image
-            source={{ uri: comic.cover }}
-            style={styles.cover}
-            resizeMode="cover"
-          />
-          <View style={styles.info}>
-            <Text style={styles.title}>{comic.title}</Text>
-            {comic.author && (
-              <Text style={styles.author}>作者: {comic.author}</Text>
-            )}
-            <View style={styles.tags}>
-              {comic.status && (
-                <Text style={styles.statusText}>
-                  {comic.status === 'completed' ? '完结' : '连载'}
-                </Text>
-              )}
-              {comic.rating && (
-                <Text style={styles.rating}>⭐ {comic.rating}</Text>
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleStartReading}
-          >
-            <Text style={styles.primaryButtonText}>开始阅读</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.secondaryButton,
-              favorited && styles.secondaryButtonActive,
-            ]}
-            onPress={handleFavorite}
-          >
-            <Text style={[
-              styles.secondaryButtonText,
-              favorited && styles.secondaryButtonTextActive,
-            ]}>
-              {favorited ? '已收藏' : '收藏'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {comic.description && (
-          <View style={styles.descSection}>
-            <Text style={styles.sectionTitle}>简介</Text>
-            <Text 
-              style={styles.description}
-              numberOfLines={showFullDesc ? undefined : 3}
-            >
-              {comic.description}
-            </Text>
-            <TouchableOpacity 
-              onPress={() => setShowFullDesc(!showFullDesc)}
-            >
-              <Text style={styles.expandButton}>
-                {showFullDesc ? '收起' : '展开'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={styles.chaptersSection}>
-          <ChapterList
-            chapters={chapters}
-            onChapterPress={handleChapterPress}
-            onDownloadChapters={handleDownloadChapters}
-          />
-        </View>
-      </ScrollView>
+      <ChapterList
+        chapters={chapters}
+        onChapterPress={handleChapterPress}
+        comicId={id}
+        comicTitle={comic.title}
+        source={currentSource}
+        ListHeaderComponent={renderHeader}
+      />
     </SafeAreaView>
   );
 };
@@ -278,7 +278,6 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     padding: 16,
-    gap: 12,
   },
   primaryButton: {
     flex: 1,
@@ -286,6 +285,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200EE',
     borderRadius: 8,
     alignItems: 'center',
+    marginRight: 12,
   },
   primaryButtonText: {
     fontSize: 16,
@@ -333,11 +333,9 @@ const styles = StyleSheet.create({
     color: '#6200EE',
     marginTop: 8,
   },
-  chaptersSection: {
-    flex: 1,
-    marginTop: 8,
-    borderTopWidth: 8,
-    borderTopColor: '#f5f5f5',
+  separator: {
+    height: 8,
+    backgroundColor: '#f5f5f5',
   },
 });
 
