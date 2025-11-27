@@ -62,12 +62,14 @@ const ReaderScreen = () => {
           );
           
           if (localImages && localImages.length > 0) {
-            console.log(`本地加载成功: ${localImages.length}页`);
+            console.log(`[Reader] 本地加载成功: ${localImages.length}页`);
+            console.log(`[Reader] 第1张URL: ${localImages[0].url}`);
+            console.log(`[Reader] 最后1张URL: ${localImages[localImages.length - 1].url}`);
             setImages(localImages);
             setLoading(false);
             return;
           } else {
-            console.error('本地图片为空，切换到网络');
+            console.error('[Reader] 本地图片为空，切换到网络');
           }
         }
       }
@@ -95,8 +97,10 @@ const ReaderScreen = () => {
   };
 
   const handleViewableItemsChanged = useRef(({ viewableItems }) => {
+    console.log(`[Reader] 可见项变化:`, viewableItems.length);
     if (viewableItems.length > 0) {
       const page = viewableItems[0].index + 1;
+      console.log(`[Reader] 当前页码: ${page}`);
       setCurrentPage(page);
     }
   }).current;
@@ -109,18 +113,23 @@ const ReaderScreen = () => {
     router.back();
   };
 
-  const renderItem = ({ item, index }) => (
-    <TouchableOpacity
-      activeOpacity={1}
-      onPress={toggleToolbar}
-      style={styles.imageContainer}
-    >
-      <ImageViewer
-        imageUrl={item.url}
-        fitMode={settings.imageFitMode}
-      />
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item, index }) => {
+    console.log(`[Reader] 渲染第${index + 1}页, URL: ${item.url?.substring(0, 50)}...`);
+    return (
+      <View style={styles.imageContainer}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={toggleToolbar}
+          style={styles.imageWrapper}
+        >
+          <ImageViewer
+            imageUrl={item.url}
+            fitMode={settings.imageFitMode}
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -156,6 +165,23 @@ const ReaderScreen = () => {
           offset: SCREEN_WIDTH * index,
           index,
         })}
+        onScroll={(event) => {
+          const offsetX = event.nativeEvent.contentOffset.x;
+          console.log(`[Reader] 滑动偏移: ${offsetX.toFixed(0)}px`);
+        }}
+        onScrollBeginDrag={() => {
+          console.log(`[Reader] 🖐 开始拖动`);
+        }}
+        onScrollEndDrag={() => {
+          console.log(`[Reader] 🖐 结束拖动`);
+        }}
+        onMomentumScrollBegin={() => {
+          console.log(`[Reader] 🚀 惯性滚动开始`);
+        }}
+        onMomentumScrollEnd={() => {
+          console.log(`[Reader] 🛑 惯性滚动结束`);
+        }}
+        scrollEventThrottle={16}
       />
 
       <ReaderToolbar
@@ -190,6 +216,10 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: SCREEN_WIDTH,
+    flex: 1,
+  },
+  imageWrapper: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },

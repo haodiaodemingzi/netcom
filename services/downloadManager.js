@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getChapterImages } from './api';
+import { Alert } from 'react-native';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
 const MAX_CONCURRENT = 3;
@@ -272,7 +274,24 @@ class DownloadManager {
     const metaPath = `${chapterDir}meta.json`;
     await FileSystem.writeAsStringAsync(metaPath, JSON.stringify(metaData));
     
+    // 将章节添加到已下载列表
+    this.downloadedChapters.set(chapterId, {
+      comicId,
+      comicTitle: task.comicTitle,
+      chapterId,
+      chapterTitle,
+      downloadedAt: new Date().toISOString()
+    });
+    
+    // 保存已下载章节列表
+    await this.saveDownloadedChapters();
+    this.notifyListeners();
+    
     console.log(`章节下载完成: ${chapterTitle}, 共${images.length}张图片`);
+    
+    // 保存到相册（仅在开发构建中可用，Expo Go不支持）
+    // 如果需要此功能，请运行 npx expo run:android
+    // await this.saveToGallery(chapterDir, images.length, chapterTitle);
   }
 
   isDownloaded(chapterId) {
@@ -303,18 +322,22 @@ class DownloadManager {
     const metaPath = `${chapterDir}meta.json`;
     
     try {
-      console.log(`读取本地章节: ${chapterId}`);
+      console.log(`[读取本地章节] 章节ID: ${chapterId}`);
+      console.log(`  目录: ${chapterDir}`);
       
       // 检查目录是否存在
       const dirInfo = await FileSystem.getInfoAsync(chapterDir);
+      console.log(`  目录存在: ${dirInfo.exists}`);
+      
       if (!dirInfo.exists) {
-        console.error(`目录不存在`);
+        console.error(`  ✗ 目录不存在`);
         return null;
       }
       
       // 读取元数据
       const metaContent = await FileSystem.readAsStringAsync(metaPath);
       const meta = JSON.parse(metaContent);
+      console.log(`  元数据: 共${meta.totalImages}张图片`);
       
       const images = [];
       let missingCount = 0;
@@ -333,15 +356,23 @@ class DownloadManager {
             isLocal: true,
             size: fileInfo.size
           });
+          
+          // 只打印前3张的信息
+          if (i <= 3) {
+            console.log(`  ✓ 第${i}页: ${filename} (${(fileInfo.size / 1024).toFixed(1)}KB)`);
+          }
         } else {
           missingCount++;
+          if (i <= 3) {
+            console.log(`  ✗ 第${i}页: ${filename} 不存在或为空`);
+          }
         }
       }
       
-      console.log(`成功加载${images.length}/${meta.totalImages}张图片${missingCount > 0 ? `, 缺失${missingCount}张` : ''}`);
+      console.log(`  成功加载${images.length}/${meta.totalImages}张图片${missingCount > 0 ? `, 缺失${missingCount}张` : ''}`);
       return images;
     } catch (error) {
-      console.error(`读取失败: ${error.message}`);
+      console.error(`  读取失败: ${error.message}`);
       return null;
     }
   }
@@ -375,6 +406,73 @@ class DownloadManager {
     });
     this.notifyListeners();
     this.processQueue();
+  }
+
+  async saveToGallery(chapterDir, totalImages, chapterTitle) {
+    try {
+      // 请求相册权限
+      console.log('请求相册权限...');
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      
+      if (status !== 'granted') {
+        console.log('相册权限被拒绝');
+        Alert.alert('提示', '需要相册权限才能保存图片到相册');
+        return;
+      }
+      
+      console.log(`开始保存${totalImages}张图片到相册...`);
+      let successCount = 0;
+      let failCount = 0;
+      
+      // 创建相册（如果不存在）
+      const albumName = '漫画下载';
+      let album = await MediaLibrary.getAlbumAsync(albumName);
+      
+      for (let i = 1; i <= totalImages; i++) {
+        try {
+          const filename = `${String(i).padStart(3, '0')}.jpg`;
+          const filepath = `${chapterDir}${filename}`;
+          
+          // 检查文件是否存在
+          const fileInfo = await FileSystem.getInfoAsync(filepath);
+          if (!fileInfo.exists) {
+            failCount++;
+            continue;
+          }
+          
+          // 保存到相册
+          const asset = await MediaLibrary.createAssetAsync(filepath);
+          
+          // 添加到专辑
+          if (album === null) {
+            album = await MediaLibrary.createAlbumAsync(albumName, asset, false);
+          } else {
+            await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+          }
+          
+          successCount++;
+          
+          if (i === 1 || i === totalImages) {
+            console.log(`  第${i}页已保存到相册`);
+          }
+        } catch (error) {
+          console.error(`保存第${i}页失败:`, error.message);
+          failCount++;
+        }
+      }
+      
+      console.log(`相册保存完成: 成功${successCount}张, 失败${failCount}张`);
+      
+      // 提示用户
+      if (successCount > 0) {
+        Alert.alert(
+          '保存成功',
+          `${chapterTitle}\n已保存${successCount}张图片到相册"${albumName}"`
+        );
+      }
+    } catch (error) {
+      console.error('保存到相册失败:', error);
+    }
   }
 
   async deleteChapter(comicId, chapterId) {

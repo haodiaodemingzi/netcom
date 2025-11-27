@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Image,
@@ -29,16 +29,25 @@ const ImageViewer = ({
   const [loading, setLoading] = useState(true);
   const [imageDimensions, setImageDimensions] = useState(null);
   
+  useEffect(() => {
+    console.log(`[ImageViewer] 开始加载图片: ${imageUrl}`);
+    setLoading(true);
+  }, [imageUrl]);
+  
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
   const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      console.log(`[ImageViewer] 🤏 开始缩放`);
+    })
     .onUpdate((e) => {
       scale.value = savedScale.value * e.scale;
     })
     .onEnd(() => {
+      console.log(`[ImageViewer] 🤏 缩放结束, scale: ${scale.value.toFixed(2)}`);
       if (scale.value < 1) {
         scale.value = withSpring(1);
       } else if (scale.value > 3) {
@@ -48,18 +57,18 @@ const ImageViewer = ({
     });
 
   const panGesture = Gesture.Pan()
+    .enabled(savedScale.value > 1) // 只在放大时启用
     .onUpdate((e) => {
-      if (scale.value > 1) {
-        translateX.value = e.translationX;
-        translateY.value = e.translationY;
-      }
+      translateX.value = e.translationX;
+      translateY.value = e.translationY;
     })
     .onEnd(() => {
       translateX.value = withSpring(0);
       translateY.value = withSpring(0);
     });
 
-  const composed = Gesture.Simultaneous(pinchGesture, panGesture);
+  // 使用Exclusive，让手势互斥，不阻止外层滑动
+  const composed = Gesture.Exclusive(pinchGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -72,14 +81,24 @@ const ImageViewer = ({
   });
 
   const handleImageLoad = (event) => {
+    console.log(`[ImageViewer] ✅ 图片加载成功！`);
+    console.log(`[ImageViewer] event对象:`, event.nativeEvent);
     const { width, height } = event.nativeEvent.source;
+    console.log(`[ImageViewer] 图片尺寸: ${width}x${height}`);
     setImageDimensions({ width, height });
     setLoading(false);
+    console.log(`[ImageViewer] Loading已设置为false`);
     onLoadEnd?.();
   };
 
   const getImageStyle = () => {
-    if (!imageDimensions) return {};
+    if (!imageDimensions) {
+      console.log(`[ImageViewer] 使用默认尺寸`);
+      return {
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT,
+      };
+    }
 
     const imageRatio = imageDimensions.width / imageDimensions.height;
     const screenRatio = SCREEN_WIDTH / SCREEN_HEIGHT;
@@ -130,8 +149,18 @@ const ImageViewer = ({
             resizeMode="contain"
             onLoad={handleImageLoad}
             onError={(error) => {
+              console.error(`[ImageViewer] ❌ 图片加载失败！`);
+              console.error(`[ImageViewer] 错误:`, error.nativeEvent);
+              console.error(`[ImageViewer] URL: ${imageUrl}`);
               setLoading(false);
               onError?.(error);
+            }}
+            onLoadStart={() => {
+              console.log(`[ImageViewer] ⏳ 开始加载图片...`);
+              console.log(`[ImageViewer] URL: ${imageUrl}`);
+            }}
+            onLoadEnd={() => {
+              console.log(`[ImageViewer] 🏁 加载结束`);
             }}
           />
         </Animated.View>
