@@ -7,6 +7,27 @@ class KomiicScraper(BaseScraper):
     def __init__(self):
         super().__init__('https://komiic.com')
 
+    def get_categories(self):
+        """获取分类列表"""
+        return {
+            'categories': [
+                {'id': '1', 'name': '热血', 'url': ''},
+                {'id': '2', 'name': '冒险', 'url': ''},
+                {'id': '3', 'name': '搞笑', 'url': ''},
+            ],
+            'total': 3
+        }
+
+    def get_comics_by_category(self, category_id, page=1, limit=20):
+        """根据分类获取漫画列表"""
+        return {
+            'comics': self._generate_mock_comics(
+                page, limit, f'分类{category_id}'
+            ),
+            'hasMore': page < 5,
+            'total': 100
+        }
+
     def get_hot_comics(self, page=1, limit=20):
         """获取热门漫画"""
         # 这里返回模拟数据,实际需要根据网站结构解析
@@ -109,6 +130,24 @@ class ManhuaguiScraper(BaseScraper):
     def __init__(self):
         super().__init__('https://www.manhuagui.com')
 
+    def get_categories(self):
+        return {
+            'categories': [
+                {'id': '1', 'name': '热血', 'url': ''},
+                {'id': '2', 'name': '恋爱', 'url': ''},
+            ],
+            'total': 2
+        }
+
+    def get_comics_by_category(self, category_id, page=1, limit=20):
+        return {
+            'comics': self._generate_mock_comics(
+                page, limit, f'漫画柜分类{category_id}'
+            ),
+            'hasMore': page < 5,
+            'total': 100
+        }
+
     def get_hot_comics(self, page=1, limit=20):
         return {
             'comics': self._generate_mock_comics(
@@ -206,6 +245,24 @@ class CopymangaScraper(BaseScraper):
     def __init__(self):
         super().__init__('https://www.copymanga.site')
 
+    def get_categories(self):
+        return {
+            'categories': [
+                {'id': '1', 'name': '搞笑', 'url': ''},
+                {'id': '2', 'name': '恋爱', 'url': ''},
+            ],
+            'total': 2
+        }
+
+    def get_comics_by_category(self, category_id, page=1, limit=20):
+        return {
+            'comics': self._generate_mock_comics(
+                page, limit, f'拷贝漫画分类{category_id}'
+            ),
+            'hasMore': page < 5,
+            'total': 100
+        }
+
     def get_hot_comics(self, page=1, limit=20):
         return {
             'comics': self._generate_mock_comics(
@@ -302,6 +359,26 @@ class MockScraper(BaseScraper):
     
     def __init__(self):
         super().__init__('http://localhost')
+
+    def get_categories(self):
+        return {
+            'categories': [
+                {'id': '1', 'name': '热血', 'url': ''},
+                {'id': '2', 'name': '冒险', 'url': ''},
+                {'id': '3', 'name': '搞笑', 'url': ''},
+                {'id': '4', 'name': '恋爱', 'url': ''},
+            ],
+            'total': 4
+        }
+
+    def get_comics_by_category(self, category_id, page=1, limit=20):
+        return {
+            'comics': self._generate_mock_comics(
+                page, limit, f'分类{category_id}'
+            ),
+            'hasMore': page < 5,
+            'total': 100
+        }
 
     def get_hot_comics(self, page=1, limit=20):
         return {

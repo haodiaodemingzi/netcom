@@ -64,3 +64,13 @@ class BaseScraper(ABC):
     def get_chapter_images(self, chapter_id):
         """获取章节图片列表"""
         pass
+
+    @abstractmethod
+    def get_categories(self):
+        """获取分类列表"""
+        pass
+
+    @abstractmethod
+    def get_comics_by_category(self, category_id, page=1, limit=20):
+        """根据分类获取漫画列表"""
+        pass

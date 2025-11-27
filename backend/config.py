@@ -24,6 +24,12 @@ COMIC_SOURCES = {
         'enabled': True,
         'description': '模拟测试数据源',
     },
+    'guoman8': {
+        'name': '国漫8',
+        'base_url': 'https://www.guoman8.cc',
+        'enabled': True,
+        'description': '国漫8漫画网',
+    },
 }
 
 # 默认数据源

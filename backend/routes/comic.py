@@ -73,6 +73,18 @@ def get_chapter_images(chapter_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@comic_bp.route('/categories', methods=['GET'])
+def get_categories():
+    """获取分类列表"""
+    source = request.args.get('source', None)
+    
+    try:
+        scraper = ScraperFactory.get_scraper(source)
+        data = scraper.get_categories()
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @comic_bp.route('/comics/category', methods=['GET'])
 def get_comics_by_category():
     """按分类获取漫画"""
@@ -83,13 +95,14 @@ def get_comics_by_category():
     
     try:
         scraper = ScraperFactory.get_scraper(source)
-        # 根据分类返回不同数据
+        # 如果是特殊分类,使用原有逻辑
         if category == 'completed':
             data = scraper.get_hot_comics(page, limit)
         elif category == 'ongoing':
             data = scraper.get_latest_comics(page, limit)
         else:
-            data = scraper.get_hot_comics(page, limit)
+            # 使用新的分类接口
+            data = scraper.get_comics_by_category(category, page, limit)
         
         return jsonify(data), 200
     except Exception as e:

@@ -4,6 +4,7 @@ from .scraper import (
     CopymangaScraper,
     MockScraper
 )
+from .guoman8_scraper import Guoman8Scraper
 from config import COMIC_SOURCES, DEFAULT_SOURCE
 
 class ScraperFactory:
@@ -14,6 +15,7 @@ class ScraperFactory:
         'manhuagui': ManhuaguiScraper,
         'copymanga': CopymangaScraper,
         'mock': MockScraper,
+        'guoman8': Guoman8Scraper,
     }
     
     _instances = {}
