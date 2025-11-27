@@ -1,0 +1,184 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const KEYS = {
+  FAVORITES: '@favorites',
+  HISTORY: '@history',
+  SETTINGS: '@settings',
+  SEARCH_HISTORY: '@search_history',
+};
+
+// 收藏相关
+export const getFavorites = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.FAVORITES);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('获取收藏失败:', error);
+    return [];
+  }
+};
+
+export const addFavorite = async (comic) => {
+  try {
+    const favorites = await getFavorites();
+    const exists = favorites.find(item => item.id === comic.id);
+    if (!exists) {
+      favorites.unshift(comic);
+      await AsyncStorage.setItem(
+        KEYS.FAVORITES, 
+        JSON.stringify(favorites)
+      );
+    }
+    return true;
+  } catch (error) {
+    console.error('添加收藏失败:', error);
+    return false;
+  }
+};
+
+export const removeFavorite = async (comicId) => {
+  try {
+    const favorites = await getFavorites();
+    const filtered = favorites.filter(item => item.id !== comicId);
+    await AsyncStorage.setItem(KEYS.FAVORITES, JSON.stringify(filtered));
+    return true;
+  } catch (error) {
+    console.error('移除收藏失败:', error);
+    return false;
+  }
+};
+
+export const isFavorite = async (comicId) => {
+  try {
+    const favorites = await getFavorites();
+    return favorites.some(item => item.id === comicId);
+  } catch (error) {
+    console.error('检查收藏失败:', error);
+    return false;
+  }
+};
+
+// 历史记录相关
+export const getHistory = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.HISTORY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('获取历史失败:', error);
+    return [];
+  }
+};
+
+export const addHistory = async (comic, chapterId, page) => {
+  try {
+    const history = await getHistory();
+    const existingIndex = history.findIndex(
+      item => item.id === comic.id
+    );
+    
+    const historyItem = {
+      ...comic,
+      lastChapterId: chapterId,
+      lastPage: page,
+      timestamp: Date.now(),
+    };
+    
+    if (existingIndex >= 0) {
+      history.splice(existingIndex, 1);
+    }
+    
+    history.unshift(historyItem);
+    
+    if (history.length > 100) {
+      history.pop();
+    }
+    
+    await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(history));
+    return true;
+  } catch (error) {
+    console.error('添加历史失败:', error);
+    return false;
+  }
+};
+
+export const clearHistory = async () => {
+  try {
+    await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify([]));
+    return true;
+  } catch (error) {
+    console.error('清除历史失败:', error);
+    return false;
+  }
+};
+
+// 设置相关
+export const getSettings = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SETTINGS);
+    return data ? JSON.parse(data) : {
+      readingMode: 'single',
+      readingDirection: 'ltr',
+      imageFitMode: 'width',
+      backgroundColor: 'black',
+      brightness: 1.0,
+      keepScreenOn: true,
+      darkMode: false,
+      autoLoadHD: false,
+    };
+  } catch (error) {
+    console.error('获取设置失败:', error);
+    return {};
+  }
+};
+
+export const saveSettings = async (settings) => {
+  try {
+    await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+    return true;
+  } catch (error) {
+    console.error('保存设置失败:', error);
+    return false;
+  }
+};
+
+// 搜索历史
+export const getSearchHistory = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SEARCH_HISTORY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('获取搜索历史失败:', error);
+    return [];
+  }
+};
+
+export const addSearchHistory = async (keyword) => {
+  try {
+    const history = await getSearchHistory();
+    const filtered = history.filter(item => item !== keyword);
+    filtered.unshift(keyword);
+    
+    if (filtered.length > 20) {
+      filtered.pop();
+    }
+    
+    await AsyncStorage.setItem(
+      KEYS.SEARCH_HISTORY, 
+      JSON.stringify(filtered)
+    );
+    return true;
+  } catch (error) {
+    console.error('添加搜索历史失败:', error);
+    return false;
+  }
+};
+
+export const clearSearchHistory = async () => {
+  try {
+    await AsyncStorage.setItem(KEYS.SEARCH_HISTORY, JSON.stringify([]));
+    return true;
+  } catch (error) {
+    console.error('清除搜索历史失败:', error);
+    return false;
+  }
+};
