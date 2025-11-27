@@ -183,6 +183,57 @@ const ChapterList = ({
     Alert.alert('成功', `已添加 "${chapter.title}" 到下载队列`);
   };
 
+  // 新的直接下载方法 - 使用完整图片URL
+  const handleDirectDownload = async (chapter) => {
+    try {
+      Alert.alert(
+        '下载确认',
+        `确定要直接下载 "${chapter.title}" 吗？\n\n这将下载完整的图片，可以离线阅读。`,
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '确定',
+            onPress: async () => {
+              try {
+                console.log(`开始直接下载章节: ${chapter.title}`);
+                
+                const result = await downloadManager.downloadChapterDirect(
+                  comicId,
+                  comicTitle,
+                  chapter,
+                  source,
+                  (progress) => {
+                    // 显示下载进度
+                    if (progress.status === 'downloading') {
+                      console.log(`下载进度: ${progress.percentage}% (${progress.completed}/${progress.total})`);
+                    }
+                  }
+                );
+
+                if (result.alreadyDownloaded) {
+                  Alert.alert('提示', `"${chapter.title}" 已经下载过了`);
+                } else if (result.success) {
+                  Alert.alert(
+                    '下载完成',
+                    `"${chapter.title}" 下载完成！\n成功: ${result.successCount} 张\n失败: ${result.failedCount} 张`
+                  );
+                } else {
+                  Alert.alert('下载失败', '章节下载过程中出现错误');
+                }
+              } catch (error) {
+                console.error('直接下载失败:', error);
+                Alert.alert('下载失败', error.message || '下载过程中出现错误');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('下载确认失败:', error);
+      Alert.alert('错误', '无法启动下载');
+    }
+  };
+
   const renderChapterCard = (item) => {
     const isActive = item.id === currentChapterId;
     const isSelected = selectedChapters.has(item.id);
@@ -277,15 +328,26 @@ const ChapterList = ({
           )}
           
           {!selectionMode && !downloadStatus && (
-            <TouchableOpacity 
-              style={styles.downloadIconButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleSingleDownload(item);
-              }}
-            >
-              <Text style={styles.downloadIcon}>⬇</Text>
-            </TouchableOpacity>
+            <View style={styles.downloadButtonsContainer}>
+              <TouchableOpacity 
+                style={styles.downloadIconButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleSingleDownload(item);
+                }}
+              >
+                <Text style={styles.downloadIcon}>⬇</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.downloadIconButton, styles.directDownloadButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDirectDownload(item);
+                }}
+              >
+                <Text style={[styles.downloadIcon, styles.directDownloadIcon]}>📱</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -372,7 +434,7 @@ const ChapterList = ({
               styles.tabText,
               activeTab === 'volume' && styles.tabTextActive
             ]}>
-              卷 ({volumeChapters.chapters.length})
+              卷 ({volumeChapters?.chapters?.length || 0})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -678,6 +740,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  downloadButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  directDownloadButton: {
+    backgroundColor: '#FF6B35',
+    marginRight: 0,
+  },
+  directDownloadIcon: {
+    fontSize: 14,
   },
 });
 

@@ -116,7 +116,7 @@ const ComicDetailScreen = () => {
                 {comic.status === 'completed' ? '完结' : '连载'}
               </Text>
             )}
-            {comic.rating && (
+            {(comic.rating != null && comic.rating > 0) && (
               <Text style={styles.rating}>⭐ {comic.rating}</Text>
             )}
           </View>

@@ -226,23 +226,45 @@ class DownloadManager {
     const metaPath = `${chapterDir}meta.json`;
     
     try {
+      console.log(`读取本地章节: ${chapterId}`);
+      
+      // 检查目录是否存在
+      const dirInfo = await FileSystem.getInfoAsync(chapterDir);
+      if (!dirInfo.exists) {
+        console.error(`目录不存在`);
+        return null;
+      }
+      
+      // 读取元数据
       const metaContent = await FileSystem.readAsStringAsync(metaPath);
       const meta = JSON.parse(metaContent);
       
       const images = [];
+      let missingCount = 0;
+      
       for (let i = 1; i <= meta.totalImages; i++) {
         const filename = `${String(i).padStart(3, '0')}.jpg`;
         const filepath = `${chapterDir}${filename}`;
-        images.push({
-          page: i,
-          url: filepath,
-          isLocal: true
-        });
+        
+        // 验证文件是否存在
+        const fileInfo = await FileSystem.getInfoAsync(filepath);
+        
+        if (fileInfo.exists && fileInfo.size > 0) {
+          images.push({
+            page: i,
+            url: filepath,
+            isLocal: true,
+            size: fileInfo.size
+          });
+        } else {
+          missingCount++;
+        }
       }
       
+      console.log(`成功加载${images.length}/${meta.totalImages}张图片${missingCount > 0 ? `, 缺失${missingCount}张` : ''}`);
       return images;
     } catch (error) {
-      console.error('读取本地章节失败:', error);
+      console.error(`读取失败: ${error.message}`);
       return null;
     }
   }
@@ -288,6 +310,163 @@ class DownloadManager {
       this.notifyListeners();
     } catch (error) {
       console.error('删除章节失败:', error);
+      throw error;
+    }
+  }
+
+  async downloadChapterDirect(comicId, comicTitle, chapter, source, onProgress) {
+    const { id: chapterId, title: chapterTitle } = chapter;
+    
+    // 检查是否已下载
+    if (this.downloadedChapters.has(chapterId)) {
+      console.log(`章节 ${chapterTitle} 已下载`);
+      if (onProgress) onProgress({ status: 'already_downloaded' });
+      return { success: true, alreadyDownloaded: true };
+    }
+
+    try {
+      console.log(`开始下载: ${chapterTitle}`);
+      
+      // 1. 获取章节下载信息
+      const apiUrl = `/api/chapters/${chapterId}/download-info?source=${source}`;
+      
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || '获取章节信息失败');
+      }
+
+      const { images, download_config } = data.data;
+      const totalImages = images.length;
+      console.log(`共${totalImages}张图片`);
+
+      // 2. 创建下载目录
+      const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
+      await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
+
+      // 3. 下载所有图片
+      let completed = 0;
+      let failed = 0;
+
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        const filename = `${String(image.page).padStart(3, '0')}.jpg`;
+        const filepath = `${chapterDir}${filename}`;
+
+        try {
+          // 只打印关键信息
+          if (i === 0 || i === images.length - 1) {
+            console.log(`下载第${image.page}页: ${image.url.substring(0, 80)}...`);
+          }
+          
+          // 使用下载配置中的headers
+          const downloadResult = await FileSystem.downloadAsync(
+            image.url,
+            filepath,
+            {
+              headers: download_config.headers
+            }
+          );
+          
+          // 验证文件是否真的存在并获取文件信息
+          const fileInfo = await FileSystem.getInfoAsync(filepath);
+          
+          if (fileInfo.exists && fileInfo.size > 0) {
+            completed++;
+            // 只打印第一张和最后一张的详细信息
+            if (i === 0 || i === images.length - 1) {
+              console.log(`成功: ${(fileInfo.size / 1024).toFixed(1)}KB`);
+            }
+          } else {
+            console.error(`第${image.page}页下载失败`);
+            failed++;
+          }
+          
+          if (onProgress) {
+            onProgress({
+              status: 'downloading',
+              page: image.page,
+              completed,
+              failed,
+              total: totalImages,
+              percentage: Math.round((completed + failed) / totalImages * 100),
+              fileSize: fileInfo.size
+            });
+          }
+        } catch (error) {
+          console.error(`第${image.page}页错误: ${error.message}`);
+          failed++;
+          
+          if (onProgress) {
+            onProgress({
+              status: 'downloading',
+              page: image.page,
+              completed,
+              failed,
+              total: totalImages,
+              percentage: Math.round((completed + failed) / totalImages * 100),
+              error: error.message
+            });
+          }
+        }
+      }
+
+      // 4. 保存元数据
+      const metaData = {
+        comicId,
+        chapterId,
+        chapterTitle,
+        totalImages: images.length,
+        successCount: completed,
+        failedCount: failed,
+        downloadedAt: new Date().toISOString()
+      };
+      
+      const metaPath = `${chapterDir}meta.json`;
+      await FileSystem.writeAsStringAsync(metaPath, JSON.stringify(metaData));
+
+      // 5. 记录为已下载
+      this.downloadedChapters.set(chapterId, {
+        comicId,
+        comicTitle,
+        chapterId,
+        chapterTitle,
+        downloadedAt: new Date().toISOString()
+      });
+      await this.saveDownloadedChapters();
+      this.notifyListeners();
+
+      console.log(`下载完成: 成功${completed}张, 失败${failed}张`);
+      
+      if (onProgress) {
+        onProgress({
+          status: 'completed',
+          completed,
+          failed,
+          total: totalImages,
+          percentage: 100
+        });
+      }
+
+      return {
+        success: true,
+        total: totalImages,
+        successCount: completed,
+        failedCount: failed
+      };
+
+    } catch (error) {
+      console.error(`下载失败: ${error.message}`);
+      if (onProgress) {
+        onProgress({
+          status: 'error',
+          error: error.message
+        });
+      }
       throw error;
     }
   }

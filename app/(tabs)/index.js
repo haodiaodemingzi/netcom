@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
 import { 
   getHotComics, 
@@ -19,8 +20,10 @@ import {
   getComicsByCategory
 } from '../../services/api';
 import { getCurrentSource, setCurrentSource } from '../../services/storage';
+import downloadManager from '../../services/downloadManager';
 
 const HomeScreen = () => {
+  const router = useRouter();
   const [comics, setComics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,9 +38,20 @@ const HomeScreen = () => {
   ]);
   const [showSourceMenu, setShowSourceMenu] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [downloadCount, setDownloadCount] = useState(0);
 
   useEffect(() => {
     loadInitialData();
+    
+    // 监听下载状态更新下载数量
+    const unsubscribe = downloadManager.subscribe((state) => {
+      setDownloadCount(state.downloadedChapters.length);
+    });
+    
+    // 初始化下载数量
+    setDownloadCount(downloadManager.downloadedChapters.size);
+    
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -151,14 +165,27 @@ const HomeScreen = () => {
   const renderHeader = () => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>漫画阅读器</Text>
-      <TouchableOpacity 
-        onPress={() => setShowSourceMenu(!showSourceMenu)}
-        style={styles.sourceButton}
-      >
-        <Text style={styles.sourceButtonText}>
-          {sources[currentSource]?.name || '数据源'} ▼
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.headerButtons}>
+        <TouchableOpacity 
+          onPress={() => router.push('/downloads')}
+          style={styles.downloadButton}
+        >
+          <Text style={styles.downloadButtonIcon}>📦</Text>
+          {downloadCount > 0 && (
+            <View style={styles.downloadBadge}>
+              <Text style={styles.downloadBadgeText}>{downloadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => setShowSourceMenu(!showSourceMenu)}
+          style={styles.sourceButton}
+        >
+          <Text style={styles.sourceButtonText}>
+            {sources[currentSource]?.name || '数据源'} ▼
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -277,6 +304,40 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  downloadButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 18,
+    position: 'relative',
+  },
+  downloadButtonIcon: {
+    fontSize: 20,
+  },
+  downloadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ff4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  downloadBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   sourceButton: {
     paddingHorizontal: 12,

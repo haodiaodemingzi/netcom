@@ -183,3 +183,71 @@ def get_comics_by_category():
     except Exception as e:
         logger.error(f"按分类获取漫画失败: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@comic_bp.route('/chapters/<chapter_id>/download-info', methods=['GET'])
+def get_chapter_download_info(chapter_id):
+    """获取章节下载信息 - 返回所有图片链接供前端下载"""
+    source = request.args.get('source', None)
+    
+    logger.info(f"获取章节下载信息 - 章节ID: {chapter_id}, 数据源: {source}")
+    
+    try:
+        scraper = ScraperFactory.get_scraper(source)
+        logger.info(f"使用爬虫: {type(scraper).__name__}")
+        
+        # 获取章节图片信息
+        result = scraper.get_chapter_images(chapter_id)
+        
+        if not result or not result.get('images'):
+            logger.warning(f"未获取到章节图片: {chapter_id}")
+            return jsonify({
+                'success': False,
+                'message': '未找到章节图片',
+                'data': {
+                    'images': [],
+                    'total': 0,
+                    'download_config': {}
+                }
+            }), 404
+        
+        # 构建下载配置信息
+        download_config = {
+            'base_url': 'https://xmanhua.com',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                'Referer': 'https://xmanhua.com/',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9'
+            },
+            'cookie_urls': [
+                'https://xmanhua.com/',
+                f'https://xmanhua.com/{chapter_id}/'
+            ]
+        }
+        
+        # 返回图片列表和下载配置
+        response_data = {
+            'success': True,
+            'data': {
+                'images': result['images'],
+                'total': result['total'],
+                'expected_total': result.get('expected_total', result['total']),
+                'download_config': download_config,
+                'chapter_id': chapter_id
+            }
+        }
+        
+        logger.info(f"成功获取章节下载信息: {len(result['images'])} 张图片")
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"获取章节下载信息失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': str(e),
+            'data': {
+                'images': [],
+                'total': 0,
+                'download_config': {}
+            }
+        }), 500

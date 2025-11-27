@@ -50,9 +50,8 @@ const ReaderScreen = () => {
       const isDownloaded = downloadManager.isDownloaded(chapterId);
       
       if (isDownloaded) {
-        console.log('加载本地已下载章节:', chapterId);
-        // 从 chapterId 提取 comicId （假设格式: comicId_chapterNum 或类似）
-        // 如果无法提取，则从 downloadedChapters 中获取
+        console.log(`加载本地章节: ${chapterId}`);
+        
         const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
           .find(info => info.chapterId === chapterId);
         
@@ -63,16 +62,18 @@ const ReaderScreen = () => {
           );
           
           if (localImages && localImages.length > 0) {
-            console.log(`成功加载本地章节，共 ${localImages.length} 页`);
+            console.log(`本地加载成功: ${localImages.length}页`);
             setImages(localImages);
             setLoading(false);
             return;
+          } else {
+            console.error('本地图片为空，切换到网络');
           }
         }
       }
       
       // 如果未下载或本地加载失败，则从网络加载
-      console.log('从网络加载章节:', chapterId);
+      console.log(`网络加载: ${chapterId}`);
       const imagesData = await getChapterImages(chapterId, source);
       setImages(imagesData.images || []);
     } catch (error) {
