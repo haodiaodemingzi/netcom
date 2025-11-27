@@ -14,8 +14,11 @@ import { useRouter } from 'expo-router';
 import { 
   getSettings, 
   saveSettings, 
-  clearHistory 
+  clearHistory,
+  getCurrentSource,
+  setCurrentSource
 } from '../../services/storage';
+import { getAvailableSources } from '../../services/api';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -24,14 +27,30 @@ const ProfileScreen = () => {
     autoLoadHD: false,
     keepScreenOn: true,
   });
+  const [currentSource, setCurrentSourceState] = useState('guoman8');
+  const [sources, setSources] = useState({});
 
   useEffect(() => {
     loadSettings();
+    loadSourceData();
   }, []);
 
   const loadSettings = async () => {
     const data = await getSettings();
     setSettings(data);
+  };
+
+  const loadSourceData = async () => {
+    try {
+      const [sourcesData, savedSource] = await Promise.all([
+        getAvailableSources(),
+        getCurrentSource(),
+      ]);
+      setSources(sourcesData);
+      setCurrentSourceState(savedSource);
+    } catch (error) {
+      console.error('加载数据源失败:', error);
+    }
   };
 
   const handleSettingChange = async (key, value) => {
@@ -54,6 +73,26 @@ const ProfileScreen = () => {
             Alert.alert('提示', '历史记录已清除');
           },
         },
+      ]
+    );
+  };
+
+  const handleSourceChange = () => {
+    const sourceOptions = Object.entries(sources).map(([key, source]) => ({
+      text: source.name,
+      onPress: async () => {
+        setCurrentSourceState(key);
+        await setCurrentSource(key);
+        Alert.alert('提示', `已切换到 ${source.name}`);
+      },
+    }));
+
+    Alert.alert(
+      '选择数据源',
+      '切换数据源后将重新加载内容',
+      [
+        ...sourceOptions,
+        { text: '取消', style: 'cancel' },
       ]
     );
   };
@@ -103,6 +142,18 @@ const ProfileScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>设置</Text>
+          <TouchableOpacity 
+            style={styles.menuItem} 
+            onPress={handleSourceChange}
+          >
+            <Text style={styles.menuTitle}>数据源</Text>
+            <View style={styles.menuRight}>
+              <Text style={styles.menuValue}>
+                {sources[currentSource]?.name || '加载中...'}
+              </Text>
+              <Text style={styles.arrow}>›</Text>
+            </View>
+          </TouchableOpacity>
           {renderSettingItem(
             '夜间模式',
             settings.darkMode,
@@ -207,6 +258,15 @@ const styles = StyleSheet.create({
   arrow: {
     fontSize: 24,
     color: '#ccc',
+  },
+  menuRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuValue: {
+    fontSize: 14,
+    color: '#999',
+    marginRight: 8,
   },
 });
 

@@ -188,10 +188,10 @@ export const clearSearchHistory = async () => {
 export const getCurrentSource = async () => {
   try {
     const data = await AsyncStorage.getItem(KEYS.CURRENT_SOURCE);
-    return data || 'mock';
+    return data || 'guoman8';
   } catch (error) {
     console.error('获取当前数据源失败:', error);
-    return 'mock';
+    return 'guoman8';
   }
 };
 

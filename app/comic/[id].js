@@ -16,7 +16,8 @@ import { getComicDetail, getChapters } from '../../services/api';
 import { 
   isFavorite, 
   addFavorite, 
-  removeFavorite 
+  removeFavorite,
+  getCurrentSource
 } from '../../services/storage';
 
 const ComicDetailScreen = () => {
@@ -28,6 +29,7 @@ const ComicDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [favorited, setFavorited] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
+  const [currentSource, setCurrentSource] = useState('guoman8');
 
   useEffect(() => {
     loadData();
@@ -36,9 +38,12 @@ const ComicDetailScreen = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      const source = await getCurrentSource();
+      setCurrentSource(source);
+      
       const [comicData, chaptersData] = await Promise.all([
-        getComicDetail(id),
-        getChapters(id),
+        getComicDetail(id, source),
+        getChapters(id, source),
         checkFavorite(),
       ]);
       setComic(comicData);

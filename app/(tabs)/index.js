@@ -32,7 +32,7 @@ const HomeScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [currentSource, setCurrentSourceState] = useState('mock');
+  const [currentSource, setCurrentSourceState] = useState('guoman8');
   const [sources, setSources] = useState({});
   const [showSourceMenu, setShowSourceMenu] = useState(false);
 

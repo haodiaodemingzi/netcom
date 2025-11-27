@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import ImageViewer from '../../components/ImageViewer';
 import ReaderToolbar from '../../components/ReaderToolbar';
 import { getChapterImages } from '../../services/api';
-import { getSettings, addHistory } from '../../services/storage';
+import { getSettings, addHistory, getCurrentSource } from '../../services/storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -30,6 +30,7 @@ const ReaderScreen = () => {
     imageFitMode: 'width',
     backgroundColor: 'black',
   });
+  const [currentSource, setCurrentSource] = useState('guoman8');
 
   useEffect(() => {
     loadData();
@@ -38,8 +39,11 @@ const ReaderScreen = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      const source = await getCurrentSource();
+      setCurrentSource(source);
+      
       const [imagesData, settingsData] = await Promise.all([
-        getChapterImages(chapterId),
+        getChapterImages(chapterId, source),
         getSettings(),
       ]);
       setImages(imagesData.images || []);

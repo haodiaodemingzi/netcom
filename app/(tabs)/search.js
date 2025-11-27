@@ -15,6 +15,7 @@ import {
   getSearchHistory,
   addSearchHistory,
   clearSearchHistory,
+  getCurrentSource,
 } from '../../services/storage';
 
 const SearchScreen = () => {
@@ -22,14 +23,21 @@ const SearchScreen = () => {
   const [results, setResults] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [currentSource, setCurrentSource] = useState('guoman8');
 
   useEffect(() => {
     loadHistory();
+    loadCurrentSource();
   }, []);
 
   const loadHistory = async () => {
     const data = await getSearchHistory();
     setHistory(data);
+  };
+
+  const loadCurrentSource = async () => {
+    const source = await getCurrentSource();
+    setCurrentSource(source);
   };
 
   const handleSearch = async (searchKeyword) => {
@@ -38,7 +46,7 @@ const SearchScreen = () => {
 
     setLoading(true);
     try {
-      const data = await searchComics(term);
+      const data = await searchComics(term, 1, 20, currentSource);
       setResults(data.comics || []);
       await addSearchHistory(term);
       await loadHistory();
