@@ -81,8 +81,6 @@ const HomeScreen = () => {
         if (categoriesData && categoriesData.categories && categoriesData.categories.length > 0) {
           // 添加热门和最新到分类列表前面
           const allCategories = [
-            { id: 'hot', name: '热门' },
-            { id: 'latest', name: '最新' },
             ...categoriesData.categories
           ];
           setCategories(allCategories);
@@ -102,6 +100,7 @@ const HomeScreen = () => {
   const loadComics = async (isRefresh = false) => {
     if (loading) return;
 
+    console.log(`[加载] 开始加载 - 分类: ${selectedCategory}`);
     setLoading(true);
     const currentPage = isRefresh ? 1 : page;
 
@@ -130,7 +129,9 @@ const HomeScreen = () => {
       setHasMore(data.hasMore || false);
     } catch (error) {
       console.error('加载漫画失败:', error);
+      setComics([]); // 出错时清空数据
     } finally {
+      console.log(`[加载] 完成 - loading设置为false`);
       setLoading(false);
       setRefreshing(false);
     }
@@ -149,9 +150,11 @@ const HomeScreen = () => {
   };
 
   const handleCategoryPress = (categoryId) => {
+    if (categoryId === selectedCategory) return; // 避免重复点击
+    setComics([]); // 先清空数据
     setSelectedCategory(categoryId);
     setPage(1);
-    setComics([]);
+    // loading会在useEffect触发loadComics时自动设置
   };
 
   const handleSourceChange = async (sourceId) => {
@@ -226,6 +229,18 @@ const HomeScreen = () => {
     </View>
   );
 
+  const renderLoadingSkeleton = () => (
+    <View style={styles.skeletonContainer}>
+      {[1, 2, 3, 4, 5, 6].map((item) => (
+        <View key={item} style={styles.skeletonCard}>
+          <View style={styles.skeletonImage} />
+          <View style={styles.skeletonTitle} />
+          <View style={styles.skeletonSubtitle} />
+        </View>
+      ))}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
@@ -259,29 +274,34 @@ const HomeScreen = () => {
       )}
       
       {renderCategories()}
-      <FlatList
-        data={comics}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
-        numColumns={2}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#6200EE']}
-          />
-        }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        ListEmptyComponent={
-          !loading && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>暂无漫画</Text>
-            </View>
-          )
-        }
-      />
+      
+      {loading && comics.length === 0 && !refreshing ? (
+        renderLoadingSkeleton()
+      ) : (
+        <FlatList
+          data={comics}
+          renderItem={renderItem}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
+          numColumns={2}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#6200EE']}
+            />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListEmptyComponent={
+            !loading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>暂无漫画</Text>
+              </View>
+            )
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -384,25 +404,37 @@ const styles = StyleSheet.create({
   },
   categoriesContent: {
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingBottom: 20,
+    alignItems: 'center',
   },
   categoryButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginHorizontal: 4,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f5f5f5',
   },
   categoryButtonActive: {
     backgroundColor: '#6200EE',
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    lineHeight: 20,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   categoryTextActive: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: 'bold',
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   listContent: {
     padding: 4,
@@ -417,6 +449,35 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#999',
+  },
+  skeletonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 4,
+  },
+  skeletonCard: {
+    width: '50%',
+    padding: 4,
+  },
+  skeletonImage: {
+    width: '100%',
+    height: 240,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  skeletonTitle: {
+    width: '80%',
+    height: 16,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  skeletonSubtitle: {
+    width: '60%',
+    height: 14,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
   },
 });
 
