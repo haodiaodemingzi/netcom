@@ -5,6 +5,7 @@ const KEYS = {
   HISTORY: '@history',
   SETTINGS: '@settings',
   SEARCH_HISTORY: '@search_history',
+  CURRENT_SOURCE: '@current_source',
 };
 
 // 收藏相关
@@ -179,6 +180,27 @@ export const clearSearchHistory = async () => {
     return true;
   } catch (error) {
     console.error('清除搜索历史失败:', error);
+    return false;
+  }
+};
+
+// 数据源相关
+export const getCurrentSource = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.CURRENT_SOURCE);
+    return data || 'mock';
+  } catch (error) {
+    console.error('获取当前数据源失败:', error);
+    return 'mock';
+  }
+};
+
+export const setCurrentSource = async (source) => {
+  try {
+    await AsyncStorage.setItem(KEYS.CURRENT_SOURCE, source);
+    return true;
+  } catch (error) {
+    console.error('设置当前数据源失败:', error);
     return false;
   }
 };

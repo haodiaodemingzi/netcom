@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.scraper import scraper
+from services.scraper_factory import ScraperFactory
 from services.cache import cache_response
 
 comic_bp = Blueprint('comic', __name__)
@@ -10,8 +10,10 @@ def get_hot_comics():
     """获取热门漫画"""
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
+    source = request.args.get('source', None)
     
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.get_hot_comics(page, limit)
         return jsonify(data), 200
     except Exception as e:
@@ -23,8 +25,10 @@ def get_latest_comics():
     """获取最新漫画"""
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
+    source = request.args.get('source', None)
     
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.get_latest_comics(page, limit)
         return jsonify(data), 200
     except Exception as e:
@@ -34,7 +38,10 @@ def get_latest_comics():
 @cache_response(timeout=600, key_prefix='detail')
 def get_comic_detail(comic_id):
     """获取漫画详情"""
+    source = request.args.get('source', None)
+    
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.get_comic_detail(comic_id)
         return jsonify(data), 200
     except Exception as e:
@@ -44,7 +51,10 @@ def get_comic_detail(comic_id):
 @cache_response(timeout=600, key_prefix='chapters')
 def get_chapters(comic_id):
     """获取章节列表"""
+    source = request.args.get('source', None)
+    
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.get_chapters(comic_id)
         return jsonify(data), 200
     except Exception as e:
@@ -54,7 +64,10 @@ def get_chapters(comic_id):
 @cache_response(timeout=1800, key_prefix='images')
 def get_chapter_images(chapter_id):
     """获取章节图片"""
+    source = request.args.get('source', None)
+    
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.get_chapter_images(chapter_id)
         return jsonify(data), 200
     except Exception as e:
@@ -66,8 +79,10 @@ def get_comics_by_category():
     category = request.args.get('category', 'all')
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
+    source = request.args.get('source', None)
     
     try:
+        scraper = ScraperFactory.get_scraper(source)
         # 根据分类返回不同数据
         if category == 'completed':
             data = scraper.get_hot_comics(page, limit)

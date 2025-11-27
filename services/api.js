@@ -31,46 +31,75 @@ apiClient.interceptors.response.use(
 );
 
 // 获取热门漫画
-export const getHotComics = async (page = 1, limit = 20) => {
-  return apiClient.get('/comics/hot', { params: { page, limit } });
+export const getHotComics = async (
+  page = 1, 
+  limit = 20, 
+  source = null
+) => {
+  const params = { page, limit };
+  if (source) params.source = source;
+  return apiClient.get('/comics/hot', { params });
 };
 
 // 获取最新漫画
-export const getLatestComics = async (page = 1, limit = 20) => {
-  return apiClient.get('/comics/latest', { params: { page, limit } });
+export const getLatestComics = async (
+  page = 1, 
+  limit = 20, 
+  source = null
+) => {
+  const params = { page, limit };
+  if (source) params.source = source;
+  return apiClient.get('/comics/latest', { params });
 };
 
 // 搜索漫画
-export const searchComics = async (keyword, page = 1, limit = 20) => {
-  return apiClient.get('/comics/search', { 
-    params: { keyword, page, limit } 
-  });
+export const searchComics = async (
+  keyword, 
+  page = 1, 
+  limit = 20, 
+  source = null
+) => {
+  const params = { keyword, page, limit };
+  if (source) params.source = source;
+  return apiClient.get('/comics/search', { params });
 };
 
 // 获取漫画详情
-export const getComicDetail = async (comicId) => {
-  return apiClient.get(`/comics/${comicId}`);
+export const getComicDetail = async (comicId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/comics/${comicId}`, { params });
 };
 
 // 获取章节列表
-export const getChapters = async (comicId) => {
-  return apiClient.get(`/comics/${comicId}/chapters`);
+export const getChapters = async (comicId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/comics/${comicId}/chapters`, { params });
 };
 
 // 获取章节图片
-export const getChapterImages = async (chapterId) => {
-  return apiClient.get(`/chapters/${chapterId}/images`);
+export const getChapterImages = async (chapterId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/chapters/${chapterId}/images`, { params });
 };
 
 // 获取分类漫画
 export const getComicsByCategory = async (
   category, 
   page = 1, 
-  limit = 20
+  limit = 20, 
+  source = null
 ) => {
-  return apiClient.get('/comics/category', { 
-    params: { category, page, limit } 
-  });
+  const params = { category, page, limit };
+  if (source) params.source = source;
+  return apiClient.get('/comics/category', { params });
+};
+
+// 获取所有可用数据源
+export const getAvailableSources = async () => {
+  return apiClient.get('/sources');
 };
 
 export default apiClient;

@@ -11,7 +11,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ComicCard from '../../components/ComicCard';
-import { getHotComics, getLatestComics } from '../../services/api';
+import { 
+  getHotComics, 
+  getLatestComics,
+  getAvailableSources 
+} from '../../services/api';
+import { getCurrentSource, setCurrentSource } from '../../services/storage';
 
 const CATEGORIES = [
   { id: 'hot', label: '热门' },
@@ -27,10 +32,30 @@ const HomeScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [currentSource, setCurrentSourceState] = useState('mock');
+  const [sources, setSources] = useState({});
+  const [showSourceMenu, setShowSourceMenu] = useState(false);
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
 
   useEffect(() => {
     loadComics();
-  }, [selectedCategory]);
+  }, [selectedCategory, currentSource]);
+
+  const loadInitialData = async () => {
+    try {
+      const [sourcesData, savedSource] = await Promise.all([
+        getAvailableSources(),
+        getCurrentSource(),
+      ]);
+      setSources(sourcesData);
+      setCurrentSourceState(savedSource);
+    } catch (error) {
+      console.error('加载初始数据失败:', error);
+    }
+  };
 
   const loadComics = async (isRefresh = false) => {
     if (loading) return;
@@ -41,9 +66,9 @@ const HomeScreen = () => {
     try {
       let data;
       if (selectedCategory === 'hot') {
-        data = await getHotComics(currentPage);
+        data = await getHotComics(currentPage, 20, currentSource);
       } else if (selectedCategory === 'latest') {
-        data = await getLatestComics(currentPage);
+        data = await getLatestComics(currentPage, 20, currentSource);
       } else {
         data = { comics: [], hasMore: false };
       }
@@ -82,9 +107,25 @@ const HomeScreen = () => {
     setComics([]);
   };
 
+  const handleSourceChange = async (sourceId) => {
+    setCurrentSourceState(sourceId);
+    await setCurrentSource(sourceId);
+    setPage(1);
+    setComics([]);
+    setShowSourceMenu(false);
+  };
+
   const renderHeader = () => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>漫画阅读器</Text>
+      <TouchableOpacity 
+        onPress={() => setShowSourceMenu(!showSourceMenu)}
+        style={styles.sourceButton}
+      >
+        <Text style={styles.sourceButtonText}>
+          {sources[currentSource]?.name || '数据源'} ▼
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -129,6 +170,34 @@ const HomeScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       {renderHeader()}
+      
+      {showSourceMenu && (
+        <View style={styles.sourceMenu}>
+          {Object.entries(sources).map(([key, source]) => (
+            <TouchableOpacity
+              key={key}
+              style={[
+                styles.sourceMenuItem,
+                currentSource === key && styles.sourceMenuItemActive,
+              ]}
+              onPress={() => handleSourceChange(key)}
+            >
+              <Text style={[
+                styles.sourceMenuText,
+                currentSource === key && styles.sourceMenuTextActive,
+              ]}>
+                {source.name}
+              </Text>
+              {source.description && (
+                <Text style={styles.sourceMenuDesc}>
+                  {source.description}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+      
       {renderCategories()}
       <FlatList
         data={comics}
@@ -163,6 +232,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -172,6 +244,44 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
+  },
+  sourceButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 16,
+  },
+  sourceButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  sourceMenu: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingVertical: 8,
+  },
+  sourceMenuItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sourceMenuItemActive: {
+    backgroundColor: '#f0f0f0',
+  },
+  sourceMenuText: {
+    fontSize: 16,
+    color: '#000',
+    marginBottom: 4,
+  },
+  sourceMenuTextActive: {
+    color: '#6200EE',
+    fontWeight: '600',
+  },
+  sourceMenuDesc: {
+    fontSize: 12,
+    color: '#999',
   },
   categoriesContainer: {
     backgroundColor: '#fff',

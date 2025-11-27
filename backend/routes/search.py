@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.scraper import scraper
+from services.scraper_factory import ScraperFactory
 from services.cache import cache_response
 
 search_bp = Blueprint('search', __name__)
@@ -10,6 +10,7 @@ def search_comics():
     keyword = request.args.get('keyword', '')
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
+    source = request.args.get('source', None)
     
     if not keyword:
         return jsonify({
@@ -17,6 +18,7 @@ def search_comics():
         }), 400
     
     try:
+        scraper = ScraperFactory.get_scraper(source)
         data = scraper.search_comics(keyword, page, limit)
         return jsonify(data), 200
     except Exception as e:
