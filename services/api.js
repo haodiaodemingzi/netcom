@@ -102,4 +102,11 @@ export const getAvailableSources = async () => {
   return apiClient.get('/sources');
 };
 
+// 获取分类列表
+export const getCategories = async (source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get('/categories', { params });
+};
+
 export default apiClient;

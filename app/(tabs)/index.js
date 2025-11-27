@@ -14,16 +14,11 @@ import ComicCard from '../../components/ComicCard';
 import { 
   getHotComics, 
   getLatestComics,
-  getAvailableSources 
+  getAvailableSources,
+  getCategories,
+  getComicsByCategory
 } from '../../services/api';
 import { getCurrentSource, setCurrentSource } from '../../services/storage';
-
-const CATEGORIES = [
-  { id: 'hot', label: '热门' },
-  { id: 'latest', label: '最新' },
-  { id: 'completed', label: '完结' },
-  { id: 'ongoing', label: '连载' },
-];
 
 const HomeScreen = () => {
   const [comics, setComics] = useState([]);
@@ -32,28 +27,61 @@ const HomeScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [currentSource, setCurrentSourceState] = useState('guoman8');
+  const [currentSource, setCurrentSourceState] = useState(null);
   const [sources, setSources] = useState({});
+  const [categories, setCategories] = useState([
+    { id: 'hot', name: '热门' },
+    { id: 'latest', name: '最新' },
+  ]);
   const [showSourceMenu, setShowSourceMenu] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     loadInitialData();
   }, []);
 
   useEffect(() => {
-    loadComics();
-  }, [selectedCategory, currentSource]);
+    if (initialized && currentSource) {
+      loadComics();
+    }
+  }, [selectedCategory, currentSource, initialized]);
 
   const loadInitialData = async () => {
     try {
-      const [sourcesData, savedSource] = await Promise.all([
-        getAvailableSources(),
-        getCurrentSource(),
-      ]);
+      const sourcesData = await getAvailableSources();
+      const savedSource = await getCurrentSource();
+      
+      console.log('获取到的数据源:', sourcesData);
+      console.log('保存的数据源:', savedSource);
+      
       setSources(sourcesData);
-      setCurrentSourceState(savedSource);
+      
+      // 确保有有效的数据源
+      const validSource = savedSource && sourcesData[savedSource] ? savedSource : 'xmanhua';
+      console.log('使用的有效数据源:', validSource);
+      setCurrentSourceState(validSource);
+      
+      // 加载分类列表
+      try {
+        const categoriesData = await getCategories(validSource);
+        if (categoriesData && categoriesData.categories && categoriesData.categories.length > 0) {
+          // 添加热门和最新到分类列表前面
+          const allCategories = [
+            { id: 'hot', name: '热门' },
+            { id: 'latest', name: '最新' },
+            ...categoriesData.categories
+          ];
+          setCategories(allCategories);
+        }
+      } catch (error) {
+        console.error('加载分类失败:', error);
+      }
+      
+      setInitialized(true);
     } catch (error) {
       console.error('加载初始数据失败:', error);
+      setCurrentSourceState('xmanhua');
+      setInitialized(true);
     }
   };
 
@@ -63,6 +91,8 @@ const HomeScreen = () => {
     setLoading(true);
     const currentPage = isRefresh ? 1 : page;
 
+    console.log(`加载漫画 - 分类: ${selectedCategory}, 页码: ${currentPage}, 数据源: ${currentSource}`);
+
     try {
       let data;
       if (selectedCategory === 'hot') {
@@ -70,8 +100,11 @@ const HomeScreen = () => {
       } else if (selectedCategory === 'latest') {
         data = await getLatestComics(currentPage, 20, currentSource);
       } else {
-        data = { comics: [], hasMore: false };
+        // 使用分类接口
+        data = await getComicsByCategory(selectedCategory, currentPage, 20, currentSource);
       }
+
+      console.log(`获取到漫画数据: ${JSON.stringify(data, null, 2)}`);
 
       if (isRefresh) {
         setComics(data.comics || []);
@@ -136,7 +169,7 @@ const HomeScreen = () => {
       style={styles.categoriesContainer}
       contentContainerStyle={styles.categoriesContent}
     >
-      {CATEGORIES.map((category) => (
+      {categories.map((category) => (
         <TouchableOpacity
           key={category.id}
           style={[
@@ -153,7 +186,7 @@ const HomeScreen = () => {
                 styles.categoryTextActive,
             ]}
           >
-            {category.label}
+            {category.name}
           </Text>
         </TouchableOpacity>
       ))}

@@ -49,16 +49,14 @@ const ComicCard = ({ comic, darkMode = false }) => {
         )}
         <View style={styles.meta}>
           {comic.status && (
-            <View style={[
-              styles.badge,
-              comic.status === 'completed' 
-                ? styles.badgeCompleted 
-                : styles.badgeOngoing
-            ]}>
-              <Text style={styles.badgeText}>
-                {comic.status === 'completed' ? '完结' : '连载'}
-              </Text>
-            </View>
+            <Text 
+              style={[
+                styles.statusText, 
+                darkMode && styles.statusTextDark
+              ]}
+            >
+              {comic.status === 'completed' ? '完结' : '连载'}
+            </Text>
           )}
           {comic.rating && (
             <Text 
@@ -119,21 +117,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeCompleted: {
-    backgroundColor: '#4CAF50',
-  },
-  badgeOngoing: {
-    backgroundColor: '#2196F3',
-  },
-  badgeText: {
+  statusText: {
     fontSize: 10,
-    color: '#fff',
+    color: '#666',
     fontWeight: '600',
+  },
+  statusTextDark: {
+    color: '#aaa',
   },
   rating: {
     fontSize: 12,

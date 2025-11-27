@@ -80,6 +80,13 @@ const ComicDetailScreen = () => {
     }
   };
 
+  const handleDownloadChapters = async (selectedChapters) => {
+    console.log('开始下载章节:', selectedChapters.map(c => c.title));
+    // TODO: 实现章节下载逻辑
+    // 可以调用后端 API 下载图片到本地存储
+    alert(`准备下载 ${selectedChapters.length} 个章节:\n${selectedChapters.map(c => c.title).slice(0, 3).join('\n')}${selectedChapters.length > 3 ? '\n...' : ''}`);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -123,16 +130,9 @@ const ComicDetailScreen = () => {
             )}
             <View style={styles.tags}>
               {comic.status && (
-                <View style={[
-                  styles.tag,
-                  comic.status === 'completed' 
-                    ? styles.tagCompleted 
-                    : styles.tagOngoing
-                ]}>
-                  <Text style={styles.tagText}>
-                    {comic.status === 'completed' ? '完结' : '连载'}
-                  </Text>
-                </View>
+                <Text style={styles.statusText}>
+                  {comic.status === 'completed' ? '完结' : '连载'}
+                </Text>
               )}
               {comic.rating && (
                 <Text style={styles.rating}>⭐ {comic.rating}</Text>
@@ -187,6 +187,7 @@ const ComicDetailScreen = () => {
           <ChapterList
             chapters={chapters}
             onChapterPress={handleChapterPress}
+            onDownloadChapters={handleDownloadChapters}
           />
         </View>
       </ScrollView>
@@ -265,22 +266,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  tagCompleted: {
-    backgroundColor: '#4CAF50',
-  },
-  tagOngoing: {
-    backgroundColor: '#2196F3',
-  },
-  tagText: {
+  statusText: {
     fontSize: 12,
-    color: '#fff',
-    fontWeight: '600',
+    color: '#666',
+    marginRight: 8,
   },
   rating: {
     fontSize: 14,

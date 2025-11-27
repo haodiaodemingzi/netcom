@@ -1,6 +1,7 @@
 import json
 from functools import wraps
 import os
+from flask import request
 
 # 简单的内存缓存实现
 _cache = {}
@@ -31,8 +32,25 @@ def cache_response(timeout=3600, key_prefix=''):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # 生成缓存键
-            cache_key = f'{key_prefix}:{func.__name__}:{str(args)}:{str(kwargs)}'
+            # 生成缓存键, 将查询参数与请求路径纳入, 防止不同数据源/分页/查询条件串缓存
+            try:
+                query_params = request.args.to_dict(flat=True) if request else {}
+                path = request.path if request else ''
+            except Exception:
+                # 兜底处理, 避免在非请求上下文报错
+                query_params = {}
+                path = ''
+
+            key_data = {
+                'prefix': key_prefix,
+                'func': func.__name__,
+                'path': path,
+                'args': args,
+                'kwargs': kwargs,
+                'query': query_params,
+            }
+            # 使用json确保键稳定, default=str 兜底不可序列化对象
+            cache_key = json.dumps(key_data, ensure_ascii=False, sort_keys=True, default=str)
             
             # 尝试从缓存获取
             cached_data = get_cache(cache_key)

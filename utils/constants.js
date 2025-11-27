@@ -1,5 +1,5 @@
 // API 配置
-export const API_BASE_URL = 'http://localhost:5000/api';
+export const API_BASE_URL = 'http://192.168.123.178:5000/api';
 
 // 颜色主题
 export const COLORS = {
