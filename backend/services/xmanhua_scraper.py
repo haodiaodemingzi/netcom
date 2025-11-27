@@ -91,49 +91,60 @@ class XmanhuaScraper(BaseScraper):
             comics = []
             
             # 获取漫画列表
-            comic_items = soup.select('body > div:nth-child(4) > ul > li')
+            comic_items = soup.select('ul.mh-list > li')
             
             # 如果第一个选择器没找到，尝试其他可能的选择器
             if not comic_items:
-                comic_items = soup.select('ul.manga-list-1-list > li')
+                comic_items = soup.select('body > div:nth-child(4) > ul > li')
             
             for item in comic_items[:limit]:
                 try:
-                    # 获取漫画链接
-                    link_elem = item.select_one('a')
+                    # 获取漫画链接和ID
+                    link_elem = item.select_one('div.mh-item > a')
+                    if not link_elem:
+                        link_elem = item.select_one('a')
                     if not link_elem:
                         continue
                     
                     href = link_elem.get('href', '')
                     
                     # 提取漫画ID
-                    # 例如: /70xm/ -> 70xm
+                    # 例如: /73xm/ -> 73xm
                     comic_id = href.strip('/').split('/')[-1] if href else ''
                     
                     # 获取封面
-                    img_elem = item.select_one('img')
+                    img_elem = item.select_one('img.mh-cover')
+                    if not img_elem:
+                        img_elem = item.select_one('img')
                     cover = img_elem.get('src', '') if img_elem else ''
                     if cover and not cover.startswith('http'):
                         cover = self.base_url + cover
                     
                     # 获取标题
-                    title_elem = item.select_one('p.manga-list-1-item-title a')
-                    if not title_elem:
-                        title_elem = item.select_one('a')
-                    title = title_elem.get_text(strip=True) if title_elem else ''
+                    title = ''
+                    title_elem = item.select_one('h2.title > a')
+                    if title_elem:
+                        title = title_elem.get('title', '').strip()
+                        if not title:
+                            title = title_elem.get_text(strip=True)
                     
                     # 获取最新章节
-                    chapter_elem = item.select_one('p.manga-list-1-item-subtitle')
+                    chapter_elem = item.select_one('p.chapter > a')
                     latest_chapter = chapter_elem.get_text(strip=True) if chapter_elem else ''
                     
                     if comic_id:
-                        comics.append({
+                        comic_data = {
                             'id': comic_id,
                             'title': title,
                             'cover': cover,
                             'latestChapter': latest_chapter,
                             'status': 'ongoing'
-                        })
+                        }
+                        comics.append(comic_data)
+                        
+                        # 调试输出前3个漫画的信息
+                        if len(comics) <= 3:
+                            print(f"漫画 #{len(comics)}: ID={comic_id}, 标题={title}, 封面={cover[:50] if cover else 'None'}")
                 except Exception as e:
                     print(f"解析单个漫画失败: {e}")
                     continue
