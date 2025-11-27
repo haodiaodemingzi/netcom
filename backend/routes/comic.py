@@ -221,7 +221,6 @@ def get_chapter_download_info(chapter_id):
             },
             'cookie_urls': [
                 'https://xmanhua.com/',
-                f'https://xmanhua.com/{chapter_id}/'
             ]
         }
         

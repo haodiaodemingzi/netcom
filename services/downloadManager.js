@@ -166,20 +166,95 @@ class DownloadManager {
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
 
-    console.log(`调用API获取章节图片: /chapters/${chapterId}/images`);
+    // 使用旧API获取图片
+    console.log(`调用API获取章节图片`);
     const imagesData = await getChapterImages(chapterId, source);
     const images = imagesData.images || [];
     console.log(`获取到 ${images.length} 张图片`);
-    
+
     task.totalImages = images.length;
     task.currentImage = 0;
+
+    // 先访问网站首页获取cookie
+    let cookieHeader = '';
+    const cookieUrl = 'https://xmanhua.com/';
+    
+    console.log(`访问网站获取cookie: ${cookieUrl}`);
+    
+    try {
+      const cookieResponse = await fetch(cookieUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9'
+        },
+        credentials: 'include'
+      });
+      
+      // 从响应头中提取Set-Cookie
+      const setCookieHeader = cookieResponse.headers.get('set-cookie');
+      if (setCookieHeader) {
+        console.log(`获取到cookie: ${setCookieHeader.substring(0, 80)}...`);
+        cookieHeader = setCookieHeader;
+      } else {
+        console.log(`未获取到cookie`);
+      }
+    } catch (error) {
+      console.log(`访问网站失败: ${error.message}`);
+    }
+
+    // 准备下载headers
+    let downloadHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+      'Referer': 'https://xmanhua.com/',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9'
+    };
+
+    if (cookieHeader) {
+      downloadHeaders['Cookie'] = cookieHeader;
+      console.log(`下载headers已添加Cookie`);
+    }
+    
+    console.log(`下载headers:`, JSON.stringify(downloadHeaders, null, 2));
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const filename = `${String(image.page).padStart(3, '0')}.jpg`;
       const filepath = `${chapterDir}${filename}`;
 
-      await FileSystem.downloadAsync(image.url, filepath);
+      // 打印图片下载信息
+      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
+        console.log(`[下载] 第${image.page}页:`);
+        console.log(`  URL: ${image.url}`);
+        console.log(`  保存到: ${filepath}`);
+        console.log(`  Headers:`, JSON.stringify(downloadHeaders, null, 2));
+      }
+
+      // 使用带headers和cookie的下载
+      let downloadResult;
+      if (Object.keys(downloadHeaders).length > 0) {
+        downloadResult = await FileSystem.downloadAsync(image.url, filepath, {
+          headers: downloadHeaders
+        });
+      } else {
+        downloadResult = await FileSystem.downloadAsync(image.url, filepath);
+      }
+      
+      // 打印下载响应
+      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
+        console.log(`  下载响应:`, JSON.stringify(downloadResult, null, 2));
+      }
+      
+      // 验证文件是否下载成功
+      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
+        const fileInfo = await FileSystem.getInfoAsync(filepath);
+        if (fileInfo.exists) {
+          console.log(`  ✓ 下载成功: ${(fileInfo.size / 1024).toFixed(1)}KB`);
+        } else {
+          console.log(`  ✗ 下载失败: 文件不存在`);
+        }
+      }
       
       task.currentImage = i + 1;
       task.progress = Math.round((task.currentImage / task.totalImages) * 100);
@@ -196,6 +271,8 @@ class DownloadManager {
     
     const metaPath = `${chapterDir}meta.json`;
     await FileSystem.writeAsStringAsync(metaPath, JSON.stringify(metaData));
+    
+    console.log(`章节下载完成: ${chapterTitle}, 共${images.length}张图片`);
   }
 
   isDownloaded(chapterId) {
@@ -348,7 +425,42 @@ class DownloadManager {
       const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
       await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
 
-      // 3. 下载所有图片
+      // 3. 如果有cookie_urls，先访问这些URL获取cookie
+      let cookieHeader = '';
+      if (download_config.cookie_urls && download_config.cookie_urls.length > 0) {
+        console.log(`访问 ${download_config.cookie_urls.length} 个URL获取cookie...`);
+        
+        for (const url of download_config.cookie_urls) {
+          try {
+            console.log(`  访问: ${url}`);
+            const cookieResponse = await fetch(url, {
+              headers: download_config.headers || {},
+              credentials: 'include'
+            });
+            
+            // 从响应头中提取Set-Cookie
+            const setCookieHeader = cookieResponse.headers.get('set-cookie');
+            if (setCookieHeader) {
+              console.log(`  获取到cookie: ${setCookieHeader.substring(0, 50)}...`);
+              cookieHeader += setCookieHeader + '; ';
+            }
+          } catch (error) {
+            console.log(`  访问失败: ${error.message}`);
+          }
+        }
+        
+        if (cookieHeader) {
+          console.log(`Cookie准备完成`);
+        }
+      }
+
+      // 4. 准备下载headers
+      let downloadHeaders = { ...download_config.headers };
+      if (cookieHeader) {
+        downloadHeaders['Cookie'] = cookieHeader.trim();
+      }
+
+      // 5. 下载所有图片
       let completed = 0;
       let failed = 0;
 
@@ -363,12 +475,12 @@ class DownloadManager {
             console.log(`下载第${image.page}页: ${image.url.substring(0, 80)}...`);
           }
           
-          // 使用下载配置中的headers
+          // 使用带cookie的headers下载
           const downloadResult = await FileSystem.downloadAsync(
             image.url,
             filepath,
             {
-              headers: download_config.headers
+              headers: downloadHeaders
             }
           );
           
