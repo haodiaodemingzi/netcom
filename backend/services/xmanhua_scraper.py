@@ -29,6 +29,32 @@ class XmanhuaScraper(BaseScraper):
             'Connection': 'keep-alive',
         })
     
+    def extract_uk_from_tokens(self, packed_code):
+        """直接从token数组中提取uk值"""
+        try:
+            # 查找split('|')部分
+            split_match = re.search(r"'([^']+)'\.split\('\|'\)", packed_code)
+            if split_match:
+                tokens = split_match.group(1).split('|')
+                
+                # 查找uk和对应的值
+                if 'uk' in tokens:
+                    uk_index = tokens.index('uk')
+                    
+                    # 查找长字符串（uk值）
+                    for i, token in enumerate(tokens):
+                        if len(token) > 40 and re.match(r'^[A-F0-9]+$', token):
+                            return token
+                
+                # 如果没找到uk关键字，直接查找长字符串
+                for i, token in enumerate(tokens):
+                    if len(token) > 40 and re.match(r'^[A-F0-9]+$', token):
+                        return token
+            
+            return None
+        except Exception:
+            return None
+    
     def get_categories(self):
         """
         获取分类列表
@@ -393,15 +419,31 @@ class XmanhuaScraper(BaseScraper):
             
             images = []
             
-            # 使用 chapterimage.ashx API 获取每一页的图片
+            # API每次返回当前页的图片URL（通常是2张：当前页和下一页）
+            # 需要逐页请求来获取所有图片
+            api_url = f'{self.base_url}/{chapter_id}/chapterimage.ashx'
+            
+            # 设置请求头
+            headers = {
+                'Accept': '*/*',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+                'Referer': f'{self.base_url}/{chapter_id}/',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Priority': 'u=1, i'
+            }
+            
+            # 确保session有必要的Cookie（通过访问章节页面获取）
+            print(f"  确保获取必要的Cookie...")
+            
+            # 逐页获取图片
             for page_num in range(1, total_pages + 1):
-                # 构建API URL
-                api_url = f'{self.base_url}/{chapter_id}/chapterimage.ashx'
-                
-                # 构建请求参数，使用从页面提取的签名
+                # 构建请求参数
                 params = {
                     'cid': cid,
-                    'page': page_num,
+                    'page': str(page_num),
                     'key': '',
                     '_cid': cid,
                     '_mid': mid,
@@ -409,14 +451,17 @@ class XmanhuaScraper(BaseScraper):
                     '_sign': viewsign
                 }
                 
-                # 设置请求头
                 headers = {
-                    'Accept': '*/*',
-                    'Accept-Language': 'zh-CN,zh;q=0.9',
-                    'Referer': f'{self.base_url}/{chapter_id}/',
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'accept': '*/*',
+                    'accept-language': 'zh-CN,zh;q=0.9',
+                    'priority': 'u=1, i',
+                    'referer': f'{self.base_url}/{chapter_id}/',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                    'x-requested-with': 'XMLHttpRequest'
                 }
-                
                 try:
                     # 使用session发送请求
                     self.session.headers.update(headers)
@@ -431,34 +476,63 @@ class XmanhuaScraper(BaseScraper):
                         response_text = api_response.text.strip()
                         
                         # API返回的是混淆的JavaScript代码
-                        # 需要执行eval来获取真实的图片URL数组
                         try:
+                            # 调试：打印原始JS代码
+                            if page_num == 1:
+                                print(f"  原始JS代码: {response_text[:300]}...")
+                            
                             # 执行混淆的JavaScript代码
                             js_code = response_text + '; d;'
                             ctx = execjs.compile(js_code)
                             result = ctx.eval('d')
                             
-                            if result and len(result) > 0:
-                                img_url = result[0]
+                            # 从JS代码中提取uk参数
+                            uk_value = self.extract_uk_from_tokens(response_text)
+                            if page_num == 1:
+                                if uk_value:
+                                    print(f"  成功提取uk参数: {uk_value[:50]}...")
+                                else:
+                                    print(f"  未找到uk参数")
+                            
+                            # 调试：打印JS执行结果
+                            if page_num == 1:
+                                print(f"  JS执行结果: {result}")
+                            
+                            # result是一个数组，通常包含2个URL（当前页和下一页）
+                            # 我们只取第一个，即当前页的URL
+                            if result and isinstance(result, list) and len(result) > 0:
+                                img_url = result[0]  # 取第一个URL，即当前页
                                 
-                                if img_url and not img_url.startswith('http'):
-                                    img_url = 'https:' + img_url if img_url.startswith('//') else self.base_url + img_url
+                                # 调试：打印原始URL
+                                if page_num <= 3:
+                                    print(f"  第{page_num}页原始URL: {img_url}")
                                 
                                 if img_url:
+                                    # 确保URL是完整的
+                                    if not img_url.startswith('http'):
+                                        img_url = 'https:' + img_url if img_url.startswith('//') else self.base_url + img_url
+                                    
+                                    # 如果URL以&uk=结尾且我们有uk值，则补充完整
+                                    if uk_value and img_url.endswith('&uk='):
+                                        img_url = img_url + uk_value
+                                        if page_num <= 3:
+                                            print(f"  第{page_num}页补充uk后: {img_url[:100]}...")
+                                    
                                     images.append({
                                         'page': page_num,
                                         'url': img_url
                                     })
                                     
+                                    # 只打印前3张的URL
                                     if page_num <= 3:
-                                        print(f"  第{page_num}页: {img_url}")
+                                        print(f"  第{page_num}页最终URL: {img_url[:100]}...")
                             else:
                                 print(f"  第{page_num}页: JavaScript执行结果为空")
                         except Exception as js_error:
                             print(f"  第{page_num}页: JavaScript执行失败 - {js_error}")
                             print(f"  响应内容: {response_text[:200]}")
                 except Exception as e:
-                    print(f"获取第{page_num}页失败: {e}")
+                    print(f"  第{page_num}页: 请求失败 - {e}")
                     continue
             
             if len(images) > 3:
