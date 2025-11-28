@@ -8,6 +8,7 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -20,6 +21,7 @@ import {
   removeFavorite,
   getCurrentSource
 } from '../../services/storage';
+import downloadManager from '../../services/downloadManager';
 
 const ComicDetailScreen = () => {
   const router = useRouter();
@@ -77,7 +79,13 @@ const ComicDetailScreen = () => {
 
   const handleStartReading = () => {
     if (chapters.length > 0) {
-      router.push(`/reader/${chapters[0].id}`);
+      // 检查第一个章节是否已下载
+      const firstChapter = chapters[0];
+      if (downloadManager.isDownloaded(firstChapter.id)) {
+        router.push(`/reader/${firstChapter.id}`);
+      } else {
+        Alert.alert('提示', '请先下载第一章才能开始阅读');
+      }
     }
   };
 

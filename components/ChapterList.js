@@ -251,7 +251,12 @@ const ChapterList = ({
           if (selectionMode) {
             toggleChapterSelection(item.id);
           } else {
-            onChapterPress(item);
+            // 检查是否已下载
+            if (downloadStatus === 'completed') {
+              onChapterPress(item);
+            } else {
+              Alert.alert('提示', '请先下载该章节才能阅读');
+            }
           }
         }}
         activeOpacity={0.7}

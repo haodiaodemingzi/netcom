@@ -7,6 +7,8 @@ import {
   StatusBar,
   Dimensions,
   ActivityIndicator,
+  Text,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import ImageViewer from '../../components/ImageViewer';
@@ -46,40 +48,69 @@ const ReaderScreen = () => {
       const settingsData = await getSettings();
       setSettings(settingsData);
       
-      // 先尝试加载本地已下载的章节
+      // 检查章节是否已下载
       const isDownloaded = downloadManager.isDownloaded(chapterId);
       
-      if (isDownloaded) {
-        console.log(`加载本地章节: ${chapterId}`);
-        
-        const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
-          .find(info => info.chapterId === chapterId);
-        
-        if (downloadedInfo) {
-          const localImages = await downloadManager.getLocalChapterImages(
-            downloadedInfo.comicId,
-            chapterId
-          );
-          
-          if (localImages && localImages.length > 0) {
-            console.log(`[Reader] 本地加载成功: ${localImages.length}页`);
-            console.log(`[Reader] 第1张URL: ${localImages[0].url}`);
-            console.log(`[Reader] 最后1张URL: ${localImages[localImages.length - 1].url}`);
-            setImages(localImages);
-            setLoading(false);
-            return;
-          } else {
-            console.error('[Reader] 本地图片为空，切换到网络');
-          }
-        }
+      if (!isDownloaded) {
+        // 未下载的章节不允许阅读
+        console.log(`章节 ${chapterId} 未下载，禁止阅读`);
+        setLoading(false);
+        Alert.alert(
+          '提示',
+          '该章节未下载，无法阅读',
+          [
+            {
+              text: '确定',
+              onPress: () => router.back()
+            }
+          ]
+        );
+        return;
       }
       
-      // 如果未下载或本地加载失败，则从网络加载
-      console.log(`网络加载: ${chapterId}`);
-      const imagesData = await getChapterImages(chapterId, source);
-      setImages(imagesData.images || []);
+      // 加载本地已下载的章节
+      console.log(`加载本地章节: ${chapterId}`);
+      
+      const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
+        .find(info => info.chapterId === chapterId);
+      
+      if (downloadedInfo) {
+        const localImages = await downloadManager.getLocalChapterImages(
+          downloadedInfo.comicId,
+          chapterId
+        );
+        
+        if (localImages && localImages.length > 0) {
+          console.log(`[Reader] 本地加载成功: ${localImages.length}页`);
+          console.log(`[Reader] 第1张URL: ${localImages[0].url}`);
+          console.log(`[Reader] 最后1张URL: ${localImages[localImages.length - 1].url}`);
+          setImages(localImages);
+        } else {
+          console.error('[Reader] 本地图片为空');
+          Alert.alert(
+            '错误',
+            '章节文件损坏，请重新下载',
+            [
+              {
+                text: '确定',
+                onPress: () => router.back()
+              }
+            ]
+          );
+        }
+      }
     } catch (error) {
       console.error('加载章节图片失败:', error);
+      Alert.alert(
+        '错误',
+        '加载章节失败: ' + error.message,
+        [
+          {
+            text: '确定',
+            onPress: () => router.back()
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
