@@ -1,8 +1,9 @@
 // API 配置
 // 🚨 打包APK前请修改为你的服务器地址！
-// 开发环境: http://localhost:5000/api
+// 开发环境（本地）: http://192.168.123.178:5000/api
 // 生产环境: https://comic.bigmang.top/api
-export const API_BASE_URL = 'https://comic.bigmang.top/api';
+export const API_BASE_URL = 'http://192.168.123.178:5000/api';
+//export const API_BASE_URL = 'https://comic.bigmang.top/api';
 
 // 颜色主题
 export const COLORS = {

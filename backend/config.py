@@ -38,7 +38,7 @@ COMIC_SOURCES = {
         'enabled': True,
         'description': 'X漫画网',
         'proxy': {
-            'enabled': False,  # 生产服务器不需要代理，改为False
+            'enabled': True,  # 生产服务器不需要代理，改为False
             'host': '127.0.0.1',
             'port': 7897,
             'type': 'http'
@@ -47,7 +47,8 @@ COMIC_SOURCES = {
 }
 
 # 默认数据源
-DEFAULT_SOURCE = 'xmanhua'
+# xmanhua需要代理，guoman8不需要代理（推荐生产环境使用）
+DEFAULT_SOURCE = os.getenv('DEFAULT_SOURCE', 'guoman8')
 
 # 缓存配置
 CACHE_TIMEOUT = {
