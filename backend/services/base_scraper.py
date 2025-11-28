@@ -41,8 +41,21 @@ class BaseScraper(ABC):
         """发送HTTP请求"""
         try:
             self._delay()
-            response = self.session.get(url, timeout=10, verify=verify_ssl)
+            # 确保正确处理gzip压缩的响应
+            response = self.session.get(
+                url, 
+                timeout=10, 
+                verify=verify_ssl,
+                headers={
+                    **self.session.headers,
+                    'Accept-Encoding': 'gzip, deflate, br'
+                }
+            )
             response.raise_for_status()
+            
+            # 确保响应内容正确解码
+            response.encoding = response.apparent_encoding or 'utf-8'
+            
             return response
         except requests.RequestException as e:
             print(f'请求失败: {url}, 错误: {e}')

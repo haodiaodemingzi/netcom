@@ -147,9 +147,20 @@ class XmanhuaScraper(BaseScraper):
             
             # 调试：打印响应信息
             print(f"[调试] 响应状态码: {response.status_code}")
+            print(f"[调试] Content-Encoding: {response.headers.get('Content-Encoding', 'none')}")
+            print(f"[调试] Content-Type: {response.headers.get('Content-Type', 'none')}")
+            print(f"[调试] 响应编码: {response.encoding}")
             print(f"[调试] 响应内容长度: {len(response.text)} 字符")
-            print(f"[调试] 响应内容预览 (前500字符):")
-            print(response.text[:500])
+            
+            # 检查是否是有效的HTML
+            html_preview = response.text[:500]
+            if '<html' in html_preview.lower() or '<!doctype' in html_preview.lower():
+                print(f"[调试] ✓ HTML内容正常")
+                print(f"[调试] 响应内容预览 (前200字符): {html_preview[:200]}")
+            else:
+                print(f"[调试] ✗ HTML内容异常，可能是压缩或编码问题")
+                print(f"[调试] 原始内容 (前100字节): {response.content[:100]}")
+                print(f"[调试] 文本内容 (前200字符): {html_preview[:200]}")
             
             soup = BeautifulSoup(response.text, 'lxml')
             
