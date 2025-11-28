@@ -14,7 +14,6 @@ export const getFavorites = async () => {
     const data = await AsyncStorage.getItem(KEYS.FAVORITES);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('获取收藏失败:', error);
     return [];
   }
 };
@@ -32,7 +31,6 @@ export const addFavorite = async (comic) => {
     }
     return true;
   } catch (error) {
-    console.error('添加收藏失败:', error);
     return false;
   }
 };
@@ -44,7 +42,6 @@ export const removeFavorite = async (comicId) => {
     await AsyncStorage.setItem(KEYS.FAVORITES, JSON.stringify(filtered));
     return true;
   } catch (error) {
-    console.error('移除收藏失败:', error);
     return false;
   }
 };
@@ -54,7 +51,6 @@ export const isFavorite = async (comicId) => {
     const favorites = await getFavorites();
     return favorites.some(item => item.id === comicId);
   } catch (error) {
-    console.error('检查收藏失败:', error);
     return false;
   }
 };
@@ -65,7 +61,6 @@ export const getHistory = async () => {
     const data = await AsyncStorage.getItem(KEYS.HISTORY);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('获取历史失败:', error);
     return [];
   }
 };
@@ -97,7 +92,6 @@ export const addHistory = async (comic, chapterId, page) => {
     await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(history));
     return true;
   } catch (error) {
-    console.error('添加历史失败:', error);
     return false;
   }
 };
@@ -107,7 +101,6 @@ export const clearHistory = async () => {
     await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify([]));
     return true;
   } catch (error) {
-    console.error('清除历史失败:', error);
     return false;
   }
 };
@@ -127,7 +120,6 @@ export const getSettings = async () => {
       autoLoadHD: false,
     };
   } catch (error) {
-    console.error('获取设置失败:', error);
     return {};
   }
 };
@@ -137,7 +129,6 @@ export const saveSettings = async (settings) => {
     await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
     return true;
   } catch (error) {
-    console.error('保存设置失败:', error);
     return false;
   }
 };
@@ -148,7 +139,6 @@ export const getSearchHistory = async () => {
     const data = await AsyncStorage.getItem(KEYS.SEARCH_HISTORY);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('获取搜索历史失败:', error);
     return [];
   }
 };
@@ -169,7 +159,6 @@ export const addSearchHistory = async (keyword) => {
     );
     return true;
   } catch (error) {
-    console.error('添加搜索历史失败:', error);
     return false;
   }
 };
@@ -179,7 +168,6 @@ export const clearSearchHistory = async () => {
     await AsyncStorage.setItem(KEYS.SEARCH_HISTORY, JSON.stringify([]));
     return true;
   } catch (error) {
-    console.error('清除搜索历史失败:', error);
     return false;
   }
 };
@@ -190,7 +178,6 @@ export const getCurrentSource = async () => {
     const data = await AsyncStorage.getItem(KEYS.CURRENT_SOURCE);
     return data || 'xmanhua';
   } catch (error) {
-    console.error('获取当前数据源失败:', error);
     return 'xmanhua';
   }
 };
@@ -200,7 +187,6 @@ export const setCurrentSource = async (source) => {
     await AsyncStorage.setItem(KEYS.CURRENT_SOURCE, source);
     return true;
   } catch (error) {
-    console.error('设置当前数据源失败:', error);
     return false;
   }
 };

@@ -38,7 +38,7 @@ class DownloadManager {
         this.downloadedChapters = new Map(Object.entries(chapters));
       }
     } catch (error) {
-      console.error('加载已下载章节失败:', error);
+      // 静默失败
     }
   }
 
@@ -47,7 +47,7 @@ class DownloadManager {
       const data = Object.fromEntries(this.downloadedChapters);
       await AsyncStorage.setItem('downloaded_chapters', JSON.stringify(data));
     } catch (error) {
-      console.error('保存已下载章节失败:', error);
+      // 静默失败
     }
   }
 
@@ -79,14 +79,12 @@ class DownloadManager {
     for (const chapter of chapters) {
       // 检查是否已下载
       if (this.downloadedChapters.has(chapter.id)) {
-        console.log(`章节 ${chapter.title} 已下载，跳过`);
         continue;
       }
       
       // 检查是否已在队列中
       const existingTask = this.queue.find(t => t.chapterId === chapter.id);
       if (existingTask) {
-        console.log(`章节 ${chapter.title} 已在下载队列中，跳过`);
         continue;
       }
       
@@ -138,11 +136,9 @@ class DownloadManager {
           if (task.retries < MAX_RETRIES) {
             task.retries++;
             task.status = 'pending';
-            console.log(`章节 ${task.chapterTitle} 下载失败，准备重试 (${task.retries}/${MAX_RETRIES})`);
           } else {
             task.status = 'failed';
             task.error = error.message;
-            console.error(`章节 ${task.chapterTitle} 下载失败:`, error);
           }
         })
         .finally(() => {
@@ -163,16 +159,12 @@ class DownloadManager {
   async downloadChapter(task) {
     const { comicId, chapterId, chapterTitle, source } = task;
     
-    console.log(`开始下载章节: ${chapterTitle} (ID: ${chapterId})`);
-    
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
 
     // 使用旧API获取图片
-    console.log(`调用API获取章节图片`);
     const imagesData = await getChapterImages(chapterId, source);
     const images = imagesData.images || [];
-    console.log(`获取到 ${images.length} 张图片`);
 
     task.totalImages = images.length;
     task.currentImage = 0;
@@ -180,8 +172,6 @@ class DownloadManager {
     // 先访问网站首页获取cookie
     let cookieHeader = '';
     const cookieUrl = 'https://xmanhua.com/';
-    
-    console.log(`访问网站获取cookie: ${cookieUrl}`);
     
     try {
       const cookieResponse = await fetch(cookieUrl, {
@@ -196,13 +186,10 @@ class DownloadManager {
       // 从响应头中提取Set-Cookie
       const setCookieHeader = cookieResponse.headers.get('set-cookie');
       if (setCookieHeader) {
-        console.log(`获取到cookie: ${setCookieHeader.substring(0, 80)}...`);
         cookieHeader = setCookieHeader;
-      } else {
-        console.log(`未获取到cookie`);
       }
     } catch (error) {
-      console.log(`访问网站失败: ${error.message}`);
+      // 静默失败
     }
 
     // 准备下载headers
@@ -215,19 +202,12 @@ class DownloadManager {
 
     if (cookieHeader) {
       downloadHeaders['Cookie'] = cookieHeader;
-      console.log(`下载headers已添加Cookie`);
     }
-    
-    console.log(`下载headers:`, JSON.stringify(downloadHeaders, null, 2));
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const filename = `${String(image.page).padStart(3, '0')}.jpg`;
       const filepath = `${chapterDir}${filename}`;
-
-      // 打印每张图片的下载URL
-      console.log(`\n[下载图片 ${i + 1}/${images.length}] 第${image.page}页`);
-      console.log(`  URL: ${image.url}`);
 
       // 使用带headers和cookie的下载
       let downloadResult;
@@ -241,28 +221,6 @@ class DownloadManager {
       
       // 验证文件
       const fileInfo = await FileSystem.getInfoAsync(filepath);
-      if (fileInfo.exists) {
-        const sizeKB = (fileInfo.size / 1024).toFixed(1);
-        console.log(`  ✓ 下载完成: ${sizeKB}KB`);
-        
-        // 检查文件是否太小（可能不是真正的图片）
-        if (fileInfo.size < 10 * 1024) { // 小于10KB
-          console.warn(`  ⚠️  警告: 文件太小 (${sizeKB}KB)，可能不是有效图片！`);
-          
-          // 读取文件前100字节查看内容
-          try {
-            const content = await FileSystem.readAsStringAsync(filepath, {
-              encoding: FileSystem.EncodingType.Base64,
-              length: 100
-            });
-            console.log(`  文件前100字节(Base64): ${content.substring(0, 50)}...`);
-          } catch (e) {
-            console.log(`  无法读取文件内容: ${e.message}`);
-          }
-        }
-      } else {
-        console.log(`  ✗ 下载失败: 文件不存在`);
-      }
       
       task.currentImage = i + 1;
       task.progress = Math.round((task.currentImage / task.totalImages) * 100);
@@ -292,8 +250,6 @@ class DownloadManager {
     // 保存已下载章节列表
     await this.saveDownloadedChapters();
     this.notifyListeners();
-    
-    console.log(`章节下载完成: ${chapterTitle}, 共${images.length}张图片`);
     
     // 保存到相册（仅在开发构建中可用，Expo Go不支持）
     // 如果需要此功能，请运行 npx expo run:android
@@ -328,22 +284,16 @@ class DownloadManager {
     const metaPath = `${chapterDir}meta.json`;
     
     try {
-      console.log(`[读取本地章节] 章节ID: ${chapterId}`);
-      console.log(`  目录: ${chapterDir}`);
-      
       // 检查目录是否存在
       const dirInfo = await FileSystem.getInfoAsync(chapterDir);
-      console.log(`  目录存在: ${dirInfo.exists}`);
       
       if (!dirInfo.exists) {
-        console.error(`  ✗ 目录不存在`);
         return null;
       }
       
       // 读取元数据
       const metaContent = await FileSystem.readAsStringAsync(metaPath);
       const meta = JSON.parse(metaContent);
-      console.log(`  元数据: 共${meta.totalImages}张图片`);
       
       const images = [];
       let missingCount = 0;
@@ -362,23 +312,13 @@ class DownloadManager {
             isLocal: true,
             size: fileInfo.size
           });
-          
-          // 只打印前3张的信息
-          if (i <= 3) {
-            console.log(`  ✓ 第${i}页: ${filename} (${(fileInfo.size / 1024).toFixed(1)}KB)`);
-          }
         } else {
           missingCount++;
-          if (i <= 3) {
-            console.log(`  ✗ 第${i}页: ${filename} 不存在或为空`);
-          }
         }
       }
       
-      console.log(`  成功加载${images.length}/${meta.totalImages}张图片${missingCount > 0 ? `, 缺失${missingCount}张` : ''}`);
       return images;
     } catch (error) {
-      console.error(`  读取失败: ${error.message}`);
       return null;
     }
   }
@@ -417,16 +357,13 @@ class DownloadManager {
   async saveToGallery(chapterDir, totalImages, chapterTitle) {
     try {
       // 请求相册权限
-      console.log('请求相册权限...');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       
       if (status !== 'granted') {
-        console.log('相册权限被拒绝');
         Alert.alert('提示', '需要相册权限才能保存图片到相册');
         return;
       }
       
-      console.log(`开始保存${totalImages}张图片到相册...`);
       let successCount = 0;
       let failCount = 0;
       
@@ -457,17 +394,10 @@ class DownloadManager {
           }
           
           successCount++;
-          
-          if (i === 1 || i === totalImages) {
-            console.log(`  第${i}页已保存到相册`);
-          }
         } catch (error) {
-          console.error(`保存第${i}页失败:`, error.message);
           failCount++;
         }
       }
-      
-      console.log(`相册保存完成: 成功${successCount}张, 失败${failCount}张`);
       
       // 提示用户
       if (successCount > 0) {
@@ -477,7 +407,7 @@ class DownloadManager {
         );
       }
     } catch (error) {
-      console.error('保存到相册失败:', error);
+      // 静默失败
     }
   }
 
@@ -490,7 +420,6 @@ class DownloadManager {
       await this.saveDownloadedChapters();
       this.notifyListeners();
     } catch (error) {
-      console.error('删除章节失败:', error);
       throw error;
     }
   }
@@ -500,14 +429,11 @@ class DownloadManager {
     
     // 检查是否已下载
     if (this.downloadedChapters.has(chapterId)) {
-      console.log(`章节 ${chapterTitle} 已下载`);
       if (onProgress) onProgress({ status: 'already_downloaded' });
       return { success: true, alreadyDownloaded: true };
     }
 
     try {
-      console.log(`开始下载: ${chapterTitle}`);
-      
       // 1. 获取章节下载信息
       const apiUrl = `/api/chapters/${chapterId}/download-info?source=${source}`;
       
@@ -523,7 +449,6 @@ class DownloadManager {
 
       const { images, download_config } = data.data;
       const totalImages = images.length;
-      console.log(`共${totalImages}张图片`);
 
       // 2. 创建下载目录
       const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
@@ -532,11 +457,8 @@ class DownloadManager {
       // 3. 如果有cookie_urls，先访问这些URL获取cookie
       let cookieHeader = '';
       if (download_config.cookie_urls && download_config.cookie_urls.length > 0) {
-        console.log(`访问 ${download_config.cookie_urls.length} 个URL获取cookie...`);
-        
         for (const url of download_config.cookie_urls) {
           try {
-            console.log(`  访问: ${url}`);
             const cookieResponse = await fetch(url, {
               headers: download_config.headers || {},
               credentials: 'include'
@@ -545,16 +467,11 @@ class DownloadManager {
             // 从响应头中提取Set-Cookie
             const setCookieHeader = cookieResponse.headers.get('set-cookie');
             if (setCookieHeader) {
-              console.log(`  获取到cookie: ${setCookieHeader.substring(0, 50)}...`);
               cookieHeader += setCookieHeader + '; ';
             }
           } catch (error) {
-            console.log(`  访问失败: ${error.message}`);
+            // 静默失败
           }
-        }
-        
-        if (cookieHeader) {
-          console.log(`Cookie准备完成`);
         }
       }
 
@@ -574,11 +491,6 @@ class DownloadManager {
         const filepath = `${chapterDir}${filename}`;
 
         try {
-          // 只打印关键信息
-          if (i === 0 || i === images.length - 1) {
-            console.log(`下载第${image.page}页: ${image.url.substring(0, 80)}...`);
-          }
-          
           // 使用带cookie的headers下载
           const downloadResult = await FileSystem.downloadAsync(
             image.url,
@@ -593,12 +505,7 @@ class DownloadManager {
           
           if (fileInfo.exists && fileInfo.size > 0) {
             completed++;
-            // 只打印第一张和最后一张的详细信息
-            if (i === 0 || i === images.length - 1) {
-              console.log(`成功: ${(fileInfo.size / 1024).toFixed(1)}KB`);
-            }
           } else {
-            console.error(`第${image.page}页下载失败`);
             failed++;
           }
           
@@ -614,7 +521,6 @@ class DownloadManager {
             });
           }
         } catch (error) {
-          console.error(`第${image.page}页错误: ${error.message}`);
           failed++;
           
           if (onProgress) {
@@ -656,8 +562,6 @@ class DownloadManager {
       await this.saveDownloadedChapters();
       this.notifyListeners();
 
-      console.log(`下载完成: 成功${completed}张, 失败${failed}张`);
-      
       if (onProgress) {
         onProgress({
           status: 'completed',
@@ -676,7 +580,6 @@ class DownloadManager {
       };
 
     } catch (error) {
-      console.error(`下载失败: ${error.message}`);
       if (onProgress) {
         onProgress({
           status: 'error',

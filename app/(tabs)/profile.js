@@ -27,8 +27,9 @@ const ProfileScreen = () => {
     autoLoadHD: false,
     keepScreenOn: true,
   });
-  const [currentSource, setCurrentSourceState] = useState('guoman8');
+  const [currentSource, setCurrentSourceState] = useState('xmanhua');
   const [sources, setSources] = useState({});
+  const [showSourceMenu, setShowSourceMenu] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -49,7 +50,7 @@ const ProfileScreen = () => {
       setSources(sourcesData);
       setCurrentSourceState(savedSource);
     } catch (error) {
-      console.error('加载数据源失败:', error);
+      // 静默失败
     }
   };
 
@@ -77,24 +78,11 @@ const ProfileScreen = () => {
     );
   };
 
-  const handleSourceChange = () => {
-    const sourceOptions = Object.entries(sources).map(([key, source]) => ({
-      text: source.name,
-      onPress: async () => {
-        setCurrentSourceState(key);
-        await setCurrentSource(key);
-        Alert.alert('提示', `已切换到 ${source.name}`);
-      },
-    }));
-
-    Alert.alert(
-      '选择数据源',
-      '切换数据源后将重新加载内容',
-      [
-        ...sourceOptions,
-        { text: '取消', style: 'cancel' },
-      ]
-    );
+  const handleSourceChange = async (sourceId) => {
+    setCurrentSourceState(sourceId);
+    await setCurrentSource(sourceId);
+    setShowSourceMenu(false);
+    Alert.alert('提示', `已切换到 ${sources[sourceId]?.name}`);
   };
 
   const renderSettingItem = (title, value, onValueChange) => (
@@ -144,16 +132,42 @@ const ProfileScreen = () => {
           <Text style={styles.sectionTitle}>设置</Text>
           <TouchableOpacity 
             style={styles.menuItem} 
-            onPress={handleSourceChange}
+            onPress={() => setShowSourceMenu(!showSourceMenu)}
           >
             <Text style={styles.menuTitle}>数据源</Text>
             <View style={styles.menuRight}>
               <Text style={styles.menuValue}>
                 {sources[currentSource]?.name || '加载中...'}
               </Text>
-              <Text style={styles.arrow}>›</Text>
+              <Text style={styles.arrow}>{showSourceMenu ? '▲' : '▼'}</Text>
             </View>
           </TouchableOpacity>
+          {showSourceMenu && (
+            <View style={styles.sourceMenuContainer}>
+              {Object.entries(sources).map(([key, source]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.sourceMenuItem,
+                    currentSource === key && styles.sourceMenuItemActive,
+                  ]}
+                  onPress={() => handleSourceChange(key)}
+                >
+                  <Text style={[
+                    styles.sourceMenuText,
+                    currentSource === key && styles.sourceMenuTextActive,
+                  ]}>
+                    {source.name}
+                  </Text>
+                  {source.description && (
+                    <Text style={styles.sourceMenuDesc}>
+                      {source.description}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           {renderSettingItem(
             '夜间模式',
             settings.darkMode,
@@ -267,6 +281,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     marginRight: 8,
+  },
+  sourceMenuContainer: {
+    backgroundColor: '#f9f9f9',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  sourceMenuItem: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sourceMenuItemActive: {
+    backgroundColor: '#e8e0f5',
+  },
+  sourceMenuText: {
+    fontSize: 15,
+    color: '#333',
+  },
+  sourceMenuTextActive: {
+    color: '#6200EE',
+    fontWeight: '600',
+  },
+  sourceMenuDesc: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
   },
 });
 

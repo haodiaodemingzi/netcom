@@ -30,7 +30,7 @@ const HomeScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [currentSource, setCurrentSourceState] = useState(null);
+  const [currentSource, setCurrentSourceState] = useState('xmanhua');
   const [sources, setSources] = useState({});
   const [categories, setCategories] = useState([
     { id: 'hot', name: '热门' },
@@ -65,14 +65,14 @@ const HomeScreen = () => {
       const sourcesData = await getAvailableSources();
       const savedSource = await getCurrentSource();
       
-      console.log('获取到的数据源:', sourcesData);
-      console.log('保存的数据源:', savedSource);
-      
       setSources(sourcesData);
       
-      // 确保有有效的数据源
+      // 确保有有效的数据源，默认使用xmanhua
       const validSource = savedSource && sourcesData[savedSource] ? savedSource : 'xmanhua';
-      console.log('使用的有效数据源:', validSource);
+      // 如果保存的数据源不存在，保存xmanhua为默认
+      if (!savedSource || !sourcesData[savedSource]) {
+        await setCurrentSource('xmanhua');
+      }
       setCurrentSourceState(validSource);
       
       // 加载分类列表
@@ -86,12 +86,11 @@ const HomeScreen = () => {
           setCategories(allCategories);
         }
       } catch (error) {
-        console.error('加载分类失败:', error);
+        // 静默失败
       }
       
       setInitialized(true);
     } catch (error) {
-      console.error('加载初始数据失败:', error);
       setCurrentSourceState('xmanhua');
       setInitialized(true);
     }
@@ -100,11 +99,8 @@ const HomeScreen = () => {
   const loadComics = async (isRefresh = false) => {
     if (loading) return;
 
-    console.log(`[加载] 开始加载 - 分类: ${selectedCategory}`);
     setLoading(true);
     const currentPage = isRefresh ? 1 : page;
-
-    console.log(`加载漫画 - 分类: ${selectedCategory}, 页码: ${currentPage}, 数据源: ${currentSource}`);
 
     try {
       let data;
@@ -117,8 +113,6 @@ const HomeScreen = () => {
         data = await getComicsByCategory(selectedCategory, currentPage, 20, currentSource);
       }
 
-      console.log(`获取到漫画数据: ${JSON.stringify(data, null, 2)}`);
-
       if (isRefresh) {
         setComics(data.comics || []);
         setPage(1);
@@ -128,10 +122,8 @@ const HomeScreen = () => {
 
       setHasMore(data.hasMore || false);
     } catch (error) {
-      console.error('加载漫画失败:', error);
-      setComics([]); // 出错时清空数据
+      setComics([]);
     } finally {
-      console.log(`[加载] 完成 - loading设置为false`);
       setLoading(false);
       setRefreshing(false);
     }

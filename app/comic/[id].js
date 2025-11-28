@@ -52,7 +52,7 @@ const ComicDetailScreen = () => {
       setComic(comicData);
       setChapters(chaptersData.chapters || []);
     } catch (error) {
-      console.error('加载漫画详情失败:', error);
+      // 静默失败
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ const ComicDetailScreen = () => {
   };
 
   const handleChapterPress = (chapter) => {
-    router.push(`/reader/${chapter.id}`);
+    router.push(`/reader/${chapter.id}?comicId=${id}`);
   };
 
   const handleStartReading = () => {
@@ -82,7 +82,7 @@ const ComicDetailScreen = () => {
       // 检查第一个章节是否已下载
       const firstChapter = chapters[0];
       if (downloadManager.isDownloaded(firstChapter.id)) {
-        router.push(`/reader/${firstChapter.id}`);
+        router.push(`/reader/${firstChapter.id}?comicId=${id}`);
       } else {
         Alert.alert('提示', '请先下载第一章才能开始阅读');
       }
