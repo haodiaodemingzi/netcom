@@ -62,6 +62,19 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: '设置',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons 
+              name="cog" 
+              size={size} 
+              color={color} 
+            />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
