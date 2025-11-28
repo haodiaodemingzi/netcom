@@ -328,26 +328,15 @@ const ChapterList = ({
           )}
           
           {!selectionMode && !downloadStatus && (
-            <View style={styles.downloadButtonsContainer}>
-              <TouchableOpacity 
-                style={styles.downloadIconButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleSingleDownload(item);
-                }}
-              >
-                <Text style={styles.downloadIcon}>⬇</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.downloadIconButton, styles.directDownloadButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDirectDownload(item);
-                }}
-              >
-                <Text style={[styles.downloadIcon, styles.directDownloadIcon]}>📱</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+              style={styles.downloadButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleSingleDownload(item);
+              }}
+            >
+              <Text style={styles.downloadButtonText}>下载</Text>
+            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>
@@ -380,42 +369,34 @@ const ChapterList = ({
             <>
               <TouchableOpacity 
                 onPress={selectAll}
-                style={styles.actionButton}
+                style={styles.headerActionButton}
               >
-                <Text style={styles.actionButtonText}>
+                <Text style={styles.headerActionButtonText}>
                   {selectedChapters.size === displayChapters.length && displayChapters.length > 0 ? '取消全选' : '全选'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 onPress={handleDownloadSelected}
-                style={[styles.actionButton, styles.downloadButton]}
+                style={[styles.headerActionButton, styles.headerDownloadButton]}
               >
-                <Text style={styles.downloadButtonText}>下载</Text>
+                <Text style={[styles.headerActionButtonText, styles.headerDownloadButtonText]}>下载</Text>
               </TouchableOpacity>
             </>
           )}
           <TouchableOpacity 
             onPress={toggleSelectionMode}
-            style={[styles.actionButton, selectionMode && styles.cancelButton]}
+            style={[styles.headerActionButton, selectionMode && styles.headerCancelButton]}
           >
-            <Text style={[
-              styles.actionButtonText,
-              selectionMode && styles.cancelButtonText
-            ]}>
+            <Text style={styles.headerActionButtonText}>
               {selectionMode ? '取消' : '批量下载'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={toggleSort}
-            style={styles.sortButton}
+            style={styles.headerActionButton}
           >
-            <Text 
-              style={[
-                styles.sortText,
-                darkMode && styles.sortTextDark,
-              ]}
-            >
-              {sortOrder === 'desc' ? '↓' : '↑'}
+            <Text style={styles.headerActionButtonText}>
+              {sortOrder === 'desc' ? '倒序' : '正序'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -505,48 +486,30 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  headerActionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 6,
     backgroundColor: '#f5f5f5',
-    marginLeft: 8,
   },
-  actionButtonText: {
+  headerActionButtonText: {
     fontSize: 13,
     color: '#666',
     fontWeight: '500',
   },
-  downloadButton: {
+  headerDownloadButton: {
     backgroundColor: '#6200EE',
   },
-  downloadButtonText: {
-    fontSize: 13,
+  headerDownloadButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
-  cancelButton: {
+  headerCancelButton: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
-  },
-  cancelButtonText: {
-    color: '#666',
-  },
-  sortButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#f5f5f5',
-  },
-  sortText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  sortTextDark: {
-    color: '#aaa',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -722,35 +685,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#ccc',
   },
-  downloadIconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  downloadButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
     backgroundColor: '#6200EE',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
   },
-  downloadIcon: {
-    fontSize: 16,
+  downloadButtonText: {
+    fontSize: 13,
     color: '#fff',
-    fontWeight: 'bold',
-  },
-  downloadButtonsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  directDownloadButton: {
-    backgroundColor: '#FF6B35',
-    marginRight: 0,
-  },
-  directDownloadIcon: {
-    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

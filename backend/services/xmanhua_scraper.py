@@ -277,7 +277,7 @@ class XmanhuaScraper(BaseScraper):
             soup = BeautifulSoup(response.text, 'lxml')
             
             # 获取标题
-            title_elem = soup.select_one('h1.detail-info-title')
+            title_elem = soup.select_one('body > div.detail-info-1 > div > div > p.detail-info-title')
             if not title_elem:
                 title_elem = soup.select_one('title')
             title = title_elem.get_text(strip=True) if title_elem else ''
@@ -297,34 +297,55 @@ class XmanhuaScraper(BaseScraper):
             description = desc_elem.get_text(strip=True) if desc_elem else ''
             
             # 获取评分
-            rating_elem = soup.select_one('body > div.detail-info-1 > div > div > p.detail-info-stars > span')
-            if not rating_elem:
-                rating_elem = soup.select_one('span.detail-info-stars-score')
-            rating = 0
+            rating_elem = soup.select_one('p.detail-info-stars')
+            rating = ''
             if rating_elem:
                 rating_text = rating_elem.get_text(strip=True)
-                try:
-                    rating = float(rating_text)
-                except:
-                    rating = 0
+                # 提取评分中的数字并转换为float
+                rating_match = re.search(r'[\d\.]+', rating_text)
+                rating = float(rating_match.group(0)) if rating_match else 0.0
             
             # 获取作者
-            author_elem = soup.select_one('p.detail-info-author')
-            author = author_elem.get_text(strip=True).replace('作者：', '') if author_elem else '未知'
+            author_elem = soup.select_one('p.detail-info-tip > span:nth-child(1)')
+            author = ''
+            if author_elem:
+                # 提取所有作者链接
+                author_links = author_elem.select('a')
+                if author_links:
+                    authors = [a.get_text(strip=True) for a in author_links]
+                    author = ', '.join(authors)
+                else:
+                    author = author_elem.get_text(strip=True).replace('作者：', '')
+            if not author:
+                author = '未知'
             
-            # 获取状态和章节数
-            # 解析: 已完結| 共205章, 2023-02-09
-            status_elem = soup.select_one('p.detail-info-update')
+            # 获取状态
+            status_elem = soup.select_one('p.detail-info-tip > span:nth-child(2) > span')
             status = 'ongoing'
-            update_time = ''
             if status_elem:
                 status_text = status_elem.get_text(strip=True)
-                if '已完結' in status_text or '完结' in status_text:
+                if '已完結' in status_text or '完结' in status_text or '已完结' in status_text:
                     status = 'completed'
-                # 提取更新时间
-                date_match = re.search(r'\d{4}-\d{2}-\d{2}', status_text)
-                if date_match:
+            
+            # 获取更新时间和状态
+            update_time = ''
+            detail_list_title = soup.select_one('div.detail-list-form-title')
+            if detail_list_title:
+                title_text = detail_list_title.get_text(strip=True)
+                # 提取更新时间，格式如 "前天 20:54" 或 "2024-01-01"
+                time_match = re.search(r'(\d{4}-\d{2}-\d{2}|\d+天前|前天|昨天)\s*\d{2}:\d{2}', title_text)
+                if time_match:
+                    update_time = time_match.group(0)
+                # 如果没有匹配到，尝试只匹配日期
+                elif re.search(r'\d{4}-\d{2}-\d{2}', title_text):
+                    date_match = re.search(r'\d{4}-\d{2}-\d{2}', title_text)
                     update_time = date_match.group(0)
+                
+                # 从这里也可以获取状态信息
+                if '連載中' in title_text or '连载中' in title_text:
+                    status = 'ongoing'
+                elif '已完結' in title_text or '完结' in title_text:
+                    status = 'completed'
             
             return {
                 'id': comic_id,

@@ -21,7 +21,7 @@ COMIC_SOURCES = {
     'mock': {
         'name': '测试数据',
         'base_url': 'http://localhost',
-        'enabled': True,
+        'enabled': False,
         'description': '模拟测试数据源',
     },
     'guoman8': {
@@ -45,7 +45,7 @@ COMIC_SOURCES = {
 }
 
 # 默认数据源
-DEFAULT_SOURCE = 'mock'
+DEFAULT_SOURCE = 'xmanhua'
 
 # 缓存配置
 CACHE_TIMEOUT = {

@@ -117,7 +117,13 @@ const ComicDetailScreen = () => {
               </Text>
             )}
             {(comic.rating != null && comic.rating > 0) && (
-              <Text style={styles.rating}>⭐ {comic.rating}</Text>
+              <View style={styles.ratingContainer}>
+                <Text style={styles.rating}>
+                  {'⭐'.repeat(Math.floor(comic.rating))}
+                  {comic.rating % 1 >= 0.5 ? '⭐' : ''}
+                </Text>
+                <Text style={styles.ratingText}>{comic.rating}</Text>
+              </View>
             )}
           </View>
         </View>
@@ -271,9 +277,18 @@ const styles = StyleSheet.create({
     color: '#666',
     marginRight: 8,
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   rating: {
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  ratingText: {
+    fontSize: 13,
     color: '#666',
+    marginLeft: 4,
   },
   actions: {
     flexDirection: 'row',
