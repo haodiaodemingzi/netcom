@@ -112,16 +112,32 @@ class XmanhuaScraper(BaseScraper):
             print(f"请求分类漫画URL: {url}")
             
             response = self._make_request(url, verify_ssl=False)
+            
+            # 调试：打印响应信息
+            print(f"[调试] 响应状态码: {response.status_code}")
+            print(f"[调试] 响应内容长度: {len(response.text)} 字符")
+            print(f"[调试] 响应内容预览 (前500字符):")
+            print(response.text[:500])
+            
             soup = BeautifulSoup(response.text, 'lxml')
             
             comics = []
             
             # 获取漫画列表
             comic_items = soup.select('ul.mh-list > li')
+            print(f"[调试] 找到 ul.mh-list > li: {len(comic_items)} 个")
             
             # 如果第一个选择器没找到，尝试其他可能的选择器
             if not comic_items:
                 comic_items = soup.select('body > div:nth-child(4) > ul > li')
+                print(f"[调试] 备选选择器找到: {len(comic_items)} 个")
+            
+            # 再试试其他选择器
+            if not comic_items:
+                all_ul = soup.select('ul')
+                print(f"[调试] 页面中所有ul标签: {len(all_ul)} 个")
+                all_li = soup.select('li')
+                print(f"[调试] 页面中所有li标签: {len(all_li)} 个")
             
             for item in comic_items[:limit]:
                 try:

@@ -1,3 +1,5 @@
+import os
+
 # 数据源配置
 COMIC_SOURCES = {
     'komiic': {
