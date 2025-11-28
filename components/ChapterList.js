@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import downloadManager from '../services/downloadManager';
+import { getHistory } from '../services/storage';
 
 const ChapterList = ({ 
   chapters, 
@@ -25,6 +26,7 @@ const ChapterList = ({
   const [selectionMode, setSelectionMode] = useState(false);
   const [activeTab, setActiveTab] = useState('chapter');
   const [downloadState, setDownloadState] = useState(null);
+  const [readingHistory, setReadingHistory] = useState(null);
 
   useEffect(() => {
     const unsubscribe = downloadManager.subscribe((state) => {
@@ -32,6 +34,16 @@ const ChapterList = ({
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    loadReadingHistory();
+  }, [comicId]);
+
+  const loadReadingHistory = async () => {
+    const history = await getHistory();
+    const comicHistory = history.find(item => item.id === comicId);
+    setReadingHistory(comicHistory);
+  };
 
   // 提取章节编号进行数字排序
   const extractChapterNumber = (title) => {
@@ -179,8 +191,6 @@ const ChapterList = ({
       [chapter],
       source
     );
-    
-    Alert.alert('成功', `已添加 "${chapter.title}" 到下载队列`);
   };
 
   // 新的直接下载方法 - 使用完整图片URL
@@ -238,6 +248,8 @@ const ChapterList = ({
     const isActive = item.id === currentChapterId;
     const isSelected = selectedChapters.has(item.id);
     const downloadStatus = getChapterDownloadStatus(item.id);
+    const hasReadingProgress = readingHistory?.lastChapterId === item.id;
+    const readingPage = readingHistory?.lastPage || 0;
     
     return (
       <TouchableOpacity
@@ -298,9 +310,9 @@ const ChapterList = ({
         </View>
         
         <View style={styles.chapterActions}>
-          {item.isRead && (
+          {hasReadingProgress && readingPage > 0 && (
             <View style={styles.readBadge}>
-              <Text style={styles.readBadgeText}>已读</Text>
+              <Text style={styles.readBadgeText}>已读至第{readingPage}页</Text>
             </View>
           )}
           

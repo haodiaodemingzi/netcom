@@ -40,6 +40,7 @@ const ReaderScreen = () => {
   const [currentSource, setCurrentSource] = useState('guoman8');
   const [allChapters, setAllChapters] = useState([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
+  const [comicInfo, setComicInfo] = useState(null);
 
   useEffect(() => {
     loadChapterList();
@@ -113,6 +114,7 @@ const ReaderScreen = () => {
         .find(info => info.chapterId === chapterId);
       
       if (downloadedInfo) {
+        setComicInfo(downloadedInfo);
         const localImages = await downloadManager.getLocalChapterImages(
           downloadedInfo.comicId,
           chapterId
@@ -165,6 +167,18 @@ const ReaderScreen = () => {
       const page = viewableItems[0].index + 1;
       setCurrentPage(page);
       
+      // 保存阅读进度
+      if (comicInfo) {
+        addHistory(
+          {
+            id: comicInfo.comicId,
+            title: comicInfo.comicTitle,
+          },
+          chapterId,
+          page
+        );
+      }
+      
       // 如果是最后一页且存在下一章且还没显示过提示
       if (page === images.length && 
           currentChapterIndex >= 0 && 
@@ -201,7 +215,7 @@ const ReaderScreen = () => {
         }
       }
     }
-  }, [images.length, currentChapterIndex, allChapters, comicId, router]);
+  }, [images.length, currentChapterIndex, allChapters, comicId, router, comicInfo, chapterId]);
 
 
   // 提取章节编号

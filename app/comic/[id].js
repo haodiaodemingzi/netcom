@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import ChapterList from '../../components/ChapterList';
-import DownloadProgress from '../../components/DownloadProgress';
 import { getComicDetail, getChapters } from '../../services/api';
 import { 
   isFavorite, 
@@ -186,7 +185,6 @@ const ComicDetailScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
-      <DownloadProgress />
       
       <View style={styles.header}>
         <TouchableOpacity 
