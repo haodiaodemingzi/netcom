@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -54,11 +55,21 @@ const HomeScreen = () => {
     return () => unsubscribe();
   }, []);
 
+  // 分类或数据源变化时，重置并加载第一页
   useEffect(() => {
     if (initialized && currentSource) {
-      loadComics();
+      setPage(1);
+      setComics([]);
+      loadComics(true);
     }
   }, [selectedCategory, currentSource, initialized]);
+
+  // 页码变化时，加载更多数据
+  useEffect(() => {
+    if (initialized && currentSource && page > 1) {
+      loadComics(false);
+    }
+  }, [page]);
 
   const loadInitialData = async () => {
     try {
@@ -136,17 +147,13 @@ const HomeScreen = () => {
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
-      setPage(page + 1);
-      loadComics();
+      setPage(prevPage => prevPage + 1);
     }
   };
 
   const handleCategoryPress = (categoryId) => {
-    if (categoryId === selectedCategory) return; // 避免重复点击
-    setComics([]); // 先清空数据
+    if (categoryId === selectedCategory) return;
     setSelectedCategory(categoryId);
-    setPage(1);
-    // loading会在useEffect触发loadComics时自动设置
   };
 
   const handleSourceChange = async (sourceId) => {
@@ -233,6 +240,17 @@ const HomeScreen = () => {
     </View>
   );
 
+  const renderFooter = () => {
+    if (!loading || comics.length === 0) return null;
+    
+    return (
+      <View style={styles.footerLoading}>
+        <ActivityIndicator size="small" color="#6200EE" />
+        <Text style={styles.footerText}>加载中...</Text>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
@@ -285,6 +303,7 @@ const HomeScreen = () => {
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
           ListEmptyComponent={
             !loading && (
               <View style={styles.emptyContainer}>
@@ -440,6 +459,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    color: '#999',
+  },
+  footerLoading: {
+    paddingVertical: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerText: {
+    marginLeft: 10,
+    fontSize: 14,
     color: '#999',
   },
   skeletonContainer: {

@@ -141,7 +141,10 @@ class XmanhuaScraper(BaseScraper):
         try:
             # 构建URL
             url = f'{self.base_url}/manga-list-{category_id}-0-10-p{page}/'
-            print(f"请求分类漫画URL: {url}")
+            print(f"\n{'='*80}")
+            print(f"[分页请求] 分类ID: {category_id}, 页码: {page}, 限制: {limit}")
+            print(f"[分页请求] 完整URL: {url}")
+            print(f"{'='*80}")
             
             response = self._make_request(url, verify_ssl=False)
             
@@ -254,13 +257,60 @@ class XmanhuaScraper(BaseScraper):
                     print(f"解析单个漫画失败: {e}")
                     continue
             
-            # 检查是否有下一页
-            has_more = len(comic_items) >= limit
+            # 从HTML中提取分页信息，判断是否有下一页
+            has_more = False
+            total_pages = 1
+            
+            # 查找分页控件
+            # 选择器: div.pagination 或类似的分页容器
+            pagination = soup.select_one('div.pagination, ul.pagination, div.page-navigator')
+            
+            # 如果没找到，尝试其他可能的选择器
+            if not pagination:
+                # 尝试查找包含页码的div
+                all_divs_with_class = soup.find_all('div', class_=True)
+                for div in all_divs_with_class:
+                    class_names = ' '.join(div.get('class', []))
+                    if 'page' in class_names.lower() or 'pag' in class_names.lower():
+                        pagination = div
+                        print(f"[分页] 找到可能的分页容器: class=\"{class_names}\"")
+                        break
+            
+            if pagination:
+                # 查找所有页码链接
+                page_links = pagination.select('a')
+                page_numbers = []
+                
+                for link in page_links:
+                    text = link.get_text(strip=True)
+                    # 提取数字页码
+                    if text.isdigit():
+                        page_numbers.append(int(text))
+                    # 检查是否有"下一页"或">"
+                    elif text in ['>', '下一页', 'next', '下页']:
+                        has_more = True
+                
+                if page_numbers:
+                    total_pages = max(page_numbers)
+                    # 如果当前页 < 最大页码，说明还有更多
+                    if page < total_pages:
+                        has_more = True
+                
+                print(f"[分页] 检测到分页控件，总页数: {total_pages}, 当前页: {page}")
+            else:
+                # 如果没找到分页控件，用返回数量判断
+                has_more = len(comics) >= limit
+                print(f"[分页] 未找到分页控件，使用数量判断: {len(comics)} >= {limit}")
+            
+            print(f"[分页] 本页返回 {len(comics)} 个漫画，hasMore={has_more}, totalPages={total_pages}")
             
             return {
                 'comics': comics,
                 'hasMore': has_more,
-                'total': len(comics)
+                'total': len(comics),
+                'page': page,
+                'limit': limit,
+                'totalPages': total_pages
             }
         except Exception as e:
             print(f"获取分类漫画失败: {e}")
