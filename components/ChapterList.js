@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import downloadManager from '../services/downloadManager';
 import { getHistory } from '../services/storage';
 
@@ -35,15 +36,23 @@ const ChapterList = ({
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    loadReadingHistory();
-  }, [comicId]);
-
-  const loadReadingHistory = async () => {
+  const loadReadingHistory = useCallback(async () => {
+    if (!comicId) return;
     const history = await getHistory();
     const comicHistory = history.find(item => item.id === comicId);
     setReadingHistory(comicHistory);
-  };
+  }, [comicId]);
+
+  useEffect(() => {
+    loadReadingHistory();
+  }, [loadReadingHistory]);
+
+  // 每次页面获得焦点时重新加载阅读历史
+  useFocusEffect(
+    useCallback(() => {
+      loadReadingHistory();
+    }, [loadReadingHistory])
+  );
 
   // 提取章节编号进行数字排序
   const extractChapterNumber = (title) => {
