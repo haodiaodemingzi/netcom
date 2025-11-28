@@ -41,20 +41,15 @@ class BaseScraper(ABC):
         """发送HTTP请求"""
         try:
             self._delay()
-            # 确保正确处理gzip压缩的响应
-            response = self.session.get(
-                url, 
-                timeout=10, 
-                verify=verify_ssl,
-                headers={
-                    **self.session.headers,
-                    'Accept-Encoding': 'gzip, deflate, br'
-                }
-            )
+            
+            # requests会自动处理gzip，但确保Accept-Encoding头存在
+            response = self.session.get(url, timeout=10, verify=verify_ssl)
             response.raise_for_status()
             
-            # 确保响应内容正确解码
-            response.encoding = response.apparent_encoding or 'utf-8'
+            # 如果响应编码不正确，尝试自动检测
+            if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
+                # ISO-8859-1是requests的默认值，通常不正确
+                response.encoding = response.apparent_encoding
             
             return response
         except requests.RequestException as e:
