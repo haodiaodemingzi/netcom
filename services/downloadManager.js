@@ -225,13 +225,9 @@ class DownloadManager {
       const filename = `${String(image.page).padStart(3, '0')}.jpg`;
       const filepath = `${chapterDir}${filename}`;
 
-      // 打印图片下载信息
-      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
-        console.log(`[下载] 第${image.page}页:`);
-        console.log(`  URL: ${image.url}`);
-        console.log(`  保存到: ${filepath}`);
-        console.log(`  Headers:`, JSON.stringify(downloadHeaders, null, 2));
-      }
+      // 打印每张图片的下载URL
+      console.log(`\n[下载图片 ${i + 1}/${images.length}] 第${image.page}页`);
+      console.log(`  URL: ${image.url}`);
 
       // 使用带headers和cookie的下载
       let downloadResult;
@@ -243,19 +239,29 @@ class DownloadManager {
         downloadResult = await FileSystem.downloadAsync(image.url, filepath);
       }
       
-      // 打印下载响应
-      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
-        console.log(`  下载响应:`, JSON.stringify(downloadResult, null, 2));
-      }
-      
-      // 验证文件是否下载成功
-      if (i === 0 || i === images.length - 1 || i % 10 === 0) {
-        const fileInfo = await FileSystem.getInfoAsync(filepath);
-        if (fileInfo.exists) {
-          console.log(`  ✓ 下载成功: ${(fileInfo.size / 1024).toFixed(1)}KB`);
-        } else {
-          console.log(`  ✗ 下载失败: 文件不存在`);
+      // 验证文件
+      const fileInfo = await FileSystem.getInfoAsync(filepath);
+      if (fileInfo.exists) {
+        const sizeKB = (fileInfo.size / 1024).toFixed(1);
+        console.log(`  ✓ 下载完成: ${sizeKB}KB`);
+        
+        // 检查文件是否太小（可能不是真正的图片）
+        if (fileInfo.size < 10 * 1024) { // 小于10KB
+          console.warn(`  ⚠️  警告: 文件太小 (${sizeKB}KB)，可能不是有效图片！`);
+          
+          // 读取文件前100字节查看内容
+          try {
+            const content = await FileSystem.readAsStringAsync(filepath, {
+              encoding: FileSystem.EncodingType.Base64,
+              length: 100
+            });
+            console.log(`  文件前100字节(Base64): ${content.substring(0, 50)}...`);
+          } catch (e) {
+            console.log(`  无法读取文件内容: ${e.message}`);
+          }
         }
+      } else {
+        console.log(`  ✗ 下载失败: 文件不存在`);
       }
       
       task.currentImage = i + 1;
