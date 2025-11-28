@@ -36,7 +36,7 @@ COMIC_SOURCES = {
         'enabled': True,
         'description': 'X漫画网',
         'proxy': {
-            'enabled': True,
+            'enabled': False,  # 生产服务器不需要代理，改为False
             'host': '127.0.0.1',
             'port': 7897,
             'type': 'http'
