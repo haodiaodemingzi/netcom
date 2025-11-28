@@ -47,8 +47,7 @@ COMIC_SOURCES = {
 }
 
 # 默认数据源
-# xmanhua需要代理，guoman8不需要代理（推荐生产环境使用）
-DEFAULT_SOURCE = os.getenv('DEFAULT_SOURCE', 'guoman8')
+DEFAULT_SOURCE = 'xmanhua'
 
 # 缓存配置
 CACHE_TIMEOUT = {

@@ -62,18 +62,37 @@ class XmanhuaScraper(BaseScraper):
         选择器: body > div.class-con > div > div:nth-child(1) > a
         """
         try:
+            print(f"\n{'='*60}")
+            print(f"[分类] 开始获取分类列表")
+            print(f"{'='*60}")
+            
             url = f'{self.base_url}/manga-list/'
+            print(f"[分类] 请求URL: {url}")
+            
             response = self._make_request(url, verify_ssl=False)
+            if not response:
+                print(f"[分类] ✗ 请求失败")
+                return {'categories': [], 'total': 0}
+            
+            print(f"[分类] ✓ 请求成功，状态码: {response.status_code}")
+            print(f"[分类] HTML长度: {len(response.text)} 字符")
+            
             soup = BeautifulSoup(response.text, 'lxml')
             
             categories = []
             
             # 获取所有分类
+            print(f"\n[分类] 开始解析分类列表")
+            print(f"[分类] 选择器: body > div.class-con > div > div:nth-child(1) > a")
             category_items = soup.select('body > div.class-con > div > div:nth-child(1) > a')
+            print(f"[分类] 找到 {len(category_items)} 个分类链接")
             
-            for item in category_items:
+            parsed_count = 0
+            for idx, item in enumerate(category_items):
                 # 跳过"全部"等非具体分类
                 if 'active' in item.get('class', []):
+                    if idx < 5:
+                        print(f"[分类] 跳过: active类的链接")
                     continue
                 
                 href = item.get('href', '')
@@ -91,13 +110,26 @@ class XmanhuaScraper(BaseScraper):
                             'name': name,
                             'url': self.base_url + href
                         })
+                        parsed_count += 1
+                        
+                        # 打印前5个分类
+                        if parsed_count <= 5:
+                            print(f"[分类] {parsed_count}. ID={category_id}, 名称={name}, URL={href}")
+            
+            if parsed_count > 5:
+                print(f"[分类] ... (共{parsed_count}个分类)")
+            
+            print(f"\n[分类] ✓ 成功解析 {len(categories)} 个分类")
+            print(f"{'='*60}\n")
             
             return {
                 'categories': categories,
                 'total': len(categories)
             }
         except Exception as e:
-            print(f"获取分类失败: {e}")
+            print(f"[分类] ✗ 获取分类失败: {e}")
+            import traceback
+            traceback.print_exc()
             return {'categories': [], 'total': 0}
     
     def get_comics_by_category(self, category_id, page=1, limit=20):
