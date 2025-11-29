@@ -137,15 +137,17 @@ const ChapterList = ({
     }
   };
 
-  const toggleChapterSelection = (chapterId) => {
-    const newSelected = new Set(selectedChapters);
-    if (newSelected.has(chapterId)) {
-      newSelected.delete(chapterId);
-    } else {
-      newSelected.add(chapterId);
-    }
-    setSelectedChapters(newSelected);
-  };
+  const toggleChapterSelection = React.useCallback((chapterId) => {
+    setSelectedChapters(prev => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(chapterId)) {
+        newSelected.delete(chapterId);
+      } else {
+        newSelected.add(chapterId);
+      }
+      return newSelected;
+    });
+  }, []);
 
   const selectAll = () => {
     const allChapterIds = displayChapters.map(c => c.id);
@@ -173,8 +175,6 @@ const ChapterList = ({
         selectedChaptersList,
         source
       );
-      
-      Alert.alert('成功', `已添加 ${selectedChapters.size} 个章节到下载队列`);
     } finally {
       setTimeout(() => {
         setPreparingDownloads(prev => {
@@ -214,7 +214,7 @@ const ChapterList = ({
     return null;
   };
 
-  const handleSingleDownload = async (chapter) => {
+  const handleSingleDownload = React.useCallback(async (chapter) => {
     setPreparingDownloads(prev => new Set([...prev, chapter.id]));
     
     try {
@@ -233,7 +233,7 @@ const ChapterList = ({
         });
       }, 500);
     }
-  };
+  }, [comicId, comicTitle, source]);
 
   // 新的直接下载方法 - 使用完整图片URL
   const handleDirectDownload = async (chapter) => {
@@ -286,12 +286,15 @@ const ChapterList = ({
     }
   };
 
-  const ChapterCard = ({ item }) => {
-    const isActive = item.id === currentChapterId;
-    const isSelected = selectedChapters.has(item.id);
-    const downloadStatus = getChapterDownloadStatus(item.id);
-    const hasReadingProgress = readingHistory?.lastChapterId === item.id;
-    const readingPage = readingHistory?.lastPage || 0;
+  const handleCardPress = React.useCallback((item) => {
+    if (selectionMode) {
+      toggleChapterSelection(item.id);
+    } else {
+      onChapterPress(item);
+    }
+  }, [selectionMode, toggleChapterSelection, onChapterPress]);
+
+  const ChapterCard = React.memo(({ item, isSelected, isActive, hasReadingProgress, readingPage, downloadStatus, onPress, selectionMode, onSingleDownload }) => {
     
     const isDownloading = downloadStatus && typeof downloadStatus === 'object' && 
                          (downloadStatus.status === 'downloading' || downloadStatus.status === 'pending');
@@ -381,13 +384,7 @@ const ChapterList = ({
           isActive && styles.chapterCardActive,
           isSelected && styles.chapterCardSelected,
         ]}
-        onPress={() => {
-          if (selectionMode) {
-            toggleChapterSelection(item.id);
-          } else {
-            onChapterPress(item);
-          }
-        }}
+        onPress={() => onPress(item)}
         activeOpacity={0.7}
       >
         {selectionMode && (
@@ -570,7 +567,7 @@ const ChapterList = ({
               activeOpacity={0.6}
               onPress={(e) => {
                 e.stopPropagation();
-                handleSingleDownload(item);
+                onSingleDownload(item);
               }}
             >
               <Text style={styles.downloadButtonText}>下载</Text>
@@ -600,7 +597,20 @@ const ChapterList = ({
         )}
       </TouchableOpacity>
     );
-  };
+  }, (prevProps, nextProps) => {
+    // 检查影响渲染的props是否变化
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.isSelected === nextProps.isSelected &&
+      prevProps.isActive === nextProps.isActive &&
+      prevProps.hasReadingProgress === nextProps.hasReadingProgress &&
+      prevProps.readingPage === nextProps.readingPage &&
+      prevProps.onPress === nextProps.onPress &&
+      prevProps.selectionMode === nextProps.selectionMode &&
+      prevProps.onSingleDownload === nextProps.onSingleDownload &&
+      JSON.stringify(prevProps.downloadStatus) === JSON.stringify(nextProps.downloadStatus)
+    );
+  });
 
   const renderListHeader = () => (
     <View>
@@ -696,15 +706,41 @@ const ChapterList = ({
     </View>
   );
 
+  const renderChapterCard = React.useCallback(({ item }) => {
+    const isActive = item.id === currentChapterId;
+    const isSelected = selectedChapters.has(item.id);
+    const downloadStatus = getChapterDownloadStatus(item.id);
+    const hasReadingProgress = readingHistory?.lastChapterId === item.id;
+    const readingPage = readingHistory?.lastPage || 0;
+    
+    return (
+      <ChapterCard 
+        item={item}
+        isSelected={isSelected}
+        isActive={isActive}
+        hasReadingProgress={hasReadingProgress}
+        readingPage={readingPage}
+        downloadStatus={downloadStatus}
+        onPress={handleCardPress}
+        selectionMode={selectionMode}
+        onSingleDownload={handleSingleDownload}
+      />
+    );
+  }, [currentChapterId, selectedChapters, downloadState, readingHistory, preparingDownloads, handleCardPress, selectionMode, handleSingleDownload]);
+
   return (
     <View style={styles.container}>
       <FlatList
         data={displayChapters}
-        renderItem={({ item }) => <ChapterCard item={item} />}
+        renderItem={renderChapterCard}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderListHeader}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={10}
       />
     </View>
   );
