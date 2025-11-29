@@ -107,7 +107,7 @@ const HomeScreen = () => {
     }
   };
 
-  const loadComics = async (isRefresh = false) => {
+const loadComics = async (isRefresh = false) => {
     if (loading) return;
 
     setLoading(true);
@@ -157,11 +157,39 @@ const HomeScreen = () => {
   };
 
   const handleSourceChange = async (sourceId) => {
+    if (sourceId === currentSource) {
+      setShowSourceMenu(false);
+      return;
+    }
+    
+    setShowSourceMenu(false);
     setCurrentSourceState(sourceId);
     await setCurrentSource(sourceId);
-    setPage(1);
-    setComics([]);
-    setShowSourceMenu(false);
+    
+    // 重新加载该数据源的分类列表
+    try {
+      const categoriesData = await getCategories(sourceId);
+      if (categoriesData && categoriesData.categories && categoriesData.categories.length > 0) {
+        setCategories(categoriesData.categories);
+        // 重置到第一个分类
+        setSelectedCategory(categoriesData.categories[0]?.id || 'hot');
+      } else {
+        // 如果获取不到分类，使用默认分类
+        setCategories([
+          { id: 'hot', name: '热门' },
+          { id: 'latest', name: '最新' },
+        ]);
+        setSelectedCategory('hot');
+      }
+    } catch (error) {
+      console.error('获取分类失败:', error);
+      // 出错时使用默认分类
+      setCategories([
+        { id: 'hot', name: '热门' },
+        { id: 'latest', name: '最新' },
+      ]);
+      setSelectedCategory('hot');
+    }
   };
 
   const renderHeader = () => (
