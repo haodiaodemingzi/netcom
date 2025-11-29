@@ -224,39 +224,58 @@ const ChapterList = ({
         selectedChaptersList,
         source
       );
-    } finally {
-      setTimeout(() => {
-        setPreparingDownloads(prev => {
-          const next = new Set(prev);
-          selectedChaptersList.forEach(c => next.delete(c.id));
-          return next;
-        });
-      }, 500);
+      
+      // 下载任务已加入队列，立即清除preparing状态
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        selectedChaptersList.forEach(c => next.delete(c.id));
+        return next;
+      });
       
       setSelectedChapters(new Set());
       setSelectionMode(false);
+    } catch (error) {
+      console.error('批量下载失败:', error);
+      // 发生错误时也清除preparing状态
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        selectedChaptersList.forEach(c => next.delete(c.id));
+        return next;
+      });
     }
   };
 
   const getChapterDownloadStatus = (chapterId) => {
-    if (preparingDownloads.has(chapterId)) {
-      return {
-        status: 'pending',
-        progress: 0
-      };
+    if (!downloadState) {
+      // 如果downloadState未初始化，检查preparingDownloads
+      if (preparingDownloads.has(chapterId)) {
+        return {
+          status: 'pending',
+          progress: 0
+        };
+      }
+      return null;
     }
     
-    if (!downloadState) return null;
-    
+    // 优先检查是否已下载完成
     if (downloadState.downloadedChapters.includes(chapterId)) {
       return 'completed';
     }
     
+    // 其次检查是否在下载队列中（包括运行中、暂停、等待）
     const task = downloadState.queue.find(t => t.chapterId === chapterId);
     if (task) {
       return {
         status: task.status,
         progress: task.progress
+      };
+    }
+    
+    // 最后才检查是否在准备中
+    if (preparingDownloads.has(chapterId)) {
+      return {
+        status: 'pending',
+        progress: 0
       };
     }
     
@@ -273,14 +292,21 @@ const ChapterList = ({
         [chapter],
         source
       );
-    } finally {
-      setTimeout(() => {
-        setPreparingDownloads(prev => {
-          const next = new Set(prev);
-          next.delete(chapter.id);
-          return next;
-        });
-      }, 500);
+      
+      // 下载任务已加入队列，立即清除preparing状态
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        next.delete(chapter.id);
+        return next;
+      });
+    } catch (error) {
+      console.error('下载失败:', error);
+      // 发生错误时也清除preparing状态
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        next.delete(chapter.id);
+        return next;
+      });
     }
   }, [comicId, comicTitle, source]);
 
@@ -346,7 +372,7 @@ const ChapterList = ({
   const ChapterCard = React.memo(({ item, isSelected, isActive, hasReadingProgress, readingPage, downloadStatus, onPress, selectionMode, onSingleDownload }) => {
     
     const isDownloading = downloadStatus && typeof downloadStatus === 'object' && 
-                         (downloadStatus.status === 'downloading' || downloadStatus.status === 'pending');
+                         downloadStatus.status === 'downloading';
     const isPending = downloadStatus && typeof downloadStatus === 'object' && 
                      downloadStatus.status === 'pending';
     const isCompleted = downloadStatus === 'completed';
@@ -357,7 +383,6 @@ const ChapterList = ({
       progressAnimRef.current = new Animated.Value(downloadProgress);
     }
     const progressAnim = progressAnimRef.current;
-    const pulseAnim = React.useRef(new Animated.Value(0)).current;
     const completionAnimRef = React.useRef(null);
     if (!completionAnimRef.current) {
       completionAnimRef.current = new Animated.Value(isCompleted ? 1 : 0);
@@ -368,25 +393,7 @@ const ChapterList = ({
     const [showingCompletion, setShowingCompletion] = React.useState(false);
     
     React.useEffect(() => {
-      if (isPending) {
-        // 等待状态 - 脉冲动画
-        progressAnim.setValue(0);
-        prevProgressRef.current = 0;
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 0.5,
-              duration: 1000,
-              useNativeDriver: false,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 0,
-              duration: 1000,
-              useNativeDriver: false,
-            })
-          ])
-        ).start();
-      } else if (isDownloading) {
+      if (isDownloading) {
         // 只在进度真正变化时才动画
         if (Math.abs(downloadProgress - prevProgressRef.current) > 0.001) {
           Animated.timing(progressAnim, {
@@ -546,8 +553,7 @@ const ChapterList = ({
           {downloadStatus?.status === 'pending' && (
             <View style={styles.downloadActionRow}>
               <View style={styles.pendingBadge}>
-                <ActivityIndicator size="small" color="#999" />
-                <Text style={styles.pendingText}>等待中</Text>
+                <Text style={styles.pendingText}>排队中</Text>
               </View>
               <TouchableOpacity 
                 style={styles.cancelButton}
@@ -630,15 +636,10 @@ const ChapterList = ({
               style={[
                 styles.progressBar,
                 { 
-                  width: isPending 
-                    ? pulseAnim.interpolate({
-                        inputRange: [0, 0.5],
-                        outputRange: ['0%', '50%']
-                      })
-                    : progressAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0%', '100%']
-                      })
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%']
+                  })
                 }
               ]}
             />
