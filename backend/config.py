@@ -44,6 +44,18 @@ COMIC_SOURCES = {
             'type': 'http'
         }
     },
+    'hmzxa': {
+        'name': 'HMZXA漫画',
+        'base_url': 'https://hmzxa.com',
+        'enabled': True,
+        'description': 'HMZXA漫画网',
+        'proxy': {
+            'enabled': False,
+            'host': '127.0.0.1',
+            'port': 7897,
+            'type': 'http'
+        }
+    },
 }
 
 # 默认数据源

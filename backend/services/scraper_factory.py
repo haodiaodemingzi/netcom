@@ -6,6 +6,7 @@ from .scraper import (
 )
 from .guoman8_scraper import Guoman8Scraper
 from .xmanhua_scraper import XmanhuaScraper
+from .hmzxa_scraper import HmzxaScraper
 from config import COMIC_SOURCES, DEFAULT_SOURCE
 
 class ScraperFactory:
@@ -18,6 +19,7 @@ class ScraperFactory:
         'mock': MockScraper,
         'guoman8': Guoman8Scraper,
         'xmanhua': XmanhuaScraper,
+        'hmzxa': HmzxaScraper,
     }
     
     _instances = {}
@@ -45,7 +47,7 @@ class ScraperFactory:
             proxy_config = COMIC_SOURCES[source].get('proxy', None)
             
             # 创建实例，传入代理配置
-            if source == 'xmanhua':
+            if source in ['xmanhua', 'hmzxa']:
                 cls._instances[source] = scraper_class(proxy_config)
             else:
                 cls._instances[source] = scraper_class()

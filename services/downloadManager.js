@@ -8,6 +8,7 @@ import { DownloadTask } from './download/DownloadTask';
 import { ImageDownloader } from './download/ImageDownloader';
 import { Guoman8Adapter } from './download/adapters/Guoman8Adapter';
 import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
+import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
 import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
@@ -31,6 +32,7 @@ class DownloadManager {
     this.adapters = {
       guoman8: new Guoman8Adapter(this.apiClient),
       xmanhua: new XmanhuaAdapter(this.apiClient),
+      hmzxa: new HmzxaAdapter(this.apiClient),
     };
     
     this.setupQueueListeners();
