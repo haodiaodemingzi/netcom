@@ -21,7 +21,6 @@ export class ImageDownloader {
         await FileSystem.makeDirectoryAsync(taskDir, { intermediates: true });
       }
 
-      const downloadPromises = [];
       let completedCount = 0;
       let totalBytes = 0;
 
@@ -31,28 +30,32 @@ export class ImageDownloader {
         }
 
         const image = task.images[i];
-        const promise = this.downloadImage(
+        const filename = `${String(i + 1).padStart(3, '0')}.jpg`;
+        const localPath = `${taskDir}${filename}`;
+
+        // 串行下载，每次只下载一张
+        const result = await this.downloadImage(
           image.url,
-          `${taskDir}${image.page}.jpg`,
+          localPath,
           task
-        ).then((result) => {
-          if (result.success) {
-            completedCount++;
-            totalBytes += result.size || 0;
-          } else {
-            task.incrementFailed();
-          }
-        });
-
-        downloadPromises.push(promise);
-
-        if (downloadPromises.length >= 5 || i === task.images.length - 1) {
-          await Promise.all(downloadPromises);
-          downloadPromises.length = 0;
-          task.updateProgress(completedCount, totalBytes);
-          if (task.onProgress) {
-            task.onProgress(task);
-          }
+        );
+        
+        if (result.success) {
+          completedCount++;
+          totalBytes += result.size || 0;
+        } else {
+          task.incrementFailed();
+        }
+        
+        // 更新进度
+        task.updateProgress(completedCount, totalBytes);
+        if (task.onProgress) {
+          task.onProgress(task);
+        }
+        
+        // 每张图片下载后延迟300ms
+        if (i < task.images.length - 1) {
+          await this.delay(300);
         }
       }
 
@@ -81,12 +84,32 @@ export class ImageDownloader {
         return { success: true, size: fileInfo.size, cached: true };
       }
 
-      const downloadResult = await FileSystem.downloadAsync(url, localPath);
+      console.log(`📥 下载: ${url}`);
+      console.log(`💾 保存: ${localPath}`);
+
+      const downloadHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+        'Referer': 'https://xmanhua.com/',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9'
+      };
+      
+      // 如果task有cookies，添加到headers
+      if (task.cookies) {
+        downloadHeaders['Cookie'] = task.cookies;
+        console.log('使用Cookie下载');
+      }
+
+      const downloadResult = await FileSystem.downloadAsync(url, localPath, {
+        headers: downloadHeaders
+      });
       
       if (downloadResult.status === 200) {
         const info = await FileSystem.getInfoAsync(localPath);
+        console.log(`✅ 成功: ${info.size} bytes`);
         return { success: true, size: info.size || 0 };
       } else {
+        console.error(`❌ 失败: HTTP ${downloadResult.status}`);
         throw new Error(`下载失败: HTTP ${downloadResult.status}`);
       }
     } catch (error) {

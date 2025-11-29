@@ -92,11 +92,14 @@ const ReaderScreen = () => {
       
       // 先检查本地是否已完整下载
       const isDownloaded = downloadManager.isDownloaded(chapterId);
+      console.log(`章节${chapterId}下载状态:`, isDownloaded);
       
       if (isDownloaded) {
         // 已下载完整章节，直接加载本地图片
         const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
           .find(info => info.chapterId === chapterId);
+        
+        console.log('已下载章节信息:', downloadedInfo);
         
         if (downloadedInfo) {
           setComicInfo(downloadedInfo);
@@ -105,10 +108,15 @@ const ReaderScreen = () => {
             chapterId
           );
           
+          console.log('获取到的本地图片数:', localImages?.length);
+          
           if (localImages && localImages.length > 0) {
+            console.log('✓ 使用本地图片');
             setImages(localImages);
             setLoading(false);
             return;
+          } else {
+            console.log('⚠ 本地图片加载失败，切换到在线模式');
           }
         }
       }
@@ -206,14 +214,20 @@ const ReaderScreen = () => {
       // 加载当前页
       loadImageForPage(currentIndex);
       
-      // 预加载下一页
+      // 预加载后2页
       if (currentIndex + 1 < images.length) {
         loadImageForPage(currentIndex + 1);
       }
+      if (currentIndex + 2 < images.length) {
+        loadImageForPage(currentIndex + 2);
+      }
       
-      // 预加载前一页
+      // 预加载前2页
       if (currentIndex - 1 >= 0) {
         loadImageForPage(currentIndex - 1);
+      }
+      if (currentIndex - 2 >= 0) {
+        loadImageForPage(currentIndex - 2);
       }
       
       // 保存阅读进度

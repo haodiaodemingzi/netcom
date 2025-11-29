@@ -5,6 +5,7 @@ export class DownloadQueue {
     this.maxConcurrent = maxConcurrent;
     this.runningTasks = new Map();
     this.pendingTasks = [];
+    this.pausedTasks = new Map();
     this.completedTasks = new Map();
     this.failedTasks = new Map();
     
@@ -13,6 +14,12 @@ export class DownloadQueue {
     this.onTaskComplete = null;
     this.onTaskFail = null;
     this.onQueueChange = null;
+  }
+  
+  setMaxConcurrent(max) {
+    this.maxConcurrent = max;
+    console.log(`下载队列并发数已更新为: ${max}`);
+    this.processNext();
   }
 
   addTask(task) {
@@ -48,6 +55,13 @@ export class DownloadQueue {
       task.cancel();
       this.runningTasks.delete(taskId);
       this.notifyQueueChange();
+      this.processNext();
+      return true;
+    }
+    
+    if (this.pausedTasks.has(taskId)) {
+      this.pausedTasks.delete(taskId);
+      this.notifyQueueChange();
       return true;
     }
     
@@ -58,17 +72,22 @@ export class DownloadQueue {
     if (this.runningTasks.has(taskId)) {
       const task = this.runningTasks.get(taskId);
       task.pause();
+      this.runningTasks.delete(taskId);
+      this.pausedTasks.set(taskId, task);
+      this.notifyQueueChange();
+      this.processNext(); // 处理下一个任务
       return true;
     }
     return false;
   }
 
   resumeTask(taskId) {
-    const task = this.runningTasks.get(taskId) || 
-                 this.pendingTasks.find(t => t.id === taskId);
-    
-    if (task && task.status === TaskStatus.PAUSED) {
-      task.resume();
+    if (this.pausedTasks.has(taskId)) {
+      const task = this.pausedTasks.get(taskId);
+      task.status = TaskStatus.PENDING;
+      this.pausedTasks.delete(taskId);
+      this.pendingTasks.unshift(task); // 添加到队列前面
+      this.notifyQueueChange();
       this.processNext();
       return true;
     }
@@ -76,7 +95,7 @@ export class DownloadQueue {
   }
 
   async processNext() {
-    console.log(`处理下载队列: 运行中=${this.runningTasks.size}, 待处理=${this.pendingTasks.length}, 最大并发=${this.maxConcurrent}`);
+    console.log(`处理下载队列: 运行中=${this.runningTasks.size}, 待处理=${this.pendingTasks.length}, 暂停=${this.pausedTasks.size}, 最大并发=${this.maxConcurrent}`);
     
     while (this.runningTasks.size < this.maxConcurrent && this.pendingTasks.length > 0) {
       const task = this.pendingTasks.shift();
@@ -145,9 +164,10 @@ export class DownloadQueue {
       maxConcurrent: this.maxConcurrent,
       running: this.runningTasks.size,
       pending: this.pendingTasks.length,
+      paused: this.pausedTasks.size,
       completed: this.completedTasks.size,
       failed: this.failedTasks.size,
-      total: this.runningTasks.size + this.pendingTasks.length + 
+      total: this.runningTasks.size + this.pendingTasks.length + this.pausedTasks.size +
              this.completedTasks.size + this.failedTasks.size,
     };
   }
@@ -156,6 +176,7 @@ export class DownloadQueue {
     return {
       running: Array.from(this.runningTasks.values()),
       pending: this.pendingTasks,
+      paused: Array.from(this.pausedTasks.values()),
       completed: Array.from(this.completedTasks.values()),
       failed: Array.from(this.failedTasks.values()),
     };

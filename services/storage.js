@@ -118,6 +118,7 @@ export const getSettings = async () => {
       keepScreenOn: true,
       darkMode: false,
       autoLoadHD: false,
+      maxConcurrentDownloads: 10,
     };
   } catch (error) {
     return {};

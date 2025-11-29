@@ -299,31 +299,43 @@ const ChapterList = ({
                      downloadStatus.status === 'pending';
     const downloadProgress = isDownloading ? (downloadStatus.progress || 0) : 0;
     
-    const progressAnim = React.useRef(new Animated.Value(0)).current;
+    const progressAnimRef = React.useRef(null);
+    if (!progressAnimRef.current) {
+      progressAnimRef.current = new Animated.Value(downloadProgress);
+    }
+    const progressAnim = progressAnimRef.current;
     const pulseAnim = React.useRef(new Animated.Value(0)).current;
+    const prevProgressRef = React.useRef(downloadProgress);
     
     React.useEffect(() => {
       if (isPending) {
+        // 等待状态 - 脉冲动画
+        progressAnim.setValue(0);
+        prevProgressRef.current = 0;
         Animated.loop(
           Animated.sequence([
             Animated.timing(pulseAnim, {
-              toValue: 0.3,
-              duration: 800,
+              toValue: 0.5,
+              duration: 1000,
               useNativeDriver: false,
             }),
             Animated.timing(pulseAnim, {
               toValue: 0,
-              duration: 800,
+              duration: 1000,
               useNativeDriver: false,
             })
           ])
         ).start();
       } else if (isDownloading) {
-        Animated.timing(progressAnim, {
-          toValue: downloadProgress,
-          duration: 300,
-          useNativeDriver: false,
-        }).start();
+        // 只在进度真正变化时才动画
+        if (Math.abs(downloadProgress - prevProgressRef.current) > 0.001) {
+          Animated.timing(progressAnim, {
+            toValue: downloadProgress,
+            duration: 200,
+            useNativeDriver: false,
+          }).start();
+          prevProgressRef.current = downloadProgress;
+        }
       }
     }, [downloadProgress, isDownloading, isPending]);
     
@@ -388,34 +400,119 @@ const ChapterList = ({
           )}
           
           {downloadStatus === 'completed' && (
-            <View style={styles.downloadedBadge}>
-              <Text style={styles.downloadedBadgeText}>✓ 已下载</Text>
+            <View style={styles.downloadActionRow}>
+              <View style={styles.downloadedBadge}>
+                <Text style={styles.downloadedBadgeText}>✓ 已下载</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={async (e) => {
+                  e.stopPropagation();
+                  Alert.alert(
+                    '删除章节',
+                    `确定要删除"${item.title}"的下载数据吗？`,
+                    [
+                      { text: '取消', style: 'cancel' },
+                      { 
+                        text: '删除', 
+                        style: 'destructive',
+                        onPress: async () => {
+                          await downloadManager.deleteDownloadedChapter(item.id);
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.deleteButtonText}>删除</Text>
+              </TouchableOpacity>
             </View>
           )}
           
           {downloadStatus?.status === 'downloading' && (
-            <View style={styles.downloadingBadge}>
-              <ActivityIndicator size="small" color="#4caf50" />
-              <Text style={styles.downloadingText}>
-                {Math.round(downloadStatus.progress * 100)}%
-              </Text>
+            <View style={styles.downloadActionRow}>
+              <View style={styles.downloadingBadge}>
+                <Text style={styles.downloadingText}>
+                  {Math.round(downloadStatus.progress * 100)}%
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.pauseButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.pauseDownload(item.id);
+                }}
+              >
+                <Text style={styles.pauseButtonText}>暂停</Text>
+              </TouchableOpacity>
             </View>
           )}
           
           {downloadStatus?.status === 'pending' && (
-            <View style={styles.pendingBadge}>
-              <ActivityIndicator size="small" color="#999" />
-              <Text style={styles.pendingText}>等待中</Text>
+            <View style={styles.downloadActionRow}>
+              <View style={styles.pendingBadge}>
+                <ActivityIndicator size="small" color="#999" />
+                <Text style={styles.pendingText}>等待中</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.cancelDownload(item.id);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {downloadStatus?.status === 'paused' && (
+            <View style={styles.downloadActionRow}>
+              <View style={styles.pausedBadge}>
+                <Text style={styles.pausedText}>已暂停</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.resumeButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.resumeDownload(item.id);
+                }}
+              >
+                <Text style={styles.resumeButtonText}>继续</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.cancelDownload(item.id);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
             </View>
           )}
           
           {downloadStatus?.status === 'failed' && (
-            <TouchableOpacity 
-              style={styles.failedBadge}
-              onPress={() => downloadManager.retryFailed()}
-            >
-              <Text style={styles.failedText}>❗ 重试</Text>
-            </TouchableOpacity>
+            <View style={styles.downloadActionRow}>
+              <TouchableOpacity 
+                style={styles.failedBadge}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.retryDownload(item.id);
+                }}
+              >
+                <Text style={styles.failedText}>重试</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  downloadManager.cancelDownload(item.id);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
+            </View>
           )}
           
           {!selectionMode && !downloadStatus && (
@@ -440,15 +537,15 @@ const ChapterList = ({
                 { 
                   width: isPending 
                     ? pulseAnim.interpolate({
-                        inputRange: [0, 0.3],
-                        outputRange: ['0%', '30%']
+                        inputRange: [0, 0.5],
+                        outputRange: ['0%', '50%']
                       })
                     : progressAnim.interpolate({
                         inputRange: [0, 1],
                         outputRange: ['0%', '100%']
                       })
                 }
-              ]} 
+              ]}
             />
           </View>
         )}
@@ -657,10 +754,10 @@ const styles = StyleSheet.create({
   chapterCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 8,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     shadowColor: '#000',
@@ -755,20 +852,86 @@ const styles = StyleSheet.create({
     color: '#2196F3',
     fontWeight: '500',
   },
+  downloadActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   downloadingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 4,
     backgroundColor: '#e8f5e9',
-    marginRight: 4,
   },
   downloadingText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#4caf50',
+    fontWeight: '600',
+  },
+  pauseButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    backgroundColor: '#ff9800',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pauseButtonText: {
+    fontSize: 12,
+    color: '#fff',
     fontWeight: '500',
-    marginLeft: 4,
+  },
+  resumeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    backgroundColor: '#4caf50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resumeButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    backgroundColor: '#f44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  deleteButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    backgroundColor: '#f44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  pausedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: '#fff3e0',
+  },
+  pausedText: {
+    fontSize: 11,
+    color: '#ff9800',
+    fontWeight: '500',
   },
   pendingBadge: {
     flexDirection: 'row',
@@ -786,15 +949,16 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   failedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 4,
-    backgroundColor: '#ffebee',
-    marginRight: 4,
+    backgroundColor: '#ff9800',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   failedText: {
-    fontSize: 11,
-    color: '#f44336',
+    fontSize: 12,
+    color: '#fff',
     fontWeight: '500',
   },
   arrowIcon: {
@@ -807,16 +971,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
     backgroundColor: '#4caf50',
-    shadowColor: '#4caf50',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
   },
   downloadButton: {
     paddingHorizontal: 12,

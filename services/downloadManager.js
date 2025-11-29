@@ -8,16 +8,19 @@ import { DownloadTask } from './download/DownloadTask';
 import { ImageDownloader } from './download/ImageDownloader';
 import { Guoman8Adapter } from './download/adapters/Guoman8Adapter';
 import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
+import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
-const MAX_CONCURRENT = 10;
 
 class DownloadManager {
   constructor() {
     this.downloadedChapters = new Map();
     this.listeners = new Set();
+    this.cachedCookies = null;
+    this.cookiesExpireTime = 0;
+    this.maxConcurrent = 10; // 默认值
     
-    this.queue = new DownloadQueue(MAX_CONCURRENT);
+    this.queue = new DownloadQueue(this.maxConcurrent);
     this.downloader = new ImageDownloader(3, 1000);
     
     this.apiClient = axios.create({
@@ -37,6 +40,57 @@ class DownloadManager {
   async init() {
     await this.ensureDownloadDir();
     await this.loadDownloadedChapters();
+    await this.loadSettings();
+  }
+  
+  async loadSettings() {
+    try {
+      const settings = await getSettings();
+      if (settings.maxConcurrentDownloads) {
+        this.maxConcurrent = settings.maxConcurrentDownloads;
+        this.queue.setMaxConcurrent(this.maxConcurrent);
+        console.log(`下载并发数设置为: ${this.maxConcurrent}`);
+      }
+    } catch (error) {
+      console.error('加载设置失败:', error);
+    }
+  }
+  
+  async updateMaxConcurrent(max) {
+    this.maxConcurrent = max;
+    this.queue.setMaxConcurrent(max);
+  }
+  
+  async getCookies() {
+    // 如果缓存的cookie还没过期，直接返回
+    const now = Date.now();
+    if (this.cachedCookies && now < this.cookiesExpireTime) {
+      return this.cachedCookies;
+    }
+    
+    try {
+      // 访问主站获取cookie
+      const response = await fetch('https://xmanhua.com/', {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        credentials: 'include'
+      });
+      
+      const setCookie = response.headers.get('set-cookie');
+      console.log('获取到的Cookie:', setCookie);
+      
+      // 缓存cookie，5分钟后过期
+      this.cachedCookies = setCookie || '';
+      this.cookiesExpireTime = now + 5 * 60 * 1000;
+      
+      return this.cachedCookies;
+    } catch (error) {
+      console.error('获取Cookie失败:', error);
+      return '';
+    }
   }
 
   async ensureDownloadDir() {
@@ -63,7 +117,7 @@ class DownloadManager {
       const data = Object.fromEntries(this.downloadedChapters);
       await AsyncStorage.setItem('downloaded_chapters', JSON.stringify(data));
     } catch (error) {
-      // 静默失败
+      console.error('保存下载记录失败:', error);
     }
   }
 
@@ -77,8 +131,8 @@ class DownloadManager {
       this.notifyListeners();
     };
     
-    this.queue.onTaskComplete = (task) => {
-      this.handleTaskComplete(task);
+    this.queue.onTaskComplete = async (task) => {
+      await this.handleTaskComplete(task);
       this.notifyListeners();
     };
     
@@ -107,7 +161,7 @@ class DownloadManager {
     const allTasks = this.queue.getAllTasks();
     
     return {
-      queue: [...allTasks.pending, ...allTasks.running].map(task => task.getInfo()),
+      queue: [...allTasks.pending, ...allTasks.running, ...allTasks.paused].map(task => task.getInfo()),
       activeDownloads: allTasks.running.map(task => task.getInfo()),
       downloadedChapters: Array.from(this.downloadedChapters.keys()),
       queueInfo: queueInfo,
@@ -160,21 +214,42 @@ class DownloadManager {
     console.log(`已添加${addedCount}个章节到下载队列`);
   }
 
-  handleTaskStart(task) {
+  async handleTaskStart(task) {
     console.log(`开始执行下载任务: ${task.chapterTitle}, 共${task.totalImages}张图片`);
+    
+    // 获取cookie
+    const cookies = await this.getCookies();
+    task.cookies = cookies;
+    
     this.downloader.downloadTask(task, DOWNLOAD_DIR).catch(error => {
       console.error(`下载任务执行失败: ${task.chapterTitle}`, error);
     });
   }
 
-  handleTaskComplete(task) {
-    this.downloadedChapters.set(task.chapterId, {
+  async handleTaskComplete(task) {
+    const chapterData = {
       comicId: task.comicId,
       comicTitle: task.comicTitle,
       chapterId: task.chapterId,
       chapterTitle: task.chapterTitle,
+      totalImages: task.totalImages,
       downloadedAt: new Date().toISOString()
-    });
+    };
+    
+    // 保存 meta.json 文件到章节目录
+    const chapterDir = `${DOWNLOAD_DIR}${task.comicId}/${task.chapterId}/`;
+    const metaPath = `${chapterDir}meta.json`;
+    try {
+      await FileSystem.writeAsStringAsync(
+        metaPath,
+        JSON.stringify(chapterData, null, 2)
+      );
+      console.log(`meta.json已保存: ${metaPath}`);
+    } catch (error) {
+      console.error('保存meta.json失败:', error);
+    }
+    
+    this.downloadedChapters.set(task.chapterId, chapterData);
     this.saveDownloadedChapters();
   }
 
@@ -214,19 +289,72 @@ class DownloadManager {
   }
 
   pauseDownload(chapterId) {
-    return this.queue.pauseTask(`${chapterId}`);
+    // 查找包含该chapterId的任务
+    const allTasks = this.queue.getAllTasks();
+    const task = [...allTasks.pending, ...allTasks.running].find(t => t.chapterId === chapterId);
+    if (task) {
+      return this.queue.pauseTask(task.id);
+    }
+    return false;
   }
 
   resumeDownload(chapterId) {
-    return this.queue.resumeTask(`${chapterId}`);
+    // 查找包含该chapterId的任务
+    const allTasks = this.queue.getAllTasks();
+    const task = allTasks.paused.find(t => t.chapterId === chapterId);
+    if (task) {
+      return this.queue.resumeTask(task.id);
+    }
+    return false;
   }
 
   cancelDownload(chapterId) {
-    return this.queue.removeTask(`${chapterId}`);
+    // 查找包含该chapterId的任务
+    const allTasks = this.queue.getAllTasks();
+    const task = [...allTasks.pending, ...allTasks.running, ...allTasks.paused].find(t => t.chapterId === chapterId);
+    if (task) {
+      return this.queue.removeTask(task.id);
+    }
+    return false;
   }
 
   retryDownload(chapterId) {
-    return this.queue.retryTask(`${chapterId}`);
+    // 查找包含该chapterId的任务
+    const allTasks = this.queue.getAllTasks();
+    const task = allTasks.failed.find(t => t.chapterId === chapterId);
+    if (task) {
+      return this.queue.retryTask(task.id);
+    }
+    return false;
+  }
+  
+  async deleteDownloadedChapter(chapterId) {
+    try {
+      // 从内存中移除
+      const chapterData = this.downloadedChapters.get(chapterId);
+      if (!chapterData) {
+        return false;
+      }
+      
+      this.downloadedChapters.delete(chapterId);
+      
+      // 删除本地文件
+      const chapterDir = `${DOWNLOAD_DIR}${chapterData.comicId}/${chapterId}/`;
+      const dirInfo = await FileSystem.getInfoAsync(chapterDir);
+      if (dirInfo.exists) {
+        await FileSystem.deleteAsync(chapterDir, { idempotent: true });
+        console.log(`已删除章节文件: ${chapterDir}`);
+      }
+      
+      // 保存状态
+      await this.saveDownloadedChapters();
+      this.notifyListeners();
+      
+      return true;
+    } catch (error) {
+      console.error('删除章节失败:', error);
+      return false;
+    }
   }
 
   clearCompletedTasks() {
@@ -241,17 +369,35 @@ class DownloadManager {
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     const metaPath = `${chapterDir}meta.json`;
     
+    console.log('=== 加载本地章节 ===');
+    console.log('章节目录:', chapterDir);
+    
     try {
       // 检查目录是否存在
       const dirInfo = await FileSystem.getInfoAsync(chapterDir);
       
       if (!dirInfo.exists) {
+        console.log('❌ 章节目录不存在');
         return null;
       }
+      
+      console.log('✓ 章节目录存在');
+      
+      // 检查meta.json
+      const metaInfo = await FileSystem.getInfoAsync(metaPath);
+      if (!metaInfo.exists) {
+        console.log('❌ meta.json不存在');
+        return null;
+      }
+      
+      console.log('✓ meta.json存在');
       
       // 读取元数据
       const metaContent = await FileSystem.readAsStringAsync(metaPath);
       const meta = JSON.parse(metaContent);
+      
+      console.log('meta.json内容:', meta);
+      console.log(`总图片数: ${meta.totalImages}`);
       
       const images = [];
       let missingCount = 0;
@@ -272,11 +418,18 @@ class DownloadManager {
           });
         } else {
           missingCount++;
+          if (i <= 3) {
+            console.log(`❌ 图片${i}缺失或为空: ${filepath}`);
+          }
         }
       }
       
+      console.log(`✓ 成功加载: ${images.length}张, 缺失: ${missingCount}张`);
+      console.log('前3张图片路径:', images.slice(0, 3).map(img => img.url));
+      
       return images;
     } catch (error) {
+      console.error('❌ 加载本地章节失败:', error);
       return null;
     }
   }
@@ -566,6 +719,12 @@ class DownloadManager {
       'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9'
     };
+    
+    // 获取并添加Cookie
+    const cookies = await this.getCookies();
+    if (cookies) {
+      downloadHeaders['Cookie'] = cookies;
+    }
     
     await FileSystem.downloadAsync(imageUrl, filepath, {
       headers: downloadHeaders

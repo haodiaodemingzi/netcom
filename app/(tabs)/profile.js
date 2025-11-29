@@ -8,6 +8,7 @@ import {
   Switch,
   StatusBar,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,7 @@ import {
   setCurrentSource
 } from '../../services/storage';
 import { getAvailableSources } from '../../services/api';
+import downloadManager from '../../services/downloadManager';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -58,6 +60,11 @@ const ProfileScreen = () => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     await saveSettings(newSettings);
+    
+    // 如果是下载并发数，更新downloadManager
+    if (key === 'maxConcurrentDownloads') {
+      downloadManager.updateMaxConcurrent(value);
+    }
   };
 
   const handleClearHistory = () => {
@@ -94,6 +101,42 @@ const ProfileScreen = () => {
         trackColor={{ false: '#ccc', true: '#6200EE' }}
         thumbColor="#fff"
       />
+    </View>
+  );
+  
+  const renderNumberSetting = (title, value, onValueChange, min = 1, max = 20) => (
+    <View style={styles.settingItem}>
+      <Text style={styles.settingTitle}>{title}</Text>
+      <View style={styles.numberInputContainer}>
+        <TouchableOpacity 
+          style={styles.numberButton}
+          onPress={() => {
+            const newValue = Math.max(min, value - 1);
+            onValueChange(newValue);
+          }}
+        >
+          <Text style={styles.numberButtonText}>−</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={styles.numberInput}
+          value={String(value)}
+          keyboardType="number-pad"
+          onChangeText={(text) => {
+            const num = parseInt(text) || min;
+            onValueChange(Math.min(max, Math.max(min, num)));
+          }}
+          includeFontPadding={false}
+        />
+        <TouchableOpacity 
+          style={styles.numberButton}
+          onPress={() => {
+            const newValue = Math.min(max, value + 1);
+            onValueChange(newValue);
+          }}
+        >
+          <Text style={styles.numberButtonText}>+</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -183,6 +226,13 @@ const ProfileScreen = () => {
             settings.keepScreenOn,
             (value) => handleSettingChange('keepScreenOn', value)
           )}
+          {renderNumberSetting(
+            '下载并发数',
+            settings.maxConcurrentDownloads || 10,
+            (value) => handleSettingChange('maxConcurrentDownloads', value),
+            1,
+            20
+          )}
         </View>
 
         <View style={styles.section}>
@@ -255,6 +305,38 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     color: '#000',
+  },
+  numberInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  numberButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+    backgroundColor: '#6200EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  numberButtonText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  numberInput: {
+    width: 50,
+    height: 32,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 4,
+    textAlign: 'center',
+    fontSize: 14,
+    padding: 0,
+    margin: 0,
+    color: '#000',
+    textAlignVertical: 'center',
   },
   menuItem: {
     flexDirection: 'row',
