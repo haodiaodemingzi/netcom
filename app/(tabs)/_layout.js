@@ -52,7 +52,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: '我的',
+          title: '设置',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons 
               name="account" 

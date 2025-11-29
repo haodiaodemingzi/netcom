@@ -140,6 +140,31 @@ const ProfileScreen = () => {
     </View>
   );
 
+  const renderRadioSetting = (title, value, options, onValueChange) => (
+    <View style={styles.radioSettingContainer}>
+      <Text style={styles.settingTitle}>{title}</Text>
+      <View style={styles.radioGroup}>
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[
+              styles.radioButton,
+              value === option.value && styles.radioButtonActive,
+            ]}
+            onPress={() => onValueChange(option.value)}
+          >
+            <Text style={[
+              styles.radioButtonText,
+              value === option.value && styles.radioButtonTextActive,
+            ]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
   const renderMenuItem = (title, onPress, showArrow = true) => (
     <TouchableOpacity 
       style={styles.menuItem} 
@@ -210,6 +235,15 @@ const ProfileScreen = () => {
                 </TouchableOpacity>
               ))}
             </View>
+          )}
+          {renderRadioSetting(
+            '阅读模式',
+            settings.scrollMode || 'horizontal',
+            [
+              { label: '左右滑动', value: 'horizontal' },
+              { label: '上下滑动', value: 'vertical' },
+            ],
+            (value) => handleSettingChange('scrollMode', value)
           )}
           {renderSettingItem(
             '夜间模式',
@@ -390,6 +424,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginTop: 4,
+  },
+  radioSettingContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  radioGroup: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 12,
+  },
+  radioButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  radioButtonActive: {
+    borderColor: '#6200EE',
+    backgroundColor: '#6200EE',
+  },
+  radioButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  radioButtonTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 

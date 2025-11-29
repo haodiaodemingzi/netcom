@@ -330,10 +330,15 @@ const ReaderScreen = () => {
   };
 
   const renderItem = ({ item, index }) => {
+    const isHorizontal = settings.scrollMode === 'horizontal';
+    const containerStyle = isHorizontal 
+      ? styles.imageContainer 
+      : styles.imageContainerVertical;
+    
     if (!item.url) {
       return (
-        <View style={styles.imageContainer}>
-          <View style={styles.loadingWrapper}>
+        <View style={containerStyle}>
+          <View style={isHorizontal ? styles.loadingWrapper : styles.loadingWrapperVertical}>
             {item.isLoading ? (
               <>
                 <ActivityIndicator size="large" color="#6200EE" />
@@ -348,10 +353,10 @@ const ReaderScreen = () => {
     }
     
     return (
-      <View style={styles.imageContainer}>
+      <View style={containerStyle}>
         <ImageViewer
           imageUrl={item.url}
-          fitMode={settings.imageFitMode}
+          fitMode={isHorizontal ? settings.imageFitMode : 'width'}
         />
       </View>
     );
@@ -364,6 +369,8 @@ const ReaderScreen = () => {
       </View>
     );
   }
+
+  const isHorizontal = settings.scrollMode === 'horizontal';
 
   return (
     <View 
@@ -379,16 +386,17 @@ const ReaderScreen = () => {
         data={images}
         renderItem={renderItem}
         keyExtractor={(item, index) => index.toString()}
-        horizontal
-        pagingEnabled
+        horizontal={isHorizontal}
+        pagingEnabled={isHorizontal}
         showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        getItemLayout={(data, index) => ({
+        getItemLayout={isHorizontal ? (data, index) => ({
           length: SCREEN_WIDTH,
           offset: SCREEN_WIDTH * index,
           index,
-        })}
+        }) : undefined}
       />
     </View>
   );
@@ -408,6 +416,9 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     flex: 1,
   },
+  imageContainerVertical: {
+    width: SCREEN_WIDTH,
+  },
   imageWrapper: {
     flex: 1,
     justifyContent: 'center',
@@ -415,6 +426,13 @@ const styles = StyleSheet.create({
   },
   loadingWrapper: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingWrapperVertical: {
+    width: SCREEN_WIDTH,
+    height: 400,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',

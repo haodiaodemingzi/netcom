@@ -112,6 +112,7 @@ export const getSettings = async () => {
     return data ? JSON.parse(data) : {
       readingMode: 'single',
       readingDirection: 'ltr',
+      scrollMode: 'horizontal',
       imageFitMode: 'width',
       backgroundColor: 'black',
       brightness: 1.0,
