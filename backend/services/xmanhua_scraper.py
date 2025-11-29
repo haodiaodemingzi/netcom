@@ -7,11 +7,13 @@ X漫画采集源
 import re
 import urllib3
 import hashlib
-import execjs
+import logging
 from datetime import datetime
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from .base_scraper import BaseScraper
+
+logger = logging.getLogger(__name__)
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -32,27 +34,110 @@ class XmanhuaScraper(BaseScraper):
     def extract_uk_from_tokens(self, packed_code):
         """直接从token数组中提取uk值"""
         try:
-            # 查找split('|')部分
             split_match = re.search(r"'([^']+)'\.split\('\|'\)", packed_code)
             if split_match:
                 tokens = split_match.group(1).split('|')
                 
-                # 查找uk和对应的值
-                if 'uk' in tokens:
-                    uk_index = tokens.index('uk')
-                    
-                    # 查找长字符串（uk值）
-                    for i, token in enumerate(tokens):
-                        if len(token) > 40 and re.match(r'^[A-F0-9]+$', token):
-                            return token
-                
-                # 如果没找到uk关键字，直接查找长字符串
-                for i, token in enumerate(tokens):
+                for token in tokens:
                     if len(token) > 40 and re.match(r'^[A-F0-9]+$', token):
                         return token
             
             return None
         except Exception:
+            return None
+    
+    def unpack_js(self, packed_code):
+        """解包Dean Edwards Packer混淆的JS代码"""
+        try:
+            # 使用更健壮的正则提取核心参数：p, a, c, k
+            # 能处理包含转义字符 \' 的复杂情况
+            pattern = r"\}\s*\(\s*(['\"])((?:(?!\1|\\).|\\.)*)\1\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['\"])((?:(?!\5|\\).|\\.)*)\5\.split\('\|'\)"
+            
+            match = re.search(pattern, packed_code)
+            if not match:
+                logger.debug("无法匹配Packer格式")
+                return None
+            
+            # 提取分组
+            quote_p = match.group(1)  # payload的引号类型
+            p_raw = match.group(2)     # payload原文
+            a = int(match.group(3))
+            c = int(match.group(4))
+            k_raw = match.group(6)     # keywords原文
+            
+            # 预处理：还原payload中的转义字符
+            p = p_raw.replace(f"\\{quote_p}", quote_p).replace(r"\\", "\\")
+            
+            # 准备关键词列表
+            k = k_raw.split('|')
+            
+            # Base36转换函数
+            def base36(n):
+                chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+                if n < len(chars):
+                    return chars[n]
+                return base36(n // len(chars)) + chars[n % len(chars)]
+            
+            # 执行替换逻辑（倒序替换）
+            for i in range(c - 1, -1, -1):
+                if i < len(k) and k[i]:
+                    token = base36(i)
+                    p = re.sub(r'\b' + token + r'\b', k[i], p)
+            
+            return p
+        except Exception as e:
+            logger.debug(f"解包JS失败: {e}", exc_info=True)
+            return None
+    
+    def decode_packed_js(self, packed_code):
+        """解码混淆的JavaScript代码，提取图片URL"""
+        try:
+            # 先解包JS代码
+            unpacked = self.unpack_js(packed_code)
+            
+            if not unpacked:
+                logger.debug("解包失败，返回None")
+                return None
+            
+            # 调试：打印解包后的代码
+            # print(f"  解包后的代码: {unpacked[:200]}...")
+            
+            # 从解包后的代码中提取变量
+            cid_match = re.search(r'(?:var\s+)?cid\s*=\s*(\d+)', unpacked)
+            key_match = re.search(r'(?:var\s+)?key\s*=\s*[\'"]?([a-f0-9]{32})[\'"]?', unpacked)
+            pix_match = re.search(r'(?:var\s+)?pix\s*=\s*[\'"]([^\'"]+)[\'"]', unpacked)
+            
+            # 提取图片数组
+            pvalue_match = re.search(r'(?:var\s+)?pvalue\s*=\s*\[(.*?)\]', unpacked)
+            
+            if not (cid_match and key_match and pix_match and pvalue_match):
+                logger.debug(f"提取变量失败: cid={bool(cid_match)}, key={bool(key_match)}, pix={bool(pix_match)}, pvalue={bool(pvalue_match)}")
+                if unpacked:
+                    logger.debug(f"解包后的代码片段: {unpacked[:300]}")
+                return None
+            
+            cid = cid_match.group(1)
+            key = key_match.group(1)
+            pix = pix_match.group(1)
+            pvalue_str = pvalue_match.group(1)
+            
+            # 分割图片路径
+            images = [img.strip().strip('"\'') for img in pvalue_str.split(',')]
+            
+            # 提取uk值（长16进制字符串）
+            uk = self.extract_uk_from_tokens(packed_code) or ""
+            
+            # 构建完整URL列表
+            full_urls = []
+            for img in images:
+                if img:  # 跳过空字符串
+                    url = f"{pix}{img}?cid={cid}&key={key}&uk={uk}"
+                    full_urls.append(url)
+            
+            return full_urls if full_urls else None
+            
+        except Exception as e:
+            logger.debug(f"解码失败: {e}", exc_info=True)
             return None
     
     def get_categories(self):
@@ -488,7 +573,7 @@ class XmanhuaScraper(BaseScraper):
                 'updateTime': update_time
             }
         except Exception as e:
-            print(f"获取漫画详情失败: {e}")
+            logger.error(f"获取漫画详情失败: {e}", exc_info=True)
             return None
     
     def get_chapters(self, comic_id):
@@ -498,7 +583,7 @@ class XmanhuaScraper(BaseScraper):
         """
         try:
             url = f'{self.base_url}/{comic_id}/'
-            print(f"请求章节列表URL: {url}")
+            logger.debug(f"请求章节列表URL: {url}")
             
             response = self._make_request(url, verify_ssl=False)
             soup = BeautifulSoup(response.text, 'lxml')
@@ -529,7 +614,7 @@ class XmanhuaScraper(BaseScraper):
                 'total': len(chapters)
             }
         except Exception as e:
-            print(f"获取章节列表失败: {e}")
+            logger.error(f"获取章节列表失败: {e}", exc_info=True)
             return {'chapters': [], 'total': 0}
     
     def get_chapter_images(self, chapter_id):
@@ -539,7 +624,7 @@ class XmanhuaScraper(BaseScraper):
         """
         try:
             first_page_url = f'{self.base_url}/{chapter_id}/'
-            print(f"请求章节第一页: {first_page_url}")
+            logger.debug(f"请求章节第一页: {first_page_url}")
             
             response = self._make_request(first_page_url, verify_ssl=False)
             if not response:
@@ -555,7 +640,7 @@ class XmanhuaScraper(BaseScraper):
             viewsign_match = re.search(r'var XMANHUA_VIEWSIGN="([^"]+)";', html_content)
             
             if not image_count_match:
-                print("未找到XMANHUA_IMAGE_COUNT变量")
+                logger.warning("未找到XMANHUA_IMAGE_COUNT变量")
                 return {'images': [], 'total': 0}
             
             total_pages = int(image_count_match.group(1))
@@ -564,8 +649,8 @@ class XmanhuaScraper(BaseScraper):
             viewsign_dt = viewsign_dt_match.group(1) if viewsign_dt_match else ''
             viewsign = viewsign_match.group(1) if viewsign_match else ''
             
-            print(f"漫画ID: {mid}, 章节ID: {cid}, 总页数: {total_pages}")
-            print(f"签名时间: {viewsign_dt}, 签名: {viewsign}")
+            logger.debug(f"漫画ID: {mid}, 章节ID: {cid}, 总页数: {total_pages}")
+            logger.debug(f"签名时间: {viewsign_dt}, 签名: {viewsign}")
             
             images = []
             
@@ -586,7 +671,7 @@ class XmanhuaScraper(BaseScraper):
             }
             
             # 确保session有必要的Cookie（通过访问章节页面获取）
-            print(f"  确保获取必要的Cookie...")
+            logger.debug("确保获取必要的Cookie...")
             
             # 逐页获取图片
             for page_num in range(1, total_pages + 1):
@@ -625,68 +710,82 @@ class XmanhuaScraper(BaseScraper):
                     if api_response and api_response.text:
                         response_text = api_response.text.strip()
                         
-                        # API返回的是混淆的JavaScript代码
+                        # API返回的是混淆的JavaScript代码，使用正则直接解析
                         try:
-                            # 调试：打印原始JS代码
-                            if page_num == 1:
-                                print(f"  原始JS代码: {response_text[:300]}...")
+                            # 使用正则直接解码
+                            result = self.decode_packed_js(response_text)
                             
-                            # 执行混淆的JavaScript代码
-                            js_code = response_text + '; d;'
-                            ctx = execjs.compile(js_code)
-                            result = ctx.eval('d')
-                            
-                            # 从JS代码中提取uk参数
+                            # 提取uk参数
                             uk_value = self.extract_uk_from_tokens(response_text)
+                            
                             if page_num == 1:
                                 if uk_value:
-                                    print(f"  成功提取uk参数: {uk_value[:50]}...")
+                                    logger.debug(f"成功提取uk参数: {uk_value[:50]}...")
+                                if result:
+                                    logger.debug(f"解析得到 {len(result)} 个URL")
                                 else:
-                                    print(f"  未找到uk参数")
+                                    logger.debug("未能从tokens解析出URL，将使用备用方案")
                             
-                            # 调试：打印JS执行结果
-                            if page_num == 1:
-                                print(f"  JS执行结果: {result}")
-                            
-                            # result是一个数组，通常包含2个URL（当前页和下一页）
-                            # 我们只取第一个，即当前页的URL
+                            # result是图片URL数组
                             if result and isinstance(result, list) and len(result) > 0:
-                                img_url = result[0]  # 取第一个URL，即当前页
+                                img_url = result[0]  # 取第一个URL
                                 
-                                # 调试：打印原始URL
                                 if page_num <= 3:
-                                    print(f"  第{page_num}页原始URL: {img_url}")
+                                    logger.debug(f"第{page_num}页原始URL: {img_url}")
                                 
                                 if img_url:
                                     # 确保URL是完整的
                                     if not img_url.startswith('http'):
-                                        img_url = 'https:' + img_url if img_url.startswith('//') else self.base_url + img_url
+                                        img_url = 'https:' + img_url if img_url.startswith('//') else 'https://image.xmanhua.com' + img_url
+                                    
+                                    # 补充查询参数
+                                    if '?' not in img_url:
+                                        # 需要添加查询参数
+                                        img_url = f"{img_url}?cid={cid}&key="
                                     
                                     # 如果URL以&uk=结尾且我们有uk值，则补充完整
-                                    if uk_value and img_url.endswith('&uk='):
-                                        img_url = img_url + uk_value
-                                        if page_num <= 3:
-                                            print(f"  第{page_num}页补充uk后: {img_url[:100]}...")
+                                    if uk_value:
+                                        if img_url.endswith('&uk='):
+                                            img_url = img_url + uk_value
+                                        elif 'uk=' not in img_url:
+                                            img_url = img_url + '&uk=' + uk_value
                                     
                                     images.append({
                                         'page': page_num,
                                         'url': img_url
                                     })
                                     
-                                    # 只打印前3张的URL
                                     if page_num <= 3:
-                                        print(f"  第{page_num}页最终URL: {img_url[:100]}...")
+                                        logger.debug(f"第{page_num}页最终URL: {img_url[:100]}...")
                             else:
-                                print(f"  第{page_num}页: JavaScript执行结果为空")
+                                logger.debug(f"第{page_num}页: 解析失败，尝试备用方案")
+                                # 备用方案1: 直接正则查找完整URL
+                                url_match = re.search(r'(https?://[^"\s]+\.(?:jpg|png|webp)[^"\s]*)', response_text)
+                                if url_match:
+                                    img_url = url_match.group(1)
+                                    if uk_value and '&uk=' in img_url and img_url.endswith('&uk='):
+                                        img_url = img_url + uk_value
+                                    images.append({'page': page_num, 'url': img_url})
+                                else:
+                                    # 备用方案2: 查找路径并构建URL
+                                    path_match = re.search(r'(/\d+/\d+/\d+/\d+_\d+\.(?:jpg|png|webp))', response_text)
+                                    if path_match:
+                                        path = path_match.group(1)
+                                        img_url = f"https://image.xmanhua.com{path}?cid={cid}&key="
+                                        if uk_value:
+                                            img_url += f"&uk={uk_value}"
+                                        images.append({'page': page_num, 'url': img_url})
+                                        if page_num <= 3:
+                                            logger.debug(f"第{page_num}页备用方案URL: {img_url[:100]}...")
                         except Exception as js_error:
-                            print(f"  第{page_num}页: JavaScript执行失败 - {js_error}")
-                            print(f"  响应内容: {response_text[:200]}")
+                            logger.debug(f"第{page_num}页: 解析失败 - {js_error}")
+                            logger.debug(f"响应内容: {response_text[:200]}")
                 except Exception as e:
-                    print(f"  第{page_num}页: 请求失败 - {e}")
+                    logger.debug(f"第{page_num}页: 请求失败 - {e}")
                     continue
             
             if len(images) > 3:
-                print(f"  ... (共{total_pages}页，已获取{len(images)}页)")
+                logger.debug(f"... (共{total_pages}页，已获取{len(images)}页)")
             
             return {
                 'images': images,
@@ -694,5 +793,5 @@ class XmanhuaScraper(BaseScraper):
                 'expected_total': total_pages
             }
         except Exception as e:
-            print(f"获取章节图片失败: {e}")
+            logger.error(f"获取章节图片失败: {e}", exc_info=True)
             return {'images': [], 'total': 0}
