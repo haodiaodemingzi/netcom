@@ -8,6 +8,8 @@ import re
 import urllib3
 import hashlib
 import logging
+import asyncio
+import aiohttp
 from datetime import datetime
 from urllib.parse import quote
 from bs4 import BeautifulSoup
@@ -617,6 +619,123 @@ class XmanhuaScraper(BaseScraper):
             logger.error(f"获取章节列表失败: {e}", exc_info=True)
             return {'chapters': [], 'total': 0}
     
+    async def _fetch_single_page_async(self, session, semaphore, api_url, page_num, params, headers, cid):
+        """异步获取单页图片"""
+        async with semaphore:
+            try:
+                # 添加随机延迟0-500ms
+                await asyncio.sleep(__import__('random').random() * 0.5)
+                
+                page_params = params.copy()
+                page_params['page'] = str(page_num)
+                
+                async with session.get(api_url, params=page_params, headers=headers, ssl=False, timeout=10) as response:
+                    if response.status == 200:
+                        response_text = await response.text()
+                        response_text = response_text.strip()
+                        
+                        # 解析JavaScript代码
+                        try:
+                            result = self.decode_packed_js(response_text)
+                            uk_value = self.extract_uk_from_tokens(response_text)
+                            
+                            if page_num == 1:
+                                if uk_value:
+                                    logger.debug(f"成功提取uk参数: {uk_value[:50]}...")
+                                if result:
+                                    logger.debug(f"解析得到 {len(result)} 个URL")
+                            
+                            if result and isinstance(result, list) and len(result) > 0:
+                                img_url = result[0]
+                                
+                                if page_num <= 3:
+                                    logger.debug(f"第{page_num}页原始URL: {img_url}")
+                                
+                                if img_url:
+                                    if not img_url.startswith('http'):
+                                        img_url = 'https:' + img_url if img_url.startswith('//') else 'https://image.xmanhua.com' + img_url
+                                    
+                                    if '?' not in img_url:
+                                        img_url = f"{img_url}?cid={cid}&key="
+                                    
+                                    if uk_value:
+                                        if img_url.endswith('&uk='):
+                                            img_url = img_url + uk_value
+                                        elif 'uk=' not in img_url:
+                                            img_url = img_url + '&uk=' + uk_value
+                                    
+                                    if page_num <= 3:
+                                        logger.debug(f"第{page_num}页最终URL: {img_url[:100]}...")
+                                    
+                                    return {'page': page_num, 'url': img_url}
+                            else:
+                                # 备用方案
+                                url_match = re.search(r'(https?://[^"\s]+\.(?:jpg|png|webp)[^"\s]*)', response_text)
+                                if url_match:
+                                    img_url = url_match.group(1)
+                                    if uk_value and '&uk=' in img_url and img_url.endswith('&uk='):
+                                        img_url = img_url + uk_value
+                                    return {'page': page_num, 'url': img_url}
+                                else:
+                                    path_match = re.search(r'(/\d+/\d+/\d+/\d+_\d+\.(?:jpg|png|webp))', response_text)
+                                    if path_match:
+                                        path = path_match.group(1)
+                                        img_url = f"https://image.xmanhua.com{path}?cid={cid}&key="
+                                        if uk_value:
+                                            img_url += f"&uk={uk_value}"
+                                        return {'page': page_num, 'url': img_url}
+                        except Exception as js_error:
+                            logger.debug(f"第{page_num}页: 解析失败 - {js_error}")
+            except Exception as e:
+                logger.debug(f"第{page_num}页: 请求失败 - {e}")
+            
+            return None
+    
+    async def _fetch_images_async(self, api_url, chapter_id, total_pages, cid, mid, viewsign_dt, viewsign):
+        """异步并发获取所有图片，最大并发5"""
+        params = {
+            'cid': cid,
+            'page': '1',
+            'key': '',
+            '_cid': cid,
+            '_mid': mid,
+            '_dt': viewsign_dt,
+            '_sign': viewsign
+        }
+        
+        headers = {
+            'accept': '*/*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'priority': 'u=1, i',
+            'referer': f'{self.base_url}/{chapter_id}/',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+            'x-requested-with': 'XMLHttpRequest'
+        }
+        
+        # 创建信号量控制并发数为5
+        semaphore = asyncio.Semaphore(5)
+        
+        # 创建aiohttp会话
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector, cookies=self.session.cookies) as session:
+            # 创建所有任务
+            tasks = []
+            for page_num in range(1, total_pages + 1):
+                task = self._fetch_single_page_async(session, semaphore, api_url, page_num, params, headers, cid)
+                tasks.append(task)
+            
+            # 并发执行所有任务
+            results = await asyncio.gather(*tasks)
+            
+            # 过滤None结果并按页码排序
+            images = [r for r in results if r is not None]
+            images.sort(key=lambda x: x['page'])
+            
+            return images
+    
     def get_chapter_images(self, chapter_id):
         """
         获取章节图片
@@ -673,116 +792,10 @@ class XmanhuaScraper(BaseScraper):
             # 确保session有必要的Cookie（通过访问章节页面获取）
             logger.debug("确保获取必要的Cookie...")
             
-            # 逐页获取图片
-            for page_num in range(1, total_pages + 1):
-                # 构建请求参数
-                params = {
-                    'cid': cid,
-                    'page': str(page_num),
-                    'key': '',
-                    '_cid': cid,
-                    '_mid': mid,
-                    '_dt': viewsign_dt,
-                    '_sign': viewsign
-                }
-                
-                headers = {
-                    'accept': '*/*',
-                    'accept-language': 'zh-CN,zh;q=0.9',
-                    'priority': 'u=1, i',
-                    'referer': f'{self.base_url}/{chapter_id}/',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-origin',
-                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-                    'x-requested-with': 'XMLHttpRequest'
-                }
-                try:
-                    # 使用session发送请求
-                    self.session.headers.update(headers)
-                    api_response = self.session.get(
-                        api_url,
-                        params=params,
-                        timeout=10,
-                        verify=False
-                    )
-                    
-                    if api_response and api_response.text:
-                        response_text = api_response.text.strip()
-                        
-                        # API返回的是混淆的JavaScript代码，使用正则直接解析
-                        try:
-                            # 使用正则直接解码
-                            result = self.decode_packed_js(response_text)
-                            
-                            # 提取uk参数
-                            uk_value = self.extract_uk_from_tokens(response_text)
-                            
-                            if page_num == 1:
-                                if uk_value:
-                                    logger.debug(f"成功提取uk参数: {uk_value[:50]}...")
-                                if result:
-                                    logger.debug(f"解析得到 {len(result)} 个URL")
-                                else:
-                                    logger.debug("未能从tokens解析出URL，将使用备用方案")
-                            
-                            # result是图片URL数组
-                            if result and isinstance(result, list) and len(result) > 0:
-                                img_url = result[0]  # 取第一个URL
-                                
-                                if page_num <= 3:
-                                    logger.debug(f"第{page_num}页原始URL: {img_url}")
-                                
-                                if img_url:
-                                    # 确保URL是完整的
-                                    if not img_url.startswith('http'):
-                                        img_url = 'https:' + img_url if img_url.startswith('//') else 'https://image.xmanhua.com' + img_url
-                                    
-                                    # 补充查询参数
-                                    if '?' not in img_url:
-                                        # 需要添加查询参数
-                                        img_url = f"{img_url}?cid={cid}&key="
-                                    
-                                    # 如果URL以&uk=结尾且我们有uk值，则补充完整
-                                    if uk_value:
-                                        if img_url.endswith('&uk='):
-                                            img_url = img_url + uk_value
-                                        elif 'uk=' not in img_url:
-                                            img_url = img_url + '&uk=' + uk_value
-                                    
-                                    images.append({
-                                        'page': page_num,
-                                        'url': img_url
-                                    })
-                                    
-                                    if page_num <= 3:
-                                        logger.debug(f"第{page_num}页最终URL: {img_url[:100]}...")
-                            else:
-                                logger.debug(f"第{page_num}页: 解析失败，尝试备用方案")
-                                # 备用方案1: 直接正则查找完整URL
-                                url_match = re.search(r'(https?://[^"\s]+\.(?:jpg|png|webp)[^"\s]*)', response_text)
-                                if url_match:
-                                    img_url = url_match.group(1)
-                                    if uk_value and '&uk=' in img_url and img_url.endswith('&uk='):
-                                        img_url = img_url + uk_value
-                                    images.append({'page': page_num, 'url': img_url})
-                                else:
-                                    # 备用方案2: 查找路径并构建URL
-                                    path_match = re.search(r'(/\d+/\d+/\d+/\d+_\d+\.(?:jpg|png|webp))', response_text)
-                                    if path_match:
-                                        path = path_match.group(1)
-                                        img_url = f"https://image.xmanhua.com{path}?cid={cid}&key="
-                                        if uk_value:
-                                            img_url += f"&uk={uk_value}"
-                                        images.append({'page': page_num, 'url': img_url})
-                                        if page_num <= 3:
-                                            logger.debug(f"第{page_num}页备用方案URL: {img_url[:100]}...")
-                        except Exception as js_error:
-                            logger.debug(f"第{page_num}页: 解析失败 - {js_error}")
-                            logger.debug(f"响应内容: {response_text[:200]}")
-                except Exception as e:
-                    logger.debug(f"第{page_num}页: 请求失败 - {e}")
-                    continue
+            # 异步并发获取图片（最大并发5）
+            images = asyncio.run(self._fetch_images_async(
+                api_url, chapter_id, total_pages, cid, mid, viewsign_dt, viewsign
+            ))
             
             if len(images) > 3:
                 logger.debug(f"... (共{total_pages}页，已获取{len(images)}页)")
