@@ -118,9 +118,17 @@ export class ImageDownloader {
       console.log(`📥 下载: ${url}`);
       console.log(`💾 保存: ${localPath}`);
 
+      // 根据数据源设置不同的Referer
+      const referers = {
+        'xmanhua': 'https://xmanhua.com/',
+        'hmzxa': 'https://hmzxa.com/',
+        'guoman8': 'https://www.guoman8.cc/'
+      };
+      const referer = referers[task.source] || 'https://xmanhua.com/';
+
       const downloadHeaders = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-        'Referer': 'https://xmanhua.com/',
+        'Referer': referer,
         'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9'
       };
@@ -128,7 +136,7 @@ export class ImageDownloader {
       // 如果task有cookies，添加到headers
       if (task.cookies) {
         downloadHeaders['Cookie'] = task.cookies;
-        console.log('使用Cookie下载');
+        console.log(`使用${task.source}的Cookie下载`);
       }
 
       const downloadResult = await FileSystem.downloadAsync(url, localPath, {

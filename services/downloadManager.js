@@ -17,8 +17,8 @@ class DownloadManager {
   constructor() {
     this.downloadedChapters = new Map();
     this.listeners = new Set();
-    this.cachedCookies = null;
-    this.cookiesExpireTime = 0;
+    this.cachedCookies = new Map(); // 按数据源缓存cookie
+    this.cookiesExpireTime = new Map(); // 按数据源记录过期时间
     this.maxConcurrent = 10; // 默认值
     
     this.queue = new DownloadQueue(this.maxConcurrent);
@@ -32,7 +32,7 @@ class DownloadManager {
     this.adapters = {
       guoman8: new Guoman8Adapter(this.apiClient),
       xmanhua: new XmanhuaAdapter(this.apiClient),
-      hmzxa: new HmzxaAdapter(this.apiClient),
+      hmzxa: new HmzxaAdapter(this.apiClient, this),
     };
     
     this.setupQueueListeners();
@@ -65,16 +65,28 @@ class DownloadManager {
     this.downloader.setMaxConcurrent(max);
   }
   
-  async getCookies() {
+  async getCookies(source = 'xmanhua') {
     // 如果缓存的cookie还没过期，直接返回
     const now = Date.now();
-    if (this.cachedCookies && now < this.cookiesExpireTime) {
-      return this.cachedCookies;
+    const cachedCookie = this.cachedCookies.get(source);
+    const expireTime = this.cookiesExpireTime.get(source);
+    
+    if (cachedCookie && expireTime && now < expireTime) {
+      return cachedCookie;
     }
     
     try {
+      // 根据数据源选择访问的URL
+      const sourceUrls = {
+        'xmanhua': 'https://xmanhua.com/',
+        'hmzxa': 'https://hmzxa.com/',
+        'guoman8': 'https://www.guoman8.cc/'
+      };
+      
+      const url = sourceUrls[source] || sourceUrls['xmanhua'];
+      
       // 访问主站获取cookie
-      const response = await fetch('https://xmanhua.com/', {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
@@ -84,15 +96,16 @@ class DownloadManager {
       });
       
       const setCookie = response.headers.get('set-cookie');
-      console.log('获取到的Cookie:', setCookie);
+      console.log(`获取到${source}的Cookie:`, setCookie);
       
       // 缓存cookie，5分钟后过期
-      this.cachedCookies = setCookie || '';
-      this.cookiesExpireTime = now + 5 * 60 * 1000;
+      const cookieValue = setCookie || '';
+      this.cachedCookies.set(source, cookieValue);
+      this.cookiesExpireTime.set(source, now + 5 * 60 * 1000);
       
-      return this.cachedCookies;
+      return cookieValue;
     } catch (error) {
-      console.error('获取Cookie失败:', error);
+      console.error(`获取${source}的Cookie失败:`, error);
       return '';
     }
   }
@@ -219,10 +232,10 @@ class DownloadManager {
   }
 
   async handleTaskStart(task) {
-    console.log(`开始执行下载任务: ${task.chapterTitle}, 共${task.totalImages}张图片`);
+    console.log(`开始执行下载任务: ${task.chapterTitle}, 共${task.totalImages}张图片, 数据源: ${task.source}`);
     
-    // 获取cookie
-    const cookies = await this.getCookies();
+    // 根据数据源获取对应的cookie
+    const cookies = await this.getCookies(task.source || 'xmanhua');
     task.cookies = cookies;
     
     this.downloader.downloadTask(task, DOWNLOAD_DIR).catch(error => {

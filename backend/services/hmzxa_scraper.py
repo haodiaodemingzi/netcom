@@ -345,8 +345,8 @@ class HmzxaScraper(BaseScraper):
                 alt = img.get('alt', '')
                 
                 # 过滤掉非内容图片（如广告、logo等）
-                # 只保留jmpic.xyz域名下的上传图片
-                if src and 'jmpic.xyz' in src and '/upload' in src:
+                # 匹配图床URL格式：数字目录/数字文件名.jpg
+                if src and re.search(r'/\d+/\d+\.(jpg|png|webp|jpeg)', src):
                     images.append({
                         'page': page_num,
                         'url': src
