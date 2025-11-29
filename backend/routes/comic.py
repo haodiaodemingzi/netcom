@@ -97,6 +97,39 @@ def get_chapters(comic_id):
         logger.error(f"获取章节列表失败: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@comic_bp.route('/chapters/<chapter_id>/images/<int:page>', methods=['GET'])
+@cache_response(timeout=1800, key_prefix='image_page')
+def get_chapter_image_by_page(chapter_id, page):
+    """获取章节的单张图片"""
+    source = request.args.get('source', None)
+    
+    logger.info(f"获取单页图片 - 章节ID: {chapter_id}, 页码: {page}, 数据源: {source}")
+    
+    try:
+        scraper = ScraperFactory.get_scraper(source)
+        logger.info(f"使用爬虫: {type(scraper).__name__}")
+        
+        data = scraper.get_chapter_images(chapter_id)
+        images = data.get('images', []) if isinstance(data, dict) else []
+        total = data.get('total', len(images)) if isinstance(data, dict) else len(images)
+        
+        if page < 1 or page > total:
+            logger.warning(f"页码超出范围: {page}, 总页数: {total}")
+            return jsonify({'error': '页码超出范围', 'page': page, 'total': total}), 400
+        
+        image = images[page - 1]
+        result = {
+            'page': page,
+            'url': image.get('url'),
+            'total': total
+        }
+        
+        logger.info(f"成功获取第{page}页图片, URL: {image.get('url')[:100]}...")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"获取单页图片失败: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @comic_bp.route('/chapters/<chapter_id>/images', methods=['GET'])
 @cache_response(timeout=1800, key_prefix='images')
 def get_chapter_images(chapter_id):

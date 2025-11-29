@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getChapterImages } from './api';
+import { getChapterImages, getChapterImageByPage } from './api';
 import { Alert } from 'react-native';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
@@ -588,6 +588,48 @@ class DownloadManager {
       }
       throw error;
     }
+  }
+
+  async downloadSingleImage(comicId, chapterId, page, imageUrl) {
+    const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
+    await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
+    
+    const filename = `${String(page).padStart(3, '0')}.jpg`;
+    const filepath = `${chapterDir}${filename}`;
+    
+    const fileInfo = await FileSystem.getInfoAsync(filepath);
+    if (fileInfo.exists && fileInfo.size > 0) {
+      return filepath;
+    }
+    
+    const downloadHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+      'Referer': 'https://xmanhua.com/',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9'
+    };
+    
+    await FileSystem.downloadAsync(imageUrl, filepath, {
+      headers: downloadHeaders
+    });
+    
+    return filepath;
+  }
+
+  async getOrDownloadImage(comicId, chapterId, page, source) {
+    const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
+    const filename = `${String(page).padStart(3, '0')}.jpg`;
+    const filepath = `${chapterDir}${filename}`;
+    
+    const fileInfo = await FileSystem.getInfoAsync(filepath);
+    if (fileInfo.exists && fileInfo.size > 0) {
+      return { url: filepath, isLocal: true, page };
+    }
+    
+    const imageData = await getChapterImageByPage(chapterId, page, source);
+    await this.downloadSingleImage(comicId, chapterId, page, imageData.url);
+    
+    return { url: filepath, isLocal: true, page, total: imageData.total };
   }
 }
 

@@ -90,62 +90,57 @@ const ReaderScreen = () => {
       const settingsData = await getSettings();
       setSettings(settingsData);
       
-      // 检查章节是否已下载
+      // 先检查本地是否已完整下载
       const isDownloaded = downloadManager.isDownloaded(chapterId);
       
-      if (!isDownloaded) {
-        // 未下载的章节不允许阅读
+      if (isDownloaded) {
+        // 已下载完整章节，直接加载本地图片
+        const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
+          .find(info => info.chapterId === chapterId);
+        
+        if (downloadedInfo) {
+          setComicInfo(downloadedInfo);
+          const localImages = await downloadManager.getLocalChapterImages(
+            downloadedInfo.comicId,
+            chapterId
+          );
+          
+          if (localImages && localImages.length > 0) {
+            setImages(localImages);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // 未下载或本地损坏，在线预览模式
+      // 获取章节总页数
+      const chapterInfo = await getChapterImages(chapterId, source);
+      const totalPages = chapterInfo.total || 0;
+      
+      if (totalPages === 0) {
+        console.error('无法获取章节信息');
         setLoading(false);
-        Alert.alert(
-          '提示',
-          '该章节未下载，无法阅读',
-          [
-            {
-              text: '确定',
-              onPress: () => router.back()
-            }
-          ]
-        );
         return;
       }
       
-      // 加载本地已下载的章节
-      const downloadedInfo = Array.from(downloadManager.downloadedChapters.values())
-        .find(info => info.chapterId === chapterId);
+      // 初始化图片占位符数组
+      const placeholders = Array.from({ length: totalPages }, (_, i) => ({
+        page: i + 1,
+        url: null,
+        isLoading: false,
+        isLocal: false
+      }));
+      setImages(placeholders);
       
-      if (downloadedInfo) {
-        setComicInfo(downloadedInfo);
-        const localImages = await downloadManager.getLocalChapterImages(
-          downloadedInfo.comicId,
-          chapterId
-        );
-        
-        if (localImages && localImages.length > 0) {
-          setImages(localImages);
-        } else {
-          Alert.alert(
-            '错误',
-            '章节文件损坏，请重新下载',
-            [
-              {
-                text: '确定',
-                onPress: () => router.back()
-              }
-            ]
-          );
-        }
-      }
+      setComicInfo({
+        comicId,
+        comicTitle: chapterInfo.title || '在线预览',
+        totalPages
+      });
+      
     } catch (error) {
-      Alert.alert(
-        '错误',
-        '加载章节失败: ' + error.message,
-        [
-          {
-            text: '确定',
-            onPress: () => router.back()
-          }
-        ]
-      );
+      console.error('加载章节失败:', error);
     } finally {
       setLoading(false);
     }
@@ -162,16 +157,70 @@ const ReaderScreen = () => {
     }
   };
 
+  const loadImageForPage = async (pageIndex) => {
+    if (!comicInfo) return;
+    const page = pageIndex + 1;
+    
+    if (images[pageIndex]?.url) return;
+    
+    setImages(prev => {
+      const updated = [...prev];
+      updated[pageIndex] = { ...updated[pageIndex], isLoading: true };
+      return updated;
+    });
+    
+    try {
+      const imageData = await downloadManager.getOrDownloadImage(
+        comicInfo.comicId || comicId,
+        chapterId,
+        page,
+        currentSource
+      );
+      
+      setImages(prev => {
+        const updated = [...prev];
+        updated[pageIndex] = {
+          page,
+          url: imageData.url,
+          isLocal: true,
+          isLoading: false
+        };
+        return updated;
+      });
+    } catch (error) {
+      console.error(`加载第${page}页失败:`, error);
+      setImages(prev => {
+        const updated = [...prev];
+        updated[pageIndex] = { ...updated[pageIndex], isLoading: false };
+        return updated;
+      });
+    }
+  };
+
   const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
     if (viewableItems.length > 0) {
-      const page = viewableItems[0].index + 1;
+      const currentIndex = viewableItems[0].index;
+      const page = currentIndex + 1;
       setCurrentPage(page);
+      
+      // 加载当前页
+      loadImageForPage(currentIndex);
+      
+      // 预加载下一页
+      if (currentIndex + 1 < images.length) {
+        loadImageForPage(currentIndex + 1);
+      }
+      
+      // 预加载前一页
+      if (currentIndex - 1 >= 0) {
+        loadImageForPage(currentIndex - 1);
+      }
       
       // 保存阅读进度
       if (comicInfo) {
         addHistory(
           {
-            id: comicInfo.comicId,
+            id: comicInfo.comicId || comicId,
             title: comicInfo.comicTitle,
           },
           chapterId,
@@ -193,9 +242,8 @@ const ReaderScreen = () => {
           return chapterNumber === currentNumber + 1;
         });
         
-        if (nextChapter && downloadManager.isDownloaded(nextChapter.id)) {
+        if (nextChapter) {
           hasShownNextChapterPrompt.current = true;
-          // 显示提示，询问是否跳转下一章
           setTimeout(() => {
             Alert.alert(
               '章节已读完',
@@ -236,12 +284,8 @@ const ReaderScreen = () => {
       });
       
       if (prevChapter) {
-        if (downloadManager.isDownloaded(prevChapter.id)) {
-          router.replace(`/reader/${prevChapter.id}?comicId=${comicId}`);
-          setCurrentPage(1);
-        } else {
-          Alert.alert('提示', '上一章未下载，无法阅读');
-        }
+        router.replace(`/reader/${prevChapter.id}?comicId=${comicId}`);
+        setCurrentPage(1);
       }
     }
   };
@@ -258,12 +302,8 @@ const ReaderScreen = () => {
       });
       
       if (nextChapter) {
-        if (downloadManager.isDownloaded(nextChapter.id)) {
-          router.replace(`/reader/${nextChapter.id}?comicId=${comicId}`);
-          setCurrentPage(1);
-        } else {
-          Alert.alert('提示', '下一章未下载，无法阅读');
-        }
+        router.replace(`/reader/${nextChapter.id}?comicId=${comicId}`);
+        setCurrentPage(1);
       }
     }
   };
@@ -276,6 +316,23 @@ const ReaderScreen = () => {
   };
 
   const renderItem = ({ item, index }) => {
+    if (!item.url) {
+      return (
+        <View style={styles.imageContainer}>
+          <View style={styles.loadingWrapper}>
+            {item.isLoading ? (
+              <>
+                <ActivityIndicator size="large" color="#6200EE" />
+                <Text style={styles.loadingText}>加载中...</Text>
+              </>
+            ) : (
+              <Text style={styles.loadingText}>滑动到此页自动加载</Text>
+            )}
+          </View>
+        </View>
+      );
+    }
+    
     return (
       <View style={styles.imageContainer}>
         <ImageViewer
@@ -341,6 +398,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 10,
   },
 });
 

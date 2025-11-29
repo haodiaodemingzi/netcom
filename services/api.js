@@ -84,6 +84,13 @@ export const getChapterImages = async (chapterId, source = null) => {
   return apiClient.get(`/chapters/${chapterId}/images`, { params });
 };
 
+// 获取单页章节图片
+export const getChapterImageByPage = async (chapterId, page, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/chapters/${chapterId}/images/${page}`, { params });
+};
+
 // 获取分类漫画
 export const getComicsByCategory = async (
   category, 

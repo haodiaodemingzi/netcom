@@ -78,13 +78,8 @@ const ComicDetailScreen = () => {
 
   const handleStartReading = () => {
     if (chapters.length > 0) {
-      // 检查第一个章节是否已下载
       const firstChapter = chapters[0];
-      if (downloadManager.isDownloaded(firstChapter.id)) {
-        router.push(`/reader/${firstChapter.id}?comicId=${id}`);
-      } else {
-        Alert.alert('提示', '请先下载第一章才能开始阅读');
-      }
+      router.push(`/reader/${firstChapter.id}?comicId=${id}`);
     }
   };
 
