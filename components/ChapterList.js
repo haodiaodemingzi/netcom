@@ -297,6 +297,7 @@ const ChapterList = ({
                          (downloadStatus.status === 'downloading' || downloadStatus.status === 'pending');
     const isPending = downloadStatus && typeof downloadStatus === 'object' && 
                      downloadStatus.status === 'pending';
+    const isCompleted = downloadStatus === 'completed';
     const downloadProgress = isDownloading ? (downloadStatus.progress || 0) : 0;
     
     const progressAnimRef = React.useRef(null);
@@ -305,7 +306,14 @@ const ChapterList = ({
     }
     const progressAnim = progressAnimRef.current;
     const pulseAnim = React.useRef(new Animated.Value(0)).current;
+    const completionAnimRef = React.useRef(null);
+    if (!completionAnimRef.current) {
+      completionAnimRef.current = new Animated.Value(isCompleted ? 1 : 0);
+    }
+    const completionAnim = completionAnimRef.current;
     const prevProgressRef = React.useRef(downloadProgress);
+    const prevCompletedRef = React.useRef(isCompleted);
+    const [showingCompletion, setShowingCompletion] = React.useState(false);
     
     React.useEffect(() => {
       if (isPending) {
@@ -338,6 +346,32 @@ const ChapterList = ({
         }
       }
     }, [downloadProgress, isDownloading, isPending]);
+    
+    React.useEffect(() => {
+      // 检测到完成状态变化时触发动画
+      if (isCompleted && !prevCompletedRef.current) {
+        setShowingCompletion(true);
+        // 进度条动画到100%
+        Animated.timing(progressAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }).start(() => {
+          // 完成后触发完成徽章的弹出动画
+          completionAnim.setValue(0);
+          Animated.spring(completionAnim, {
+            toValue: 1,
+            tension: 100,
+            friction: 8,
+            useNativeDriver: true,
+          }).start(() => {
+            // 动画完成后隐藏进度条
+            setTimeout(() => setShowingCompletion(false), 100);
+          });
+        });
+      }
+      prevCompletedRef.current = isCompleted;
+    }, [isCompleted]);
     
     return (
       <TouchableOpacity
@@ -400,7 +434,22 @@ const ChapterList = ({
           )}
           
           {downloadStatus === 'completed' && (
-            <View style={styles.downloadActionRow}>
+            <Animated.View 
+              style={[
+                styles.downloadActionRow,
+                {
+                  opacity: completionAnim,
+                  transform: [
+                    {
+                      scale: completionAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1],
+                      }),
+                    },
+                  ],
+                }
+              ]}
+            >
               <View style={styles.downloadedBadge}>
                 <Text style={styles.downloadedBadgeText}>✓ 已下载</Text>
               </View>
@@ -426,7 +475,7 @@ const ChapterList = ({
               >
                 <Text style={styles.deleteButtonText}>删除</Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           )}
           
           {downloadStatus?.status === 'downloading' && (
@@ -529,7 +578,7 @@ const ChapterList = ({
           )}
         </View>
         
-        {isDownloading && (
+        {(isDownloading || showingCompletion) && (
           <View style={styles.progressBarContainer}>
             <Animated.View 
               style={[
