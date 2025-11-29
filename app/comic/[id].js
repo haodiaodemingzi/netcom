@@ -179,7 +179,7 @@ const ComicDetailScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -188,6 +188,7 @@ const ComicDetailScreen = () => {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>{comic.title}</Text>
       </View>
 
       <ChapterList
@@ -222,12 +223,13 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingTop: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   backButton: {
     width: 48,
@@ -237,10 +239,15 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 28,
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    color: '#000',
+    fontWeight: '300',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#000',
+    marginRight: 48,
   },
   topSection: {
     flexDirection: 'row',
