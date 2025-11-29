@@ -21,7 +21,7 @@ class DownloadManager {
     this.maxConcurrent = 10; // 默认值
     
     this.queue = new DownloadQueue(this.maxConcurrent);
-    this.downloader = new ImageDownloader(3, 1000);
+    this.downloader = new ImageDownloader(3, 1000, this.maxConcurrent);
     
     this.apiClient = axios.create({
       baseURL: API_BASE_URL,
@@ -49,6 +49,7 @@ class DownloadManager {
       if (settings.maxConcurrentDownloads) {
         this.maxConcurrent = settings.maxConcurrentDownloads;
         this.queue.setMaxConcurrent(this.maxConcurrent);
+        this.downloader.setMaxConcurrent(this.maxConcurrent);
         console.log(`下载并发数设置为: ${this.maxConcurrent}`);
       }
     } catch (error) {
@@ -59,6 +60,7 @@ class DownloadManager {
   async updateMaxConcurrent(max) {
     this.maxConcurrent = max;
     this.queue.setMaxConcurrent(max);
+    this.downloader.setMaxConcurrent(max);
   }
   
   async getCookies() {

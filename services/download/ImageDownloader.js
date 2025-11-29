@@ -2,10 +2,15 @@ import * as FileSystem from 'expo-file-system';
 import { TaskStatus } from './DownloadTask';
 
 export class ImageDownloader {
-  constructor(maxRetries = 3, retryDelay = 1000) {
+  constructor(maxRetries = 3, retryDelay = 1000, maxConcurrent = 10) {
     this.maxRetries = maxRetries;
     this.retryDelay = retryDelay;
+    this.maxConcurrent = maxConcurrent;
     this.activeDownloads = new Map();
+  }
+
+  setMaxConcurrent(maxConcurrent) {
+    this.maxConcurrent = maxConcurrent;
   }
 
   async downloadTask(task, baseDir) {
@@ -24,40 +29,44 @@ export class ImageDownloader {
       let completedCount = 0;
       let totalBytes = 0;
 
-      for (let i = 0; i < task.images.length; i++) {
-        if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.PAUSED) {
-          break;
-        }
+      // 使用并发控制下载所有图片
+      await this.downloadWithConcurrency(
+        task.images,
+        this.maxConcurrent,
+        async (image, index) => {
+          if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.PAUSED) {
+            return { success: false, cancelled: true };
+          }
 
-        const image = task.images[i];
-        const filename = `${String(i + 1).padStart(3, '0')}.jpg`;
-        const localPath = `${taskDir}${filename}`;
+          const filename = `${String(index + 1).padStart(3, '0')}.jpg`;
+          const localPath = `${taskDir}${filename}`;
 
-        // 串行下载，每次只下载一张
-        const result = await this.downloadImage(
-          image.url,
-          localPath,
-          task
-        );
-        
-        if (result.success) {
-          completedCount++;
-          totalBytes += result.size || 0;
-        } else {
-          task.incrementFailed();
+          // 随机延迟0-500ms
+          const randomDelay = Math.floor(Math.random() * 501);
+          await this.delay(randomDelay);
+
+          const result = await this.downloadImage(
+            image.url,
+            localPath,
+            task
+          );
+          
+          if (result.success) {
+            completedCount++;
+            totalBytes += result.size || 0;
+          } else {
+            task.incrementFailed();
+          }
+          
+          // 更新进度
+          task.updateProgress(completedCount, totalBytes);
+          if (task.onProgress) {
+            task.onProgress(task);
+          }
+
+          return result;
         }
-        
-        // 更新进度
-        task.updateProgress(completedCount, totalBytes);
-        if (task.onProgress) {
-          task.onProgress(task);
-        }
-        
-        // 每张图片下载后延迟300ms
-        if (i < task.images.length - 1) {
-          await this.delay(300);
-        }
-      }
+      );
 
       if (task.status === TaskStatus.DOWNLOADING) {
         if (task.failedImages === 0) {
@@ -71,6 +80,28 @@ export class ImageDownloader {
     } catch (error) {
       task.fail(error);
     }
+  }
+
+  async downloadWithConcurrency(items, concurrency, handler) {
+    const results = [];
+    const executing = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const promise = handler(item, i).then(result => {
+        executing.splice(executing.indexOf(promise), 1);
+        return result;
+      });
+
+      results.push(promise);
+      executing.push(promise);
+
+      if (executing.length >= concurrency) {
+        await Promise.race(executing);
+      }
+    }
+
+    return Promise.all(results);
   }
 
   async downloadImage(url, localPath, task, retryCount = 0) {
