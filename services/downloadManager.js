@@ -6,7 +6,6 @@ import { API_BASE_URL } from '../utils/constants';
 import { DownloadQueue } from './download/DownloadQueue';
 import { DownloadTask } from './download/DownloadTask';
 import { ImageDownloader } from './download/ImageDownloader';
-import { Guoman8Adapter } from './download/adapters/Guoman8Adapter';
 import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
 import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
 import { getSettings } from './storage';
@@ -30,7 +29,6 @@ class DownloadManager {
     });
     
     this.adapters = {
-      guoman8: new Guoman8Adapter(this.apiClient),
       xmanhua: new XmanhuaAdapter(this.apiClient),
       hmzxa: new HmzxaAdapter(this.apiClient, this),
     };
@@ -65,7 +63,12 @@ class DownloadManager {
     this.downloader.setMaxConcurrent(max);
   }
   
-  async getCookies(source = 'xmanhua') {
+  async getCookies(source) {
+    if (!source) {
+      console.warn('getCookies: 未指定数据源');
+      return '';
+    }
+    
     // 如果缓存的cookie还没过期，直接返回
     const now = Date.now();
     const cachedCookie = this.cachedCookies.get(source);
@@ -80,10 +83,13 @@ class DownloadManager {
       const sourceUrls = {
         'xmanhua': 'https://xmanhua.com/',
         'hmzxa': 'https://hmzxa.com/',
-        'guoman8': 'https://www.guoman8.cc/'
       };
       
-      const url = sourceUrls[source] || sourceUrls['xmanhua'];
+      const url = sourceUrls[source];
+      if (!url) {
+        console.warn(`getCookies: 未知数据源 ${source}`);
+        return '';
+      }
       
       // 访问主站获取cookie
       const response = await fetch(url, {
@@ -235,8 +241,10 @@ class DownloadManager {
     console.log(`开始执行下载任务: ${task.chapterTitle}, 共${task.totalImages}张图片, 数据源: ${task.source}`);
     
     // 根据数据源获取对应的cookie
-    const cookies = await this.getCookies(task.source || 'xmanhua');
-    task.cookies = cookies;
+    if (task.source) {
+      const cookies = await this.getCookies(task.source);
+      task.cookies = cookies;
+    }
     
     this.downloader.downloadTask(task, DOWNLOAD_DIR).catch(error => {
       console.error(`下载任务执行失败: ${task.chapterTitle}`, error);

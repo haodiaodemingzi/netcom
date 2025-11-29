@@ -1,10 +1,3 @@
-from .scraper import (
-    KomiicScraper,
-    ManhuaguiScraper,
-    CopymangaScraper,
-    MockScraper
-)
-from .guoman8_scraper import Guoman8Scraper
 from .xmanhua_scraper import XmanhuaScraper
 from .hmzxa_scraper import HmzxaScraper
 from config import COMIC_SOURCES, DEFAULT_SOURCE
@@ -13,11 +6,6 @@ class ScraperFactory:
     """爬虫工厂类,根据数据源创建对应的爬虫实例"""
     
     _scrapers = {
-        'komiic': KomiicScraper,
-        'manhuagui': ManhuaguiScraper,
-        'copymanga': CopymangaScraper,
-        'mock': MockScraper,
-        'guoman8': Guoman8Scraper,
         'xmanhua': XmanhuaScraper,
         'hmzxa': HmzxaScraper,
     }

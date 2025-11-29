@@ -37,7 +37,7 @@ const ReaderScreen = () => {
     imageFitMode: 'width',
     backgroundColor: 'black',
   });
-  const [currentSource, setCurrentSource] = useState('guoman8');
+  const [currentSource, setCurrentSource] = useState(null);
   const [allChapters, setAllChapters] = useState([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
   const [comicInfo, setComicInfo] = useState(null);

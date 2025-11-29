@@ -29,7 +29,7 @@ const ProfileScreen = () => {
     autoLoadHD: false,
     keepScreenOn: true,
   });
-  const [currentSource, setCurrentSourceState] = useState('xmanhua');
+  const [currentSource, setCurrentSourceState] = useState(null);
   const [sources, setSources] = useState({});
   const [showSourceMenu, setShowSourceMenu] = useState(false);
 
@@ -50,7 +50,17 @@ const ProfileScreen = () => {
         getCurrentSource(),
       ]);
       setSources(sourcesData);
-      setCurrentSourceState(savedSource);
+      
+      // 如果有保存的数据源且有效，使用它；否则使用第一个可用的数据源
+      const firstAvailableSource = Object.keys(sourcesData)[0];
+      const validSource = savedSource && sourcesData[savedSource] ? savedSource : firstAvailableSource;
+      
+      setCurrentSourceState(validSource);
+      
+      // 如果没有保存的数据源，保存当前选择的为默认
+      if (!savedSource && validSource) {
+        await setCurrentSource(validSource);
+      }
     } catch (error) {
       // 静默失败
     }

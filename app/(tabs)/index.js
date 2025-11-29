@@ -31,7 +31,7 @@ const HomeScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [currentSource, setCurrentSourceState] = useState('xmanhua');
+  const [currentSource, setCurrentSourceState] = useState(null);
   const [sources, setSources] = useState({});
   const [categories, setCategories] = useState([
     { id: 'hot', name: '热门' },
@@ -78,11 +78,15 @@ const HomeScreen = () => {
       
       setSources(sourcesData);
       
-      // 确保有有效的数据源，默认使用xmanhua
-      const validSource = savedSource && sourcesData[savedSource] ? savedSource : 'xmanhua';
-      // 如果保存的数据源不存在，保存xmanhua为默认
+      // 获取第一个可用的数据源作为默认值
+      const firstAvailableSource = Object.keys(sourcesData)[0];
+      
+      // 确保有有效的数据源
+      const validSource = savedSource && sourcesData[savedSource] ? savedSource : firstAvailableSource;
+      
+      // 如果没有保存的数据源，保存当前选择的为默认
       if (!savedSource || !sourcesData[savedSource]) {
-        await setCurrentSource('xmanhua');
+        await setCurrentSource(validSource);
       }
       setCurrentSourceState(validSource);
       
@@ -102,7 +106,12 @@ const HomeScreen = () => {
       
       setInitialized(true);
     } catch (error) {
-      setCurrentSourceState('xmanhua');
+      // 出错时尝试获取任何可用的数据源
+      const fallbackSource = Object.keys(sources)[0];
+      if (fallbackSource) {
+        setCurrentSourceState(fallbackSource);
+        await setCurrentSource(fallbackSource);
+      }
       setInitialized(true);
     }
   };

@@ -31,7 +31,7 @@ const ComicDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [favorited, setFavorited] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
-  const [currentSource, setCurrentSource] = useState('guoman8');
+  const [currentSource, setCurrentSource] = useState(null);
 
   useEffect(() => {
     loadData();

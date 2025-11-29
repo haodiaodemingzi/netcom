@@ -178,9 +178,9 @@ export const clearSearchHistory = async () => {
 export const getCurrentSource = async () => {
   try {
     const data = await AsyncStorage.getItem(KEYS.CURRENT_SOURCE);
-    return data || 'xmanhua';
+    return data || null;
   } catch (error) {
-    return 'xmanhua';
+    return null;
   }
 };
 

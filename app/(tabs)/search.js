@@ -10,12 +10,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ComicCard from '../../components/ComicCard';
-import { searchComics } from '../../services/api';
+import { searchComics, getAvailableSources } from '../../services/api';
 import {
   getSearchHistory,
   addSearchHistory,
   clearSearchHistory,
   getCurrentSource,
+  setCurrentSource,
 } from '../../services/storage';
 
 const SearchScreen = () => {
@@ -23,7 +24,7 @@ const SearchScreen = () => {
   const [results, setResults] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentSource, setCurrentSource] = useState('guoman8');
+  const [currentSource, setCurrentSource] = useState(null);
 
   useEffect(() => {
     loadHistory();
@@ -36,8 +37,22 @@ const SearchScreen = () => {
   };
 
   const loadCurrentSource = async () => {
-    const source = await getCurrentSource();
-    setCurrentSource(source);
+    try {
+      let source = await getCurrentSource();
+      
+      // 如果没有保存的数据源，从API获取第一个可用的
+      if (!source) {
+        const sourcesData = await getAvailableSources();
+        source = Object.keys(sourcesData)[0];
+        if (source) {
+          await setCurrentSource(source);
+        }
+      }
+      
+      setCurrentSource(source);
+    } catch (error) {
+      console.error('加载数据源失败:', error);
+    }
   };
 
   const handleSearch = async (searchKeyword) => {
