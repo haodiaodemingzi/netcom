@@ -6,6 +6,7 @@ HMZXA漫画采集源
 
 import re
 import logging
+from urllib.parse import quote
 from bs4 import BeautifulSoup
 from .base_scraper import BaseScraper
 
@@ -182,17 +183,115 @@ class HmzxaScraper(BaseScraper):
     def search_comics(self, keyword='', page=1, limit=20):
         """
         搜索或浏览漫画
-        keyword: 搜索关键词（暂不支持）
+        keyword: 搜索关键词
         page: 页码
         limit: 每页数量
         """
-        # HMZXA网站暂不支持关键词搜索，使用默认分类浏览
-        logger.info(f"搜索漫画: keyword='{keyword}', page={page}")
-        if keyword:
-            logger.warning("HMZXA暂不支持关键词搜索，返回默认分类")
-        
-        # 使用热血分类作为默认
-        return self.get_comics_by_category('49', page, limit)
+        try:
+            if not keyword:
+                # 没有关键词时返回默认分类
+                logger.info(f"无搜索关键词，返回默认分类")
+                return self.get_comics_by_category('49', page, limit)
+            
+            # 构建搜索URL，对关键词进行URL编码
+            # 格式: /search/{关键词} 或 /search/{关键词}/{页码}
+            encoded_keyword = quote(keyword)
+            if page == 1:
+                url = f'{self.base_url}/search/{encoded_keyword}'
+            else:
+                url = f'{self.base_url}/search/{encoded_keyword}/{page}'
+            
+            logger.info(f"搜索漫画: keyword='{keyword}', page={page}, url={url}")
+            
+            response = self._make_request(url)
+            if not response:
+                return {'comics': [], 'hasMore': False, 'total': 0, 'page': page, 'limit': limit}
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            comics = []
+            
+            # 查找漫画列表，结构与分类页面相同
+            comic_list = soup.find('ul', class_='acgn-comic-list')
+            if comic_list:
+                items = comic_list.find_all('li', class_='acgn-item')[:limit]
+                
+                for item in items:
+                    try:
+                        # 获取链接和标题
+                        title_link = item.find('h3', class_='acgn-title').find('a')
+                        if not title_link:
+                            continue
+                        
+                        href = title_link.get('href', '')
+                        title = title_link.get('title', '').replace('漫画', '').strip()
+                        comic_id = href.strip('/').replace('.html', '')
+                        
+                        # 获取封面
+                        thumbnail = item.find('a', class_='acgn-thumbnail')
+                        cover_img = thumbnail.find('img') if thumbnail else None
+                        cover = ''
+                        if cover_img:
+                            style = cover_img.get('style', '')
+                            cover_match = re.search(r"url\('([^']+)'\)", style)
+                            if cover_match:
+                                cover = cover_match.group(1)
+                        
+                        # 获取最新章节
+                        latest_chapter = ''
+                        desc_div = item.find('div', class_='acgn-desc')
+                        if desc_div:
+                            latest_link = desc_div.find('a', class_='latest-cartoon')
+                            if latest_link:
+                                latest_chapter = latest_link.get('title', '')
+                        
+                        comics.append({
+                            'id': comic_id,
+                            'title': title,
+                            'cover': cover,
+                            'latestChapter': latest_chapter,
+                            'status': 'ongoing'
+                        })
+                    except Exception as e:
+                        logger.debug(f"解析搜索结果项失败: {e}")
+                        continue
+            
+            # 解析分页信息
+            has_more = False
+            total_pages = 1
+            
+            # 查找分页控件
+            pagination = soup.find('div', class_='acgn-pages')
+            if pagination:
+                page_links = pagination.find_all('a')
+                page_numbers = []
+                
+                for link in page_links:
+                    text = link.get_text(strip=True)
+                    if text.isdigit():
+                        page_numbers.append(int(text))
+                    elif 'acgn-next' in link.get('class', []):
+                        has_more = True
+                
+                if page_numbers:
+                    total_pages = max(page_numbers)
+                    if page < total_pages:
+                        has_more = True
+            else:
+                has_more = len(comics) >= limit
+            
+            logger.info(f"搜索到 {len(comics)} 部漫画, hasMore={has_more}, totalPages={total_pages}")
+            
+            return {
+                'comics': comics,
+                'hasMore': has_more,
+                'total': len(comics),
+                'page': page,
+                'limit': limit,
+                'totalPages': total_pages
+            }
+        except Exception as e:
+            logger.error(f"搜索漫画失败: {e}", exc_info=True)
+            return {'comics': [], 'hasMore': False, 'total': 0, 'page': page, 'limit': limit}
     
     def get_comic_detail(self, comic_id):
         """获取漫画详情"""
