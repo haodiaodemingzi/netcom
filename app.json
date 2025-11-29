@@ -2,7 +2,7 @@
   "expo": {
     "name": "看漫画",
     "slug": "comic-reader",
-    "version": "1.0.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,6 +19,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.comicreader.app",
+      "versionCode": 3,
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
