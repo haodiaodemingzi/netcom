@@ -1,20 +1,36 @@
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getChapterImages, getChapterImageByPage } from './api';
-import { Alert } from 'react-native';
+import axios from 'axios';
+import { API_BASE_URL } from '../utils/constants';
+import { DownloadQueue } from './download/DownloadQueue';
+import { DownloadTask } from './download/DownloadTask';
+import { ImageDownloader } from './download/ImageDownloader';
+import { Guoman8Adapter } from './download/adapters/Guoman8Adapter';
+import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
-const MAX_CONCURRENT = 3;
-const MAX_RETRIES = 3;
+const MAX_CONCURRENT = 10;
 
 class DownloadManager {
   constructor() {
-    this.queue = [];
-    this.activeDownloads = new Map();
     this.downloadedChapters = new Map();
     this.listeners = new Set();
-    this.currentDownloading = 0;
+    
+    this.queue = new DownloadQueue(MAX_CONCURRENT);
+    this.downloader = new ImageDownloader(3, 1000);
+    
+    this.apiClient = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 30000,
+    });
+    
+    this.adapters = {
+      guoman8: new Guoman8Adapter(this.apiClient),
+      xmanhua: new XmanhuaAdapter(this.apiClient),
+    };
+    
+    this.setupQueueListeners();
     this.init();
   }
 
@@ -51,6 +67,31 @@ class DownloadManager {
     }
   }
 
+  setupQueueListeners() {
+    this.queue.onTaskStart = (task) => {
+      this.handleTaskStart(task);
+      this.notifyListeners();
+    };
+    
+    this.queue.onTaskProgress = (task) => {
+      this.notifyListeners();
+    };
+    
+    this.queue.onTaskComplete = (task) => {
+      this.handleTaskComplete(task);
+      this.notifyListeners();
+    };
+    
+    this.queue.onTaskFail = (task, error) => {
+      this.handleTaskFail(task, error);
+      this.notifyListeners();
+    };
+    
+    this.queue.onQueueChange = () => {
+      this.notifyListeners();
+    };
+  }
+
   subscribe(listener) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -62,198 +103,83 @@ class DownloadManager {
   }
 
   getState() {
+    const queueInfo = this.queue.getQueueInfo();
+    const allTasks = this.queue.getAllTasks();
+    
     return {
-      queue: this.queue.map(task => ({
-        chapterId: task.chapterId,
-        chapterTitle: task.chapterTitle,
-        status: task.status,
-        progress: task.progress,
-        error: task.error
-      })),
-      activeDownloads: Array.from(this.activeDownloads.values()),
-      downloadedChapters: Array.from(this.downloadedChapters.keys())
+      queue: [...allTasks.pending, ...allTasks.running].map(task => task.getInfo()),
+      activeDownloads: allTasks.running.map(task => task.getInfo()),
+      downloadedChapters: Array.from(this.downloadedChapters.keys()),
+      queueInfo: queueInfo,
     };
   }
 
   async downloadChapters(comicId, comicTitle, chapters, source) {
+    const adapter = this.adapters[source];
+    if (!adapter) {
+      console.error(`不支持的数据源: ${source}`);
+      return;
+    }
+
+    let addedCount = 0;
+
     for (const chapter of chapters) {
-      // 检查是否已下载
       if (this.downloadedChapters.has(chapter.id)) {
+        console.log(`章节${chapter.title}已下载，跳过`);
         continue;
       }
-      
-      // 检查是否已在队列中
-      const existingTask = this.queue.find(t => t.chapterId === chapter.id);
-      if (existingTask) {
-        continue;
-      }
-      
-      const task = {
-        comicId,
-        comicTitle,
-        chapterId: chapter.id,
-        chapterTitle: chapter.title,
-        source,
-        status: 'pending',
-        progress: 0,
-        currentImage: 0,
-        totalImages: 0,
-        retries: 0,
-        error: null
-      };
 
-      this.queue.push(task);
+      try {
+        console.log(`正在获取章节信息: ${chapter.title}`);
+        const chapterInfo = await adapter.getChapterInfo(chapter.id);
+        const images = chapterInfo.images || [];
+
+        if (images.length === 0) {
+          console.log(`章节${chapter.title}没有图片，跳过`);
+          continue;
+        }
+
+        console.log(`章节${chapter.title}共${images.length}张图片，加入下载队列`);
+
+        const task = new DownloadTask(
+          chapter.id,
+          comicId,
+          comicTitle,
+          chapter.title,
+          images,
+          source
+        );
+
+        this.queue.addTask(task);
+        addedCount++;
+      } catch (error) {
+        console.error(`获取章节${chapter.id}信息失败:`, error);
+      }
     }
 
-    this.notifyListeners();
-    this.processQueue();
+    console.log(`已添加${addedCount}个章节到下载队列`);
   }
 
-  async processQueue() {
-    while (this.queue.length > 0 && this.currentDownloading < MAX_CONCURRENT) {
-      const task = this.queue.find(t => t.status === 'pending');
-      if (!task) break;
-
-      task.status = 'downloading';
-      this.currentDownloading++;
-      this.activeDownloads.set(task.chapterId, task);
-      this.notifyListeners();
-
-      this.downloadChapter(task)
-        .then(() => {
-          task.status = 'completed';
-          task.progress = 100;
-          this.downloadedChapters.set(task.chapterId, {
-            comicId: task.comicId,
-            comicTitle: task.comicTitle,
-            chapterId: task.chapterId,
-            chapterTitle: task.chapterTitle,
-            downloadedAt: new Date().toISOString()
-          });
-          this.saveDownloadedChapters();
-        })
-        .catch((error) => {
-          if (task.retries < MAX_RETRIES) {
-            task.retries++;
-            task.status = 'pending';
-          } else {
-            task.status = 'failed';
-            task.error = error.message;
-          }
-        })
-        .finally(() => {
-          this.currentDownloading--;
-          this.activeDownloads.delete(task.chapterId);
-          
-          const taskIndex = this.queue.findIndex(t => t.chapterId === task.chapterId);
-          if (taskIndex !== -1 && task.status === 'completed') {
-            this.queue.splice(taskIndex, 1);
-          }
-          
-          this.notifyListeners();
-          this.processQueue();
-        });
-    }
+  handleTaskStart(task) {
+    console.log(`开始执行下载任务: ${task.chapterTitle}, 共${task.totalImages}张图片`);
+    this.downloader.downloadTask(task, DOWNLOAD_DIR).catch(error => {
+      console.error(`下载任务执行失败: ${task.chapterTitle}`, error);
+    });
   }
 
-  async downloadChapter(task) {
-    const { comicId, chapterId, chapterTitle, source } = task;
-    
-    const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
-    await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
-
-    // 使用旧API获取图片
-    const imagesData = await getChapterImages(chapterId, source);
-    const images = imagesData.images || [];
-
-    task.totalImages = images.length;
-    task.currentImage = 0;
-
-    // 先访问网站首页获取cookie
-    let cookieHeader = '';
-    const cookieUrl = 'https://xmanhua.com/';
-    
-    try {
-      const cookieResponse = await fetch(cookieUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9'
-        },
-        credentials: 'include'
-      });
-      
-      // 从响应头中提取Set-Cookie
-      const setCookieHeader = cookieResponse.headers.get('set-cookie');
-      if (setCookieHeader) {
-        cookieHeader = setCookieHeader;
-      }
-    } catch (error) {
-      // 静默失败
-    }
-
-    // 准备下载headers
-    let downloadHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-      'Referer': 'https://xmanhua.com/',
-      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      'Accept-Language': 'zh-CN,zh;q=0.9'
-    };
-
-    if (cookieHeader) {
-      downloadHeaders['Cookie'] = cookieHeader;
-    }
-
-    for (let i = 0; i < images.length; i++) {
-      const image = images[i];
-      const filename = `${String(image.page).padStart(3, '0')}.jpg`;
-      const filepath = `${chapterDir}${filename}`;
-
-      // 使用带headers和cookie的下载
-      let downloadResult;
-      if (Object.keys(downloadHeaders).length > 0) {
-        downloadResult = await FileSystem.downloadAsync(image.url, filepath, {
-          headers: downloadHeaders
-        });
-      } else {
-        downloadResult = await FileSystem.downloadAsync(image.url, filepath);
-      }
-      
-      // 验证文件
-      const fileInfo = await FileSystem.getInfoAsync(filepath);
-      
-      task.currentImage = i + 1;
-      task.progress = Math.round((task.currentImage / task.totalImages) * 100);
-      this.notifyListeners();
-    }
-
-    const metaData = {
-      comicId,
-      chapterId,
-      chapterTitle,
-      totalImages: images.length,
-      downloadedAt: new Date().toISOString()
-    };
-    
-    const metaPath = `${chapterDir}meta.json`;
-    await FileSystem.writeAsStringAsync(metaPath, JSON.stringify(metaData));
-    
-    // 将章节添加到已下载列表
-    this.downloadedChapters.set(chapterId, {
-      comicId,
+  handleTaskComplete(task) {
+    this.downloadedChapters.set(task.chapterId, {
+      comicId: task.comicId,
       comicTitle: task.comicTitle,
-      chapterId,
-      chapterTitle,
+      chapterId: task.chapterId,
+      chapterTitle: task.chapterTitle,
       downloadedAt: new Date().toISOString()
     });
-    
-    // 保存已下载章节列表
-    await this.saveDownloadedChapters();
-    this.notifyListeners();
-    
-    // 保存到相册（仅在开发构建中可用，Expo Go不支持）
-    // 如果需要此功能，请运行 npx expo run:android
-    // await this.saveToGallery(chapterDir, images.length, chapterTitle);
+    this.saveDownloadedChapters();
+  }
+
+  handleTaskFail(task, error) {
+    console.error(`下载失败: ${task.chapterTitle}`, error);
   }
 
   isDownloaded(chapterId) {
@@ -265,18 +191,50 @@ class DownloadManager {
       return 'completed';
     }
     
-    const task = this.queue.find(t => t.chapterId === chapterId);
-    if (task) {
-      return task.status;
-    }
+    const allTasks = this.queue.getAllTasks();
+    const allTasksList = [
+      ...allTasks.pending,
+      ...allTasks.running,
+      ...allTasks.failed
+    ];
     
-    return null;
+    const task = allTasksList.find(t => t.chapterId === chapterId);
+    return task ? task.status : null;
   }
 
   getChapterProgress(chapterId) {
-    const task = this.queue.find(t => t.chapterId === chapterId) || 
-                 this.activeDownloads.get(chapterId);
+    const allTasks = this.queue.getAllTasks();
+    const allTasksList = [
+      ...allTasks.pending,
+      ...allTasks.running
+    ];
+    
+    const task = allTasksList.find(t => t.chapterId === chapterId);
     return task ? task.progress : 0;
+  }
+
+  pauseDownload(chapterId) {
+    return this.queue.pauseTask(`${chapterId}`);
+  }
+
+  resumeDownload(chapterId) {
+    return this.queue.resumeTask(`${chapterId}`);
+  }
+
+  cancelDownload(chapterId) {
+    return this.queue.removeTask(`${chapterId}`);
+  }
+
+  retryDownload(chapterId) {
+    return this.queue.retryTask(`${chapterId}`);
+  }
+
+  clearCompletedTasks() {
+    this.queue.clearCompleted();
+  }
+
+  clearFailedTasks() {
+    this.queue.clearFailed();
   }
 
   async getLocalChapterImages(comicId, chapterId) {
@@ -626,10 +584,19 @@ class DownloadManager {
       return { url: filepath, isLocal: true, page };
     }
     
-    const imageData = await getChapterImageByPage(chapterId, page, source);
-    await this.downloadSingleImage(comicId, chapterId, page, imageData.url);
-    
-    return { url: filepath, isLocal: true, page, total: imageData.total };
+    try {
+      const response = await this.apiClient.get(`/chapters/${chapterId}/images/${page}`, {
+        params: { source }
+      });
+      
+      const imageData = response.data;
+      await this.downloadSingleImage(comicId, chapterId, page, imageData.url);
+      
+      return { url: filepath, isLocal: true, page, total: imageData.total };
+    } catch (error) {
+      console.error(`获取第${page}页图片失败:`, error);
+      throw error;
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import downloadManager from '../services/downloadManager';
@@ -28,6 +29,7 @@ const ChapterList = ({
   const [activeTab, setActiveTab] = useState('chapter');
   const [downloadState, setDownloadState] = useState(null);
   const [readingHistory, setReadingHistory] = useState(null);
+  const [preparingDownloads, setPreparingDownloads] = useState(new Set());
 
   useEffect(() => {
     const unsubscribe = downloadManager.subscribe((state) => {
@@ -162,20 +164,39 @@ const ChapterList = ({
     
     const selectedChaptersList = displayChapters.filter(c => selectedChapters.has(c.id));
     
-    await downloadManager.downloadChapters(
-      comicId,
-      comicTitle,
-      selectedChaptersList,
-      source
-    );
+    setPreparingDownloads(prev => new Set([...prev, ...selectedChaptersList.map(c => c.id)]));
     
-    Alert.alert('成功', `已添加 ${selectedChapters.size} 个章节到下载队列`);
-    
-    setSelectedChapters(new Set());
-    setSelectionMode(false);
+    try {
+      await downloadManager.downloadChapters(
+        comicId,
+        comicTitle,
+        selectedChaptersList,
+        source
+      );
+      
+      Alert.alert('成功', `已添加 ${selectedChapters.size} 个章节到下载队列`);
+    } finally {
+      setTimeout(() => {
+        setPreparingDownloads(prev => {
+          const next = new Set(prev);
+          selectedChaptersList.forEach(c => next.delete(c.id));
+          return next;
+        });
+      }, 500);
+      
+      setSelectedChapters(new Set());
+      setSelectionMode(false);
+    }
   };
 
   const getChapterDownloadStatus = (chapterId) => {
+    if (preparingDownloads.has(chapterId)) {
+      return {
+        status: 'pending',
+        progress: 0
+      };
+    }
+    
     if (!downloadState) return null;
     
     if (downloadState.downloadedChapters.includes(chapterId)) {
@@ -194,12 +215,24 @@ const ChapterList = ({
   };
 
   const handleSingleDownload = async (chapter) => {
-    await downloadManager.downloadChapters(
-      comicId,
-      comicTitle,
-      [chapter],
-      source
-    );
+    setPreparingDownloads(prev => new Set([...prev, chapter.id]));
+    
+    try {
+      await downloadManager.downloadChapters(
+        comicId,
+        comicTitle,
+        [chapter],
+        source
+      );
+    } finally {
+      setTimeout(() => {
+        setPreparingDownloads(prev => {
+          const next = new Set(prev);
+          next.delete(chapter.id);
+          return next;
+        });
+      }, 500);
+    }
   };
 
   // 新的直接下载方法 - 使用完整图片URL
@@ -253,12 +286,46 @@ const ChapterList = ({
     }
   };
 
-  const renderChapterCard = (item) => {
+  const ChapterCard = ({ item }) => {
     const isActive = item.id === currentChapterId;
     const isSelected = selectedChapters.has(item.id);
     const downloadStatus = getChapterDownloadStatus(item.id);
     const hasReadingProgress = readingHistory?.lastChapterId === item.id;
     const readingPage = readingHistory?.lastPage || 0;
+    
+    const isDownloading = downloadStatus && typeof downloadStatus === 'object' && 
+                         (downloadStatus.status === 'downloading' || downloadStatus.status === 'pending');
+    const isPending = downloadStatus && typeof downloadStatus === 'object' && 
+                     downloadStatus.status === 'pending';
+    const downloadProgress = isDownloading ? (downloadStatus.progress || 0) : 0;
+    
+    const progressAnim = React.useRef(new Animated.Value(0)).current;
+    const pulseAnim = React.useRef(new Animated.Value(0)).current;
+    
+    React.useEffect(() => {
+      if (isPending) {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 0.3,
+              duration: 800,
+              useNativeDriver: false,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 0,
+              duration: 800,
+              useNativeDriver: false,
+            })
+          ])
+        ).start();
+      } else if (isDownloading) {
+        Animated.timing(progressAnim, {
+          toValue: downloadProgress,
+          duration: 300,
+          useNativeDriver: false,
+        }).start();
+      }
+    }, [downloadProgress, isDownloading, isPending]);
     
     return (
       <TouchableOpacity
@@ -328,13 +395,16 @@ const ChapterList = ({
           
           {downloadStatus?.status === 'downloading' && (
             <View style={styles.downloadingBadge}>
-              <ActivityIndicator size="small" color="#2196F3" />
-              <Text style={styles.downloadingText}>{downloadStatus.progress}%</Text>
+              <ActivityIndicator size="small" color="#4caf50" />
+              <Text style={styles.downloadingText}>
+                {Math.round(downloadStatus.progress * 100)}%
+              </Text>
             </View>
           )}
           
           {downloadStatus?.status === 'pending' && (
             <View style={styles.pendingBadge}>
+              <ActivityIndicator size="small" color="#999" />
               <Text style={styles.pendingText}>等待中</Text>
             </View>
           )}
@@ -351,6 +421,7 @@ const ChapterList = ({
           {!selectionMode && !downloadStatus && (
             <TouchableOpacity 
               style={styles.downloadButton}
+              activeOpacity={0.6}
               onPress={(e) => {
                 e.stopPropagation();
                 handleSingleDownload(item);
@@ -360,6 +431,27 @@ const ChapterList = ({
             </TouchableOpacity>
           )}
         </View>
+        
+        {isDownloading && (
+          <View style={styles.progressBarContainer}>
+            <Animated.View 
+              style={[
+                styles.progressBar,
+                { 
+                  width: isPending 
+                    ? pulseAnim.interpolate({
+                        inputRange: [0, 0.3],
+                        outputRange: ['0%', '30%']
+                      })
+                    : progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%']
+                      })
+                }
+              ]} 
+            />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -462,7 +554,7 @@ const ChapterList = ({
     <View style={styles.container}>
       <FlatList
         data={displayChapters}
-        renderItem={({ item }) => renderChapterCard(item)}
+        renderItem={({ item }) => <ChapterCard item={item} />}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -669,16 +761,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#e8f5e9',
     marginRight: 4,
   },
   downloadingText: {
     fontSize: 11,
-    color: '#2196F3',
+    color: '#4caf50',
     fontWeight: '500',
     marginLeft: 4,
   },
   pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
@@ -689,6 +783,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     fontWeight: '500',
+    marginLeft: 4,
   },
   failedBadge: {
     paddingHorizontal: 8,
@@ -706,6 +801,23 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#ccc',
   },
+  progressBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#4caf50',
+    shadowColor: '#4caf50',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 3,
+  },
   downloadButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -713,6 +825,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200EE',
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#6200EE',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   downloadButtonText: {
     fontSize: 13,
