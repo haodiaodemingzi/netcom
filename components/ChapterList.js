@@ -30,6 +30,7 @@ const ChapterList = ({
   const [downloadState, setDownloadState] = useState(null);
   const [readingHistory, setReadingHistory] = useState(null);
   const [preparingDownloads, setPreparingDownloads] = useState(new Set());
+  const [activeRange, setActiveRange] = useState('all');
 
   useEffect(() => {
     const unsubscribe = downloadManager.subscribe((state) => {
@@ -118,16 +119,59 @@ const ChapterList = ({
   const volumeChapters = groupedData.find(g => g.type === 'volume');
   const normalChapters = groupedData.find(g => g.type === 'chapter');
   
-  // 根据当前标签页获取显示的章节
-  const displayChapters = activeTab === 'volume' 
+  // 根据当前标签页获取章节
+  const tabChapters = activeTab === 'volume' 
     ? (volumeChapters?.chapters || [])
     : (normalChapters?.chapters || []);
   
   // 判断是否有卷分类
   const hasVolumes = volumeChapters && volumeChapters.chapters && volumeChapters.chapters.length > 0;
+  
+  // 生成区间列表（每100章一个区间，基于当前排序）
+  const rangeSize = 100;
+  const generateRanges = (chapters) => {
+    if (chapters.length <= rangeSize) return [];
+    const ranges = [];
+    for (let i = 0; i < chapters.length; i += rangeSize) {
+      const start = i + 1;
+      const end = Math.min(i + rangeSize, chapters.length);
+      // 使用第一个和最后一个章节的编号来显示区间
+      const firstChapter = chapters[i];
+      const lastChapter = chapters[Math.min(i + rangeSize - 1, chapters.length - 1)];
+      const firstNum = extractChapterNumber(firstChapter.title);
+      const lastNum = extractChapterNumber(lastChapter.title);
+      
+      ranges.push({
+        id: `range-${start}-${end}`,
+        label: `${firstNum}-${lastNum}`,
+        start,
+        end,
+        count: end - start + 1
+      });
+    }
+    return ranges;
+  };
+  
+  const ranges = generateRanges(tabChapters);
+  const hasRanges = ranges.length > 0;
+  
+  // 根据选择的区间筛选显示的章节
+  const displayChapters = activeRange === 'all' 
+    ? tabChapters
+    : (() => {
+        const range = ranges.find(r => r.id === activeRange);
+        if (!range) return tabChapters;
+        return tabChapters.slice(range.start - 1, range.end);
+      })();
 
   const toggleSort = () => {
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    setActiveRange('all');
+  };
+  
+  const handleRangeChange = (rangeId) => {
+    setActiveRange(rangeId);
+    setSelectedChapters(new Set());
   };
 
   const toggleSelectionMode = () => {
@@ -156,6 +200,11 @@ const ChapterList = ({
     } else {
       setSelectedChapters(new Set(allChapterIds));
     }
+  };
+  
+  const selectCurrentRange = () => {
+    const allChapterIds = displayChapters.map(c => c.id);
+    setSelectedChapters(new Set(allChapterIds));
   };
 
   const handleDownloadSelected = async () => {
@@ -617,25 +666,39 @@ const ChapterList = ({
       {ListHeaderComponent ? ListHeaderComponent() : null}
       
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text 
-            style={[
-              styles.headerTitle,
-              darkMode && styles.headerTitleDark,
-            ]}
-          >
-            章节列表 ({displayChapters.length})
-          </Text>
-          {selectionMode && (
-            <Text style={styles.selectedCount}>
+        {!selectionMode ? (
+          <View style={styles.headerLeft}>
+            <Text 
+              style={[
+                styles.headerTitle,
+                darkMode && styles.headerTitleDark,
+              ]}
+            >
+              章节列表 ({displayChapters.length})
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.headerLeftSelection}>
+            <Text style={styles.headerTitle}>
+              章节列表 ({displayChapters.length})
+            </Text>
+            <Text style={styles.selectedCountVertical}>
               已选 {selectedChapters.size}
             </Text>
-          )}
-        </View>
+          </View>
+        )}
         
         <View style={styles.headerActions}>
           {selectionMode && (
             <>
+              {activeRange !== 'all' && (
+                <TouchableOpacity 
+                  onPress={selectCurrentRange}
+                  style={[styles.headerActionButton, styles.headerRangeButton]}
+                >
+                  <Text style={[styles.headerActionButtonText, styles.headerRangeButtonText]}>选择区间</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
                 onPress={selectAll}
                 style={styles.headerActionButton}
@@ -678,7 +741,10 @@ const ChapterList = ({
               styles.tab,
               activeTab === 'volume' && styles.tabActive
             ]}
-            onPress={() => setActiveTab('volume')}
+            onPress={() => {
+              setActiveTab('volume');
+              setActiveRange('all');
+            }}
           >
             <Text style={[
               styles.tabText,
@@ -692,7 +758,10 @@ const ChapterList = ({
               styles.tab,
               activeTab === 'chapter' && styles.tabActive
             ]}
-            onPress={() => setActiveTab('chapter')}
+            onPress={() => {
+              setActiveTab('chapter');
+              setActiveRange('all');
+            }}
           >
             <Text style={[
               styles.tabText,
@@ -701,6 +770,45 @@ const ChapterList = ({
               章节 ({normalChapters?.chapters.length || 0})
             </Text>
           </TouchableOpacity>
+        </View>
+      )}
+      
+      {hasRanges && (
+        <View style={styles.rangeContainer}>
+          <Text style={styles.rangeTitle}>区间选择:</Text>
+          <View style={styles.rangeList}>
+            <TouchableOpacity
+              style={[
+                styles.rangeChip,
+                activeRange === 'all' && styles.rangeChipActive
+              ]}
+              onPress={() => handleRangeChange('all')}
+            >
+              <Text style={[
+                styles.rangeChipText,
+                activeRange === 'all' && styles.rangeChipTextActive
+              ]}>
+                全部 ({tabChapters.length})
+              </Text>
+            </TouchableOpacity>
+            {ranges.map((range) => (
+              <TouchableOpacity
+                key={range.id}
+                style={[
+                  styles.rangeChip,
+                  activeRange === range.id && styles.rangeChipActive
+                ]}
+                onPress={() => handleRangeChange(range.id)}
+              >
+                <Text style={[
+                  styles.rangeChipText,
+                  activeRange === range.id && styles.rangeChipTextActive
+                ]}>
+                  {range.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
     </View>
@@ -764,6 +872,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  headerLeftSelection: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
   headerTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -777,6 +890,12 @@ const styles = StyleSheet.create({
     color: '#6200EE',
     fontWeight: '500',
     marginLeft: 12,
+  },
+  selectedCountVertical: {
+    fontSize: 12,
+    color: '#6200EE',
+    fontWeight: '500',
+    marginTop: 4,
   },
   headerActions: {
     flexDirection: 'row',
@@ -805,6 +924,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  headerRangeButton: {
+    backgroundColor: '#ff9800',
+  },
+  headerRangeButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -1078,6 +1204,45 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: {
     fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  rangeContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f9f9f9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  rangeTitle: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  rangeList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  rangeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  rangeChipActive: {
+    backgroundColor: '#6200EE',
+    borderColor: '#6200EE',
+  },
+  rangeChipText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  rangeChipTextActive: {
     color: '#fff',
     fontWeight: '600',
   },
