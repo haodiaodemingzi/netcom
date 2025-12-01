@@ -15,7 +15,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import ImageViewer from '../../components/ImageViewer';
 import { getChapterImages, getChapters } from '../../services/api';
-import { getSettings, addHistory, getCurrentSource } from '../../services/storage';
+import { getSettings, addHistory, getCurrentSource, getHistory } from '../../services/storage';
 import downloadManager from '../../services/downloadManager';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -25,6 +25,8 @@ const ReaderScreen = () => {
   const { chapterId, comicId } = useLocalSearchParams();
   const flatListRef = useRef(null);
   const hasShownNextChapterPrompt = useRef(false);
+  const isRestoringProgress = useRef(false);
+  const lastSavedPage = useRef(1);
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
   }).current;
@@ -32,6 +34,8 @@ const ReaderScreen = () => {
   const [images, setImages] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [shouldRestoreProgress, setShouldRestoreProgress] = useState(false);
+  const [restorePageNumber, setRestorePageNumber] = useState(null);
   const [settings, setSettings] = useState({
     readingMode: 'single',
     imageFitMode: 'width',
@@ -46,15 +50,30 @@ const ReaderScreen = () => {
     loadChapterList();
   }, [comicId]);
 
-  // 处理Android返回键
+  // 处理Android返回键和页面卸载时保存阅读进度
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', async () => {
+      // 保存阅读进度
+      if (comicInfo && comicInfo.comicId && currentPage !== lastSavedPage.current) {
+        console.log(`返回时保存阅读进度: 漫画=${comicInfo.comicId}, 章节=${chapterId}, 页码=${currentPage}`);
+        await addHistory(
+          {
+            id: comicInfo.comicId,
+            title: comicInfo.comicTitle,
+            cover: comicInfo.cover || '',
+          },
+          chapterId,
+          currentPage
+        );
+        lastSavedPage.current = currentPage;
+        console.log(`阅读进度已保存`);
+      }
       router.back();
       return true; // 阻止默认行为
     });
 
     return () => backHandler.remove();
-  }, [router]);
+  }, [router, comicInfo, chapterId, currentPage]);
 
   useEffect(() => {
     if (allChapters.length > 0) {
@@ -62,6 +81,29 @@ const ReaderScreen = () => {
       hasShownNextChapterPrompt.current = false;
     }
   }, [chapterId, allChapters]);
+
+  // 监听图片加载完成，恢复阅读进度
+  useEffect(() => {
+    if (shouldRestoreProgress && images.length > 0 && restorePageNumber) {
+      console.log(`图片加载完成，恢复进度到第${restorePageNumber}页，总图片数=${images.length}`);
+      isRestoringProgress.current = true;
+      
+      const index = restorePageNumber - 1;
+      if (index >= 0 && index < images.length) {
+        console.log(`滚动到第${restorePageNumber}页 (index=${index})`);
+        flatListRef.current?.scrollToIndex({
+          index,
+          animated: false,
+          viewPosition: 0.5,
+        });
+        setCurrentPage(restorePageNumber);
+      }
+      
+      isRestoringProgress.current = false;
+      setShouldRestoreProgress(false);
+      setRestorePageNumber(null);
+    }
+  }, [shouldRestoreProgress, images.length, restorePageNumber]);
 
   const loadChapterList = async () => {
     if (!comicId) {
@@ -102,7 +144,17 @@ const ReaderScreen = () => {
         console.log('已下载章节信息:', downloadedInfo);
         
         if (downloadedInfo) {
-          setComicInfo(downloadedInfo);
+          // 确保 comicInfo 有完整的字段
+          const comicInfoData = {
+            comicId: downloadedInfo.comicId,
+            comicTitle: downloadedInfo.comicTitle,
+            cover: downloadedInfo.cover || '',
+            chapterId: downloadedInfo.chapterId,
+            chapterTitle: downloadedInfo.chapterTitle,
+            totalImages: downloadedInfo.totalImages,
+          };
+          setComicInfo(comicInfoData);
+          
           const localImages = await downloadManager.getLocalChapterImages(
             downloadedInfo.comicId,
             chapterId
@@ -113,6 +165,17 @@ const ReaderScreen = () => {
           if (localImages && localImages.length > 0) {
             console.log('✓ 使用本地图片');
             setImages(localImages);
+            
+            // 恢复阅读进度（强制刷新缓存）
+            const history = await getHistory(true);
+            const comicHistory = history.find(h => h.id === downloadedInfo.comicId);
+            if (comicHistory && comicHistory.lastChapterId === chapterId && comicHistory.lastPage) {
+              console.log(`恢复阅读进度: 页码=${comicHistory.lastPage}`);
+              // 设置标志，等待图片加载完成后再恢复进度
+              setRestorePageNumber(comicHistory.lastPage);
+              setShouldRestoreProgress(true);
+            }
+            
             setLoading(false);
             return;
           } else {
@@ -147,6 +210,16 @@ const ReaderScreen = () => {
         totalPages
       });
       
+      // 恢复阅读进度（在线模式，强制刷新缓存）
+      const history = await getHistory(true);
+      const comicHistory = history.find(h => h.id === comicId);
+      if (comicHistory && comicHistory.lastChapterId === chapterId && comicHistory.lastPage) {
+        console.log(`恢复阅读进度: 页码=${comicHistory.lastPage}`);
+        // 设置标志，等待图片加载完成后再恢复进度
+        setRestorePageNumber(comicHistory.lastPage);
+        setShouldRestoreProgress(true);
+      }
+      
     } catch (error) {
       console.error('加载章节失败:', error);
     } finally {
@@ -154,16 +227,36 @@ const ReaderScreen = () => {
     }
   };
 
-  const handlePageChange = (page) => {
+  const handlePageChange = useCallback((page) => {
+    console.log(`handlePageChange: page=${page}, images.length=${images.length}`);
     const index = page - 1;
     if (index >= 0 && index < images.length) {
+      console.log(`滚动到第${page}页 (index=${index})`);
       flatListRef.current?.scrollToIndex({
         index,
-        animated: true,
+        animated: false,
+        viewPosition: 0.5,
       });
       setCurrentPage(page);
+      
+      // 立即加载当前页和周围的页面
+      loadImageForPage(index);
+      if (index + 1 < images.length) {
+        loadImageForPage(index + 1);
+      }
+      if (index + 2 < images.length) {
+        loadImageForPage(index + 2);
+      }
+      if (index - 1 >= 0) {
+        loadImageForPage(index - 1);
+      }
+      if (index - 2 >= 0) {
+        loadImageForPage(index - 2);
+      }
+    } else {
+      console.log(`handlePageChange 失败: page=${page}, images.length=${images.length}`);
     }
-  };
+  }, [images]);
 
   const loadImageForPage = async (pageIndex) => {
     if (!comicInfo) return;
@@ -230,18 +323,6 @@ const ReaderScreen = () => {
         loadImageForPage(currentIndex - 2);
       }
       
-      // 保存阅读进度
-      if (comicInfo) {
-        addHistory(
-          {
-            id: comicInfo.comicId || comicId,
-            title: comicInfo.comicTitle,
-          },
-          chapterId,
-          page
-        );
-      }
-      
       // 如果是最后一页且存在下一章且还没显示过提示
       if (page === images.length && 
           currentChapterIndex >= 0 && 
@@ -277,7 +358,7 @@ const ReaderScreen = () => {
         }
       }
     }
-  }, [images.length, currentChapterIndex, allChapters, comicId, router, comicInfo, chapterId]);
+  }, [images.length, currentChapterIndex, allChapters, comicId, router, chapterId]);
 
 
   // 提取章节编号
@@ -398,6 +479,21 @@ const ReaderScreen = () => {
           index,
         }) : undefined}
       />
+      
+      {/* 进度显示 */}
+      <View style={styles.progressBar}>
+        <View style={styles.progressInfo}>
+          <Text style={styles.progressText}>
+            {getCurrentChapterTitle()} · 第 {currentPage} / {images.length} 页
+          </Text>
+        </View>
+        <View 
+          style={[
+            styles.progressFill,
+            { width: `${(currentPage / images.length) * 100}%` }
+          ]}
+        />
+      </View>
     </View>
   );
 };
@@ -441,6 +537,24 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     marginTop: 10,
+  },
+  progressBar: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  progressInfo: {
+    marginBottom: 6,
+  },
+  progressText: {
+    color: '#fff',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: '#6200EE',
+    borderRadius: 1.5,
   },
 });
 

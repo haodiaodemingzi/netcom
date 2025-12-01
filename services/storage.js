@@ -8,6 +8,11 @@ const KEYS = {
   CURRENT_SOURCE: '@current_source',
 };
 
+// 内存缓存，减少 AsyncStorage 读取次数
+let historyCache = null;
+let historyCacheTime = 0;
+const CACHE_DURATION = 5000; // 5秒缓存
+
 // 收藏相关
 export const getFavorites = async () => {
   try {
@@ -55,11 +60,23 @@ export const isFavorite = async (comicId) => {
   }
 };
 
-// 历史记录相关
-export const getHistory = async () => {
+// 历史记录相关（优化版本，使用内存缓存提高性能）
+export const getHistory = async (forceRefresh = false) => {
   try {
+    const now = Date.now();
+    // 如果不强制刷新且缓存未过期，直接返回缓存
+    if (!forceRefresh && historyCache && (now - historyCacheTime) < CACHE_DURATION) {
+      return historyCache;
+    }
+    
     const data = await AsyncStorage.getItem(KEYS.HISTORY);
-    return data ? JSON.parse(data) : [];
+    const history = data ? JSON.parse(data) : [];
+    
+    // 更新缓存
+    historyCache = history;
+    historyCacheTime = now;
+    
+    return history;
   } catch (error) {
     return [];
   }
@@ -89,6 +106,10 @@ export const addHistory = async (comic, chapterId, page) => {
       history.pop();
     }
     
+    // 更新缓存
+    historyCache = history;
+    historyCacheTime = Date.now();
+    
     await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(history));
     return true;
   } catch (error) {
@@ -98,6 +119,8 @@ export const addHistory = async (comic, chapterId, page) => {
 
 export const clearHistory = async () => {
   try {
+    historyCache = [];
+    historyCacheTime = Date.now();
     await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify([]));
     return true;
   } catch (error) {
