@@ -33,7 +33,20 @@ const ChapterList = ({
   const [activeRange, setActiveRange] = useState('all');
 
   useEffect(() => {
+    // 立即获取当前状态
+    const currentState = downloadManager.getState();
+    console.log('ChapterList 初始化时获取 downloadState:', {
+      downloadedCount: currentState.downloadedChapters?.length || 0,
+      queueCount: currentState.queue?.length || 0,
+    });
+    setDownloadState(currentState);
+    
+    // 订阅后续更新
     const unsubscribe = downloadManager.subscribe((state) => {
+      console.log('ChapterList 收到 downloadState 更新:', {
+        downloadedCount: state.downloadedChapters?.length || 0,
+        queueCount: state.queue?.length || 0,
+      });
       setDownloadState(state);
     });
     return unsubscribe;
@@ -245,25 +258,30 @@ const ChapterList = ({
     }
   };
 
-  const getChapterDownloadStatus = (chapterId) => {
-    if (!downloadState) {
-      // 如果downloadState未初始化，检查preparingDownloads
-      if (preparingDownloads.has(chapterId)) {
-        return {
-          status: 'pending',
-          progress: 0
-        };
-      }
-      return null;
-    }
-    
-    // 优先检查是否已下载完成
-    if (downloadState.downloadedChapters.includes(chapterId)) {
+  // 缓存已下载章节的 Set，避免频繁的数组查找
+  const downloadedChaptersSet = React.useMemo(() => {
+    if (!downloadState?.downloadedChapters) return new Set();
+    return new Set(downloadState.downloadedChapters);
+  }, [downloadState?.downloadedChapters]);
+
+  // 缓存队列中的任务 Map，避免频繁的数组查找
+  const queueTasksMap = React.useMemo(() => {
+    if (!downloadState?.queue) return new Map();
+    const map = new Map();
+    downloadState.queue.forEach(task => {
+      map.set(task.chapterId, task);
+    });
+    return map;
+  }, [downloadState?.queue]);
+
+  const getChapterDownloadStatus = React.useCallback((chapterId) => {
+    // 首先检查是否已下载完成（O(1) 查找）
+    if (downloadedChaptersSet.has(chapterId)) {
       return 'completed';
     }
     
-    // 其次检查是否在下载队列中（包括运行中、暂停、等待）
-    const task = downloadState.queue.find(t => t.chapterId === chapterId);
+    // 检查是否在下载队列中（O(1) 查找）
+    const task = queueTasksMap.get(chapterId);
     if (task) {
       return {
         status: task.status,
@@ -271,7 +289,7 @@ const ChapterList = ({
       };
     }
     
-    // 最后才检查是否在准备中
+    // 最后检查是否在准备中
     if (preparingDownloads.has(chapterId)) {
       return {
         status: 'pending',
@@ -280,7 +298,7 @@ const ChapterList = ({
     }
     
     return null;
-  };
+  }, [downloadedChaptersSet, queueTasksMap, preparingDownloads]);
 
   const handleSingleDownload = React.useCallback(async (chapter) => {
     setPreparingDownloads(prev => new Set([...prev, chapter.id]));
@@ -378,6 +396,10 @@ const ChapterList = ({
     const isCompleted = downloadStatus === 'completed';
     const downloadProgress = isDownloading ? (downloadStatus.progress || 0) : 0;
     
+    // 长按状态
+    const [isLongPressed, setIsLongPressed] = React.useState(false);
+    const longPressTimer = React.useRef(null);
+    
     const progressAnimRef = React.useRef(null);
     if (!progressAnimRef.current) {
       progressAnimRef.current = new Animated.Value(downloadProgress);
@@ -432,6 +454,20 @@ const ChapterList = ({
       prevCompletedRef.current = isCompleted;
     }, [isCompleted]);
     
+    const handlePressIn = () => {
+      longPressTimer.current = setTimeout(() => {
+        if (isCompleted) {
+          setIsLongPressed(true);
+        }
+      }, 500);
+    };
+
+    const handlePressOut = () => {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+      }
+    };
+
     return (
       <TouchableOpacity
         style={[
@@ -441,6 +477,8 @@ const ChapterList = ({
           isSelected && styles.chapterCardSelected,
         ]}
         onPress={() => onPress(item)}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         activeOpacity={0.7}
       >
         {selectionMode && (
@@ -482,7 +520,7 @@ const ChapterList = ({
         <View style={styles.chapterActions}>
           {hasReadingProgress && readingPage > 0 && (
             <View style={styles.readBadge}>
-              <Text style={styles.readBadgeText}>已读至第{readingPage}页</Text>
+              <Text style={styles.readBadgeText}>P{readingPage}</Text>
             </View>
           )}
           
@@ -506,28 +544,31 @@ const ChapterList = ({
               <View style={styles.downloadedBadge}>
                 <Text style={styles.downloadedBadgeText}>✓ 已下载</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={async (e) => {
-                  e.stopPropagation();
-                  Alert.alert(
-                    '删除章节',
-                    `确定要删除"${item.title}"的下载数据吗？`,
-                    [
-                      { text: '取消', style: 'cancel' },
-                      { 
-                        text: '删除', 
-                        style: 'destructive',
-                        onPress: async () => {
-                          await downloadManager.deleteDownloadedChapter(item.id);
+              {isLongPressed && !selectionMode && (
+                <TouchableOpacity 
+                  style={styles.deleteButton}
+                  onPress={async (e) => {
+                    e.stopPropagation();
+                    Alert.alert(
+                      '删除章节',
+                      `确定要删除"${item.title}"的下载数据吗？`,
+                      [
+                        { text: '取消', style: 'cancel' },
+                        { 
+                          text: '删除', 
+                          style: 'destructive',
+                          onPress: async () => {
+                            await downloadManager.deleteChapter(item.comicId || comicId, item.id);
+                            setIsLongPressed(false);
+                          }
                         }
-                      }
-                    ]
-                  );
-                }}
-              >
-                <Text style={styles.deleteButtonText}>删除</Text>
-              </TouchableOpacity>
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.deleteButtonText}>删除</Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           )}
           
@@ -649,6 +690,13 @@ const ChapterList = ({
     );
   }, (prevProps, nextProps) => {
     // 检查影响渲染的props是否变化
+    // 返回 true 表示 props 相同，不需要重新渲染
+    const downloadStatusEqual = 
+      prevProps.downloadStatus === nextProps.downloadStatus ||
+      (prevProps.downloadStatus && nextProps.downloadStatus &&
+       prevProps.downloadStatus.status === nextProps.downloadStatus.status &&
+       prevProps.downloadStatus.progress === nextProps.downloadStatus.progress);
+    
     return (
       prevProps.item.id === nextProps.item.id &&
       prevProps.isSelected === nextProps.isSelected &&
@@ -658,7 +706,7 @@ const ChapterList = ({
       prevProps.onPress === nextProps.onPress &&
       prevProps.selectionMode === nextProps.selectionMode &&
       prevProps.onSingleDownload === nextProps.onSingleDownload &&
-      JSON.stringify(prevProps.downloadStatus) === JSON.stringify(nextProps.downloadStatus)
+      downloadStatusEqual
     );
   });
 
@@ -713,6 +761,34 @@ const ChapterList = ({
                 style={[styles.headerActionButton, styles.headerDownloadButton]}
               >
                 <Text style={[styles.headerActionButtonText, styles.headerDownloadButtonText]}>下载</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => {
+                  Alert.alert(
+                    '删除章节',
+                    `确定要删除选中的 ${selectedChapters.size} 个章节的下载数据吗？`,
+                    [
+                      { text: '取消', style: 'cancel' },
+                      { 
+                        text: '删除', 
+                        style: 'destructive',
+                        onPress: async () => {
+                          for (const chapterId of selectedChapters) {
+                            const chapter = displayChapters.find(c => c.id === chapterId);
+                            if (chapter) {
+                              await downloadManager.deleteChapter(comicId, chapterId);
+                            }
+                          }
+                          setSelectedChapters(new Set());
+                          setSelectionMode(false);
+                        }
+                      }
+                    ]
+                  );
+                }}
+                style={[styles.headerActionButton, styles.headerDeleteButton]}
+              >
+                <Text style={[styles.headerActionButtonText, styles.headerDeleteButtonText]}>删除</Text>
               </TouchableOpacity>
             </>
           )}
@@ -835,7 +911,7 @@ const ChapterList = ({
         onSingleDownload={handleSingleDownload}
       />
     );
-  }, [currentChapterId, selectedChapters, downloadState, readingHistory, preparingDownloads, handleCardPress, selectionMode, handleSingleDownload]);
+  }, [currentChapterId, selectedChapters, getChapterDownloadStatus, readingHistory, handleCardPress, selectionMode, handleSingleDownload]);
 
   return (
     <View style={styles.container}>
@@ -1041,16 +1117,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   readBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
     backgroundColor: '#e8f5e9',
     marginRight: 4,
   },
   readBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#4caf50',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   downloadedBadge: {
     paddingHorizontal: 8,

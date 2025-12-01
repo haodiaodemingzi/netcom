@@ -19,6 +19,7 @@ class DownloadManager {
     this.cachedCookies = new Map(); // 按数据源缓存cookie
     this.cookiesExpireTime = new Map(); // 按数据源记录过期时间
     this.maxConcurrent = 10; // 默认值
+    this.initialized = false; // 初始化标志
     
     this.queue = new DownloadQueue(this.maxConcurrent);
     this.downloader = new ImageDownloader(3, 1000, this.maxConcurrent);
@@ -38,9 +39,17 @@ class DownloadManager {
   }
 
   async init() {
-    await this.ensureDownloadDir();
-    await this.loadDownloadedChapters();
-    await this.loadSettings();
+    try {
+      await this.ensureDownloadDir();
+      await this.loadDownloadedChapters();
+      await this.loadSettings();
+      this.initialized = true;
+      console.log('DownloadManager 初始化完成');
+      this.notifyListeners();
+    } catch (error) {
+      console.error('DownloadManager 初始化失败:', error);
+      this.initialized = true; // 即使失败也标记为已初始化
+    }
   }
   
   async loadSettings() {
@@ -126,12 +135,17 @@ class DownloadManager {
   async loadDownloadedChapters() {
     try {
       const data = await AsyncStorage.getItem('downloaded_chapters');
+      console.log('从 AsyncStorage 加载已下载章节:', data ? '有数据' : '无数据');
       if (data) {
         const chapters = JSON.parse(data);
+        console.log('已下载章节数:', Object.keys(chapters).length);
         this.downloadedChapters = new Map(Object.entries(chapters));
+        console.log('已下载章节列表:', Array.from(this.downloadedChapters.keys()).slice(0, 10));
+      } else {
+        console.log('AsyncStorage 中没有已下载章节数据');
       }
     } catch (error) {
-      // 静默失败
+      console.error('加载已下载章节失败:', error);
     }
   }
 
@@ -275,7 +289,9 @@ class DownloadManager {
     }
     
     this.downloadedChapters.set(task.chapterId, chapterData);
-    this.saveDownloadedChapters();
+    console.log(`章节${task.chapterId}已添加到已下载列表`);
+    await this.saveDownloadedChapters();
+    console.log(`已下载章节已保存到 AsyncStorage`);
   }
 
   handleTaskFail(task, error) {
@@ -551,9 +567,15 @@ class DownloadManager {
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     
     try {
+      // 删除文件
       await FileSystem.deleteAsync(chapterDir, { idempotent: true });
+      
+      // 从内存中删除
       this.downloadedChapters.delete(chapterId);
+      
+      // 从 AsyncStorage 中删除
       await this.saveDownloadedChapters();
+      
       this.notifyListeners();
     } catch (error) {
       throw error;
