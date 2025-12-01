@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import ComicCard from '../../components/ComicCard';
 import { searchComics, getAvailableSources } from '../../services/api';
 import {
@@ -25,18 +26,29 @@ const SearchScreen = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentSource, setCurrentSource] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  
+  const lastSourceRef = useRef(null);
+  const lastKeywordRef = useRef('');
 
   useEffect(() => {
     loadHistory();
-    loadCurrentSource();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAndCheckSource();
+    }, [])
+  );
 
   const loadHistory = async () => {
     const data = await getSearchHistory();
     setHistory(data);
   };
 
-  const loadCurrentSource = async () => {
+  const loadAndCheckSource = async () => {
     try {
       let source = await getCurrentSource();
       
@@ -49,7 +61,35 @@ const SearchScreen = () => {
         }
       }
       
-      setCurrentSource(source);
+      // 检查数据源是否变化
+      const sourceChanged = lastSourceRef.current && lastSourceRef.current !== source;
+      
+      // 如果数据源变化了，且有搜索关键词，重新搜索
+      if (sourceChanged && lastKeywordRef.current) {
+        console.log(`数据源已切换: ${lastSourceRef.current} -> ${source}，重新搜索: ${lastKeywordRef.current}`);
+        // 使用ref中存储的关键词重新搜索
+        const searchTerm = lastKeywordRef.current;
+        
+        // 先更新状态和ref
+        setCurrentSource(source);
+        lastSourceRef.current = source;
+        
+        setLoading(true);
+        setPage(1);
+        try {
+          const data = await searchComics(searchTerm, 1, 20, source);
+          setResults(data.comics || []);
+          setHasMore(data.hasMore || false);
+        } catch (error) {
+          console.error('重新搜索失败:', error);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // 没有变化或没有关键词，只更新状态
+        setCurrentSource(source);
+        lastSourceRef.current = source;
+      }
     } catch (error) {
       console.error('加载数据源失败:', error);
     }
@@ -60,15 +100,50 @@ const SearchScreen = () => {
     if (!term.trim()) return;
 
     setLoading(true);
+    setPage(1);
+    lastKeywordRef.current = term; // 记录搜索关键词
+    
     try {
-      const data = await searchComics(term, 1, 20, currentSource);
+      // 确保有数据源
+      let searchSource = currentSource;
+      if (!searchSource) {
+        searchSource = await getCurrentSource();
+        if (!searchSource) {
+          const sourcesData = await getAvailableSources();
+          searchSource = Object.keys(sourcesData)[0];
+        }
+        setCurrentSource(searchSource);
+        lastSourceRef.current = searchSource;
+      }
+      
+      console.log(`搜索: 关键词="${term}", 数据源=${searchSource}`);
+      const data = await searchComics(term, 1, 20, searchSource);
       setResults(data.comics || []);
+      setHasMore(data.hasMore || false);
       await addSearchHistory(term);
       await loadHistory();
     } catch (error) {
       console.error('搜索失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (!hasMore || loadingMore || !keyword.trim() || !currentSource) return;
+
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      console.log(`加载更多: 页码=${nextPage}, 数据源=${currentSource}`);
+      const data = await searchComics(keyword, nextPage, 20, currentSource);
+      setResults(prev => [...prev, ...(data.comics || [])]);
+      setHasMore(data.hasMore || false);
+      setPage(nextPage);
+    } catch (error) {
+      console.error('加载更多失败:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -145,6 +220,15 @@ const SearchScreen = () => {
           keyExtractor={(item, index) => `${item.id}-${index}`}
           numColumns={2}
           contentContainerStyle={styles.listContent}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <Text style={styles.footerText}>加载中...</Text>
+              </View>
+            ) : null
+          }
         />
       )}
 
@@ -237,6 +321,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    color: '#999',
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 14,
     color: '#999',
   },
 });
