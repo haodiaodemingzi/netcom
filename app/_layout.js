@@ -18,6 +18,10 @@ export default function Layout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="comic/[id]" />
         <Stack.Screen name="reader/[chapterId]" />
+        <Stack.Screen name="series/[id]" />
+        <Stack.Screen name="player/[episodeId]" />
+        <Stack.Screen name="novel/[id]" />
+        <Stack.Screen name="novel-reader/[chapterId]" />
       </Stack>
     </GestureHandlerRootView>
   );

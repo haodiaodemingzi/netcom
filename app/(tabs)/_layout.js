@@ -24,6 +24,32 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="series"
+        options={{
+          title: '短剧',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons 
+              name="play-circle" 
+              size={size} 
+              color={color} 
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="novel"
+        options={{
+          title: '小说',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons 
+              name="book-open" 
+              size={size} 
+              color={color} 
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="search"
         options={{
           title: '搜索',
