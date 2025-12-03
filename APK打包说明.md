@@ -9,10 +9,17 @@
 
 ## 🚀 方式一：使用EAS Build（推荐）
 
+EAS Build是Expo提供的云端构建服务，可以避免本地环境配置问题，推荐使用。
+
 ### 1. 安装EAS CLI
 
 ```bash
 npm install -g eas-cli
+```
+
+验证安装：
+```bash
+eas --version
 ```
 
 ### 2. 登录Expo账号
@@ -27,6 +34,11 @@ eas login
 eas register
 ```
 
+检查登录状态：
+```bash
+eas whoami
+```
+
 ### 3. 配置项目
 
 ```bash
@@ -34,56 +46,255 @@ cd c:\coding\netcom
 eas build:configure
 ```
 
+这会创建或更新 `eas.json` 配置文件。
+
 ### 4. 构建APK
 
-```bash
-# 构建APK (不需要Google Play签名)
-eas build -p android --profile preview
+#### 预览版APK（用于测试）
 
-# 或构建用于发布的AAB
-eas build -p android --profile production
+```bash
+# 非交互式构建（适合CI/CD）
+eas build -p android --profile preview --non-interactive
+
+# 或交互式构建（会提示选择）
+eas build -p android --profile preview
+```
+
+#### 生产版APK
+
+```bash
+eas build -p android --profile production --non-interactive
+```
+
+#### 查看构建状态
+
+构建开始后，会显示构建日志链接，例如：
+```
+See logs: https://expo.dev/accounts/your-account/projects/comic-reader/builds/xxx
 ```
 
 ### 5. 下载APK
 
-构建完成后，会得到一个下载链接，直接下载APK文件即可。
+构建完成后：
+- 在终端会显示下载链接
+- 或访问构建日志页面下载
+- 或使用命令：
+```bash
+eas build:list
+```
+
+### 6. EAS Build配置文件说明
+
+`eas.json` 配置文件示例：
+
+```json
+{
+  "cli": {
+    "version": ">= 5.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      },
+      "distribution": "internal"
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
+```
+
+### 7. EAS Build常见问题
+
+**构建失败：**
+- 检查依赖版本是否匹配 Expo SDK
+- 运行 `npx expo-doctor` 检查项目配置
+- 查看构建日志中的具体错误信息
+
+**依赖版本不匹配：**
+```bash
+# 检查并修复依赖版本
+npx expo install --check
+npx expo install expo-av expo-file-system expo-media-library
+```
 
 ---
 
 ## 🛠️ 方式二：本地构建（需要Android Studio）
 
 ### 前置要求
-- 安装Android Studio
-- 配置ANDROID_HOME环境变量
-- 安装JDK 11+
 
-### 步骤
+#### 1. 环境准备
 
-#### 1. 安装依赖
+- **安装Android Studio**：下载并安装最新版本
+- **配置ANDROID_HOME环境变量**：
+  ```bash
+  # Windows (PowerShell)
+  [System.Environment]::SetEnvironmentVariable('ANDROID_HOME', 'C:\Users\YourName\AppData\Local\Android\Sdk', 'User')
+  
+  # Windows (CMD)
+  setx ANDROID_HOME "C:\Users\YourName\AppData\Local\Android\Sdk"
+  
+  # 验证
+  echo %ANDROID_HOME%
+  ```
+
+- **安装JDK 17**（推荐）或 JDK 11+：
+  ```bash
+  # 检查Java版本
+  java -version
+  ```
+
+- **配置Java路径**：在 `android/gradle.properties` 中添加：
+  ```properties
+  org.gradle.java.home=C:/Program Files/Java/jdk-17
+  ```
+
+#### 2. 检查依赖版本
+
+```bash
+cd c:\coding\netcom
+
+# 检查依赖版本是否匹配
+npx expo-doctor
+
+# 如果发现版本不匹配，修复：
+npx expo install --check
+npx expo install expo-av expo-file-system expo-media-library expo-constants
+```
+
+### 构建步骤
+
+#### 1. 安装项目依赖
 
 ```bash
 cd c:\coding\netcom
 npm install
 ```
 
-#### 2. 预构建
-
+如果遇到依赖冲突：
 ```bash
-npx expo prebuild
+npm install --legacy-peer-deps
 ```
 
-#### 3. 构建APK
+#### 2. 预构建原生代码
+
+```bash
+# 清理并重新生成原生代码
+npx expo prebuild --clean
+```
+
+这会生成 `android/` 和 `ios/` 目录。
+
+#### 3. 清理构建缓存
 
 ```bash
 cd android
-./gradlew assembleRelease
+./gradlew clean
 ```
 
-#### 4. 找到APK
+#### 4. 构建Release APK
 
-APK位置：
+**标准构建：**
+```bash
+cd android
+./gradlew :app:assembleRelease
+```
+
+**带详细错误信息（推荐用于调试）：**
+```bash
+cd android
+./gradlew :app:assembleRelease --stacktrace
+```
+
+**带完整调试信息：**
+```bash
+cd android
+./gradlew :app:assembleRelease --stacktrace --info
+```
+
+#### 5. 找到生成的APK
+
+构建成功后，APK位置：
 ```
 android/app/build/outputs/apk/release/app-release.apk
+```
+
+#### 6. 验证APK
+
+```bash
+# 检查APK文件大小
+ls -lh android/app/build/outputs/apk/release/app-release.apk
+
+# Windows
+dir android\app\build\outputs\apk\release\app-release.apk
+```
+
+### 本地构建常见问题
+
+#### 问题1：Java版本错误
+
+**错误信息：**
+```
+Dependency requires at least JVM runtime version 11. This build uses a Java 8 JVM.
+```
+
+**解决方法：**
+1. 在 `android/gradle.properties` 中添加：
+   ```properties
+   org.gradle.java.home=C:/Program Files/Java/jdk-17
+   ```
+2. 停止Gradle守护进程：
+   ```bash
+   cd android
+   ./gradlew --stop
+   ```
+
+#### 问题2：CMake构建失败
+
+**错误信息：**
+```
+CMake Error: Target "expo-av" links to target "ReactAndroid::reactnativejni" but the target was not found.
+```
+
+**解决方法：**
+1. 确保依赖版本正确：
+   ```bash
+   npx expo install --check
+   ```
+2. 清理CMake缓存：
+   ```bash
+   cd android
+   ./gradlew clean
+   ```
+3. 重新运行prebuild：
+   ```bash
+   npx expo prebuild --clean
+   ```
+
+#### 问题3：新架构相关错误
+
+如果使用 `react-native-reanimated`，必须启用新架构：
+```properties
+# android/gradle.properties
+newArchEnabled=true
+```
+
+#### 问题4：依赖版本不匹配
+
+运行检查：
+```bash
+npx expo-doctor
+```
+
+根据提示更新依赖：
+```bash
+npx expo install expo-av@~16.0.7 expo-file-system@~19.0.19 expo-media-library@~18.2.0
 ```
 
 ---
@@ -240,6 +451,87 @@ android {
 
 ---
 
+## ⚙️ 环境配置详解
+
+### Java版本配置
+
+项目需要Java 17（推荐）或Java 11+。
+
+#### 检查Java版本
+```bash
+java -version
+```
+
+#### 配置Gradle使用指定Java版本
+
+在 `android/gradle.properties` 文件中添加：
+```properties
+# 指定Java路径（根据实际安装路径修改）
+org.gradle.java.home=C:/Program Files/Java/jdk-17
+```
+
+#### Windows路径格式说明
+- 使用正斜杠 `/` 或双反斜杠 `\\`
+- 示例：`C:/Program Files/Java/jdk-17` 或 `C:\\Program Files\\Java\\jdk-17`
+
+### Android SDK配置
+
+#### 设置ANDROID_HOME环境变量
+
+**Windows PowerShell:**
+```powershell
+[System.Environment]::SetEnvironmentVariable('ANDROID_HOME', 'C:\Users\YourName\AppData\Local\Android\Sdk', 'User')
+```
+
+**Windows CMD:**
+```cmd
+setx ANDROID_HOME "C:\Users\YourName\AppData\Local\Android\Sdk"
+```
+
+**验证配置:**
+```bash
+echo $ANDROID_HOME  # Git Bash
+echo %ANDROID_HOME%  # CMD
+```
+
+### Gradle配置优化
+
+在 `android/gradle.properties` 中可以添加以下配置：
+
+```properties
+# JVM参数（增加内存）
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+
+# 并行构建
+org.gradle.parallel=true
+
+# 指定Java版本
+org.gradle.java.home=C:/Program Files/Java/jdk-17
+
+# 新架构（react-native-reanimated需要）
+newArchEnabled=true
+
+# Hermes引擎
+hermesEnabled=true
+```
+
+### 依赖版本检查
+
+在构建前，务必检查依赖版本：
+
+```bash
+# 检查项目健康状态
+npx expo-doctor
+
+# 检查并修复依赖版本
+npx expo install --check
+
+# 手动更新关键依赖
+npx expo install expo-av expo-file-system expo-media-library expo-constants
+```
+
+---
+
 ## 🐛 常见问题
 
 ### 1. 构建失败
@@ -264,6 +556,54 @@ keytool -genkeypair -v -storetype PKCS12 ...
 ```bash
 # 使用legacy模式
 npm install --legacy-peer-deps
+```
+
+### 4. Gradle构建失败（本地构建）
+
+**查看详细错误：**
+```bash
+cd android
+./gradlew :app:assembleRelease --stacktrace
+```
+
+**常见解决方案：**
+```bash
+# 1. 清理构建
+cd android
+./gradlew clean
+
+# 2. 停止Gradle守护进程
+./gradlew --stop
+
+# 3. 重新预构建
+cd ..
+npx expo prebuild --clean
+
+# 4. 检查Java版本配置
+# 确保 android/gradle.properties 中有正确的Java路径
+```
+
+### 5. EAS Build失败
+
+**查看构建日志：**
+- 构建开始后会显示日志链接
+- 访问链接查看详细错误信息
+
+**常见原因：**
+- 依赖版本不匹配 Expo SDK
+- `app.json` 配置错误
+- 环境变量未正确设置
+
+**解决方法：**
+```bash
+# 检查项目配置
+npx expo-doctor
+
+# 修复依赖
+npx expo install --check
+
+# 重新构建
+eas build -p android --profile preview --non-interactive
 ```
 
 ---
@@ -292,19 +632,53 @@ npm install --legacy-peer-deps
 
 ## 🎯 快速开始（推荐流程）
 
+### 方式A：EAS Build（推荐，最简单）
+
 ```bash
-# 1. 登录Expo
+# 1. 安装EAS CLI
+npm install -g eas-cli
+
+# 2. 登录Expo账号
 eas login
 
-# 2. 配置EAS
+# 3. 配置项目（首次需要）
+cd c:\coding\netcom
 eas build:configure
 
-# 3. 构建APK
-eas build -p android --profile preview
+# 4. 构建APK
+eas build -p android --profile preview --non-interactive
 
-# 4. 等待构建完成（约10-15分钟）
+# 5. 等待构建完成（约10-15分钟），然后下载APK
+```
 
-# 5. 下载APK并安装测试
+### 方式B：本地构建（需要配置环境）
+
+```bash
+# 1. 检查环境
+java -version  # 需要JDK 17
+echo $ANDROID_HOME  # 需要配置Android SDK路径
+
+# 2. 安装依赖
+cd c:\coding\netcom
+npm install
+
+# 3. 检查依赖版本
+npx expo-doctor
+npx expo install --check
+
+# 4. 预构建
+npx expo prebuild --clean
+
+# 5. 配置Java路径（在 android/gradle.properties）
+# 添加：org.gradle.java.home=C:/Program Files/Java/jdk-17
+
+# 6. 构建APK
+cd android
+./gradlew clean
+./gradlew :app:assembleRelease --stacktrace
+
+# 7. 找到APK
+# android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ---
