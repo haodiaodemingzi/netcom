@@ -50,6 +50,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="ebooks"
+        options={{
+          title: '电子书',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="book-open-page-variant"
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: '设置',
