@@ -9,6 +9,8 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,7 +20,8 @@ import {
   getLatestComics,
   getAvailableSources,
   getCategories,
-  getComicsByCategory
+  getComicsByCategory,
+  searchComics,
 } from '../../services/api';
 import { getCurrentSource, setCurrentSource } from '../../services/storage';
 import downloadManager from '../../services/downloadManager';
@@ -40,6 +43,10 @@ const HomeScreen = () => {
   const [showSourceMenu, setShowSourceMenu] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [downloadCount, setDownloadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -114,6 +121,34 @@ const HomeScreen = () => {
       }
       setInitialized(true);
     }
+  };
+
+  // 搜索漫画
+  const handleSearch = async (query) => {
+    if (!query.trim()) {
+      setSearchQuery('');
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      const data = await searchComics(query, 1, 50, currentSource);
+      setSearchResults(data.comics || []);
+    } catch (error) {
+      console.error('搜索失败:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // 清除搜索
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsSearching(false);
   };
 
 const loadComics = async (isRefresh = false) => {
@@ -203,61 +238,89 @@ const loadComics = async (isRefresh = false) => {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <Text style={styles.headerTitle}>漫画阅读器</Text>
-      <View style={styles.headerButtons}>
-        <TouchableOpacity 
-          onPress={() => router.push('/downloads')}
-          style={styles.downloadButton}
-        >
-          <Text style={styles.downloadButtonIcon}>📦</Text>
-          {downloadCount > 0 && (
-            <View style={styles.downloadBadge}>
-              <Text style={styles.downloadBadgeText}>{downloadCount}</Text>
-            </View>
+      {/* 标题 - 搜索栏 - 数据源 - 下载 */}
+      <View style={styles.headerRow}>
+        <Text style={styles.headerTitle}>漫画</Text>
+        
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="搜索漫画..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => handleSearch(searchQuery)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={clearSearch}
+            >
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+        </View>
+        
         <TouchableOpacity 
-          onPress={() => setShowSourceMenu(!showSourceMenu)}
           style={styles.sourceButton}
+          onPress={() => setShowSourceMenu(true)}
         >
-          <Text style={styles.sourceButtonText}>
-            {sources[currentSource]?.name || '数据源'} ▼
+          <Text style={styles.sourceText}>
+            {sources[currentSource]?.name || '数据源'}
           </Text>
         </TouchableOpacity>
       </View>
+      
+      {/* 搜索结果提示 */}
+      {searchQuery.length > 0 && (
+        <Text style={styles.infoText}>
+          {isSearching ? '搜索中...' : `找到 ${searchResults.length} 本漫画`}
+        </Text>
+      )}
     </View>
   );
 
-  const renderCategories = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.categoriesContainer}
-      contentContainerStyle={styles.categoriesContent}
-    >
-      {categories.map((category) => (
-        <TouchableOpacity
-          key={category.id}
-          style={[
-            styles.categoryButton,
-            selectedCategory === category.id && 
-              styles.categoryButtonActive,
-          ]}
-          onPress={() => handleCategoryPress(category.id)}
-        >
-          <Text
-            style={[
-              styles.categoryText,
-              selectedCategory === category.id && 
-                styles.categoryTextActive,
-            ]}
-          >
-            {category.name}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  );
+  const renderCategories = () => {
+    const displayCategories = showAllCategories ? categories : categories.slice(0, 8);
+    const hasMore = categories.length > 8;
+
+    return (
+      <View style={styles.categoryBar}>
+        <View style={styles.categoryContent}>
+          {displayCategories.map((category, index) => (
+            <TouchableOpacity
+              key={`${category.id || ''}-${index}`}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category.id && styles.categoryChipActive,
+              ]}
+              onPress={() => handleCategoryPress(category.id)}
+            >
+              <Text
+                style={[
+                  styles.categoryText,
+                  selectedCategory === category.id && styles.categoryTextActive,
+                ]}
+              >
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {hasMore && (
+            <TouchableOpacity
+              style={styles.moreButton}
+              onPress={() => setShowAllCategories(!showAllCategories)}
+            >
+              <Text style={styles.moreButtonText}>
+                {showAllCategories ? '收起' : '更多'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles.cardWrapper}>
@@ -288,48 +351,67 @@ const loadComics = async (isRefresh = false) => {
     );
   };
 
+  // 显示的数据:搜索结果或分类漫画
+  const displayComics = searchQuery.trim() ? searchResults : comics;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       {renderHeader()}
       
-      {showSourceMenu && (
-        <View style={styles.sourceMenu}>
-          {Object.entries(sources).map(([key, source]) => (
-            <TouchableOpacity
-              key={key}
-              style={[
-                styles.sourceMenuItem,
-                currentSource === key && styles.sourceMenuItemActive,
-              ]}
-              onPress={() => handleSourceChange(key)}
-            >
-              <Text style={[
-                styles.sourceMenuText,
-                currentSource === key && styles.sourceMenuTextActive,
-              ]}>
-                {source.name}
-              </Text>
-              {source.description && (
-                <Text style={styles.sourceMenuDesc}>
-                  {source.description}
+      {/* 数据源选择器Modal */}
+      <Modal
+        visible={showSourceMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSourceMenu(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSourceMenu(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>选择数据源</Text>
+              <TouchableOpacity onPress={() => setShowSourceMenu(false)}>
+                <Text style={styles.pickerClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {Object.entries(sources).map(([key, source]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.pickerItem,
+                  currentSource === key && styles.pickerItemActive
+                ]}
+                onPress={() => handleSourceChange(key)}
+              >
+                <Text style={[
+                  styles.pickerItemText,
+                  currentSource === key && styles.pickerItemTextActive
+                ]}>
+                  {source.name}
                 </Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+                {currentSource === key && (
+                  <Text style={styles.pickerCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
       
-      {renderCategories()}
+      {!searchQuery.trim() && renderCategories()}
       
-      {loading && comics.length === 0 && !refreshing ? (
+      {(loading || isSearching) && displayComics.length === 0 && !refreshing ? (
         renderLoadingSkeleton()
       ) : (
         <FlatList
-          data={comics}
+          data={displayComics}
           renderItem={renderItem}
           keyExtractor={(item, index) => `${item.id}-${index}`}
-          numColumns={2}
+          numColumns={3}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -342,9 +424,11 @@ const loadComics = async (isRefresh = false) => {
           onEndReachedThreshold={0.5}
           ListFooterComponent={renderFooter}
           ListEmptyComponent={
-            !loading && (
+            !loading && !isSearching && (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>暂无漫画</Text>
+                <Text style={styles.emptyText}>
+                  {searchQuery.trim() ? '未找到相关漫画' : '暂无漫画'}
+                </Text>
               </View>
             )
           }
@@ -360,23 +444,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  headerButtons: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111',
+    minWidth: 50,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 38,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  clearButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  clearButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  sourceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    height: 38,
+  },
+  sourceText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+    marginRight: 4,
+  },
+  sourceArrow: {
+    fontSize: 10,
+    color: '#999',
+  },
+  infoText: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 8,
   },
   downloadButton: {
     width: 36,
@@ -407,88 +542,128 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  sourceButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 16,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sourceButtonText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  sourceMenu: {
+  pickerContainer: {
     backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '80%',
+    maxWidth: 300,
+    maxHeight: '70%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    paddingVertical: 8,
   },
-  sourceMenuItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111',
+  },
+  pickerClose: {
+    fontSize: 24,
+    color: '#999',
+    fontWeight: '300',
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  sourceMenuItemActive: {
-    backgroundColor: '#f0f0f0',
+  pickerItemActive: {
+    backgroundColor: '#f8f9fa',
   },
-  sourceMenuText: {
+  pickerItemText: {
     fontSize: 16,
-    color: '#000',
-    marginBottom: 4,
+    color: '#333',
   },
-  sourceMenuTextActive: {
+  pickerItemTextActive: {
     color: '#6200EE',
     fontWeight: '600',
   },
-  sourceMenuDesc: {
-    fontSize: 12,
-    color: '#999',
+  pickerCheck: {
+    fontSize: 18,
+    color: '#6200EE',
+    fontWeight: 'bold',
   },
-  categoriesContainer: {
+  categoryBar: {
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    borderBottomWidth: 1,
   },
-  categoriesContent: {
+  categoryContent: {
     paddingHorizontal: 12,
-    paddingVertical: 16,
-    paddingBottom: 20,
-    alignItems: 'center',
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
     paddingVertical: 10,
-    marginHorizontal: 4,
-    height: 40,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: '22%',
+    maxWidth: '48%',
+    paddingHorizontal: 8,
+    height: 34,
+    borderRadius: 4,
+    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  categoryButtonActive: {
+  categoryChipActive: {
     backgroundColor: '#6200EE',
+    borderColor: '#6200EE',
   },
   categoryText: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#666',
-    lineHeight: 20,
-    textAlign: 'center',
-    textAlignVertical: 'center',
   },
   categoryTextActive: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 15,
-    lineHeight: 20,
-    textAlign: 'center',
-    textAlignVertical: 'center',
+    fontWeight: '600',
+  },
+  moreButton: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: '22%',
+    maxWidth: '48%',
+    paddingHorizontal: 8,
+    height: 34,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  moreButtonText: {
+    fontSize: 13,
+    color: '#6200EE',
+    fontWeight: '600',
   },
   listContent: {
-    padding: 4,
+    padding: 0.5,
   },
   cardWrapper: {
-    width: '50%',
+    width: '33.333%',
+    padding: 0.5,
   },
   emptyContainer: {
     padding: 40,

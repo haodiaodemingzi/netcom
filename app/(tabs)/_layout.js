@@ -13,36 +13,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '首页',
+          title: '漫画',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons 
-              name="home" 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: '搜索',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="magnify" 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="favorite"
-        options={{
-          title: '收藏',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="heart" 
+              name="book-open-variant" 
               size={size} 
               color={color} 
             />
@@ -63,6 +37,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="favorite"
+        options={{
+          title: '收藏',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons 
+              name="heart" 
+              size={size} 
+              color={color} 
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: '设置',
@@ -73,6 +60,12 @@ export default function TabLayout() {
               color={color} 
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

@@ -37,6 +37,7 @@ const EbookTabScreen = () => {
   const [allBooksMetadata, setAllBooksMetadata] = useState([]);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // 加载数据源列表和元数据
   useEffect(() => {
@@ -454,7 +455,7 @@ const EbookTabScreen = () => {
 
       <View style={styles.categoryBar}>
         <View style={styles.categoryContent}>
-          {categories.map((category, index) => (
+          {(showAllCategories ? categories : categories.slice(0, 8)).map((category, index) => (
             <TouchableOpacity
               key={`${category.id || ''}-${index}`}
               style={[
@@ -473,6 +474,16 @@ const EbookTabScreen = () => {
               </Text>
             </TouchableOpacity>
           ))}
+          {categories.length > 8 && (
+            <TouchableOpacity
+              style={styles.moreButton}
+              onPress={() => setShowAllCategories(!showAllCategories)}
+            >
+              <Text style={styles.moreButtonText}>
+                {showAllCategories ? '收起' : '更多'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -484,7 +495,7 @@ const EbookTabScreen = () => {
             <BookCard book={item} />
           </View>
         )}
-        numColumns={2}
+        numColumns={3}
         columnWrapperStyle={styles.columnWrapper}
         refreshControl={
           <RefreshControl
@@ -676,25 +687,53 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: 16,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: '22%',
+    maxWidth: '48%',
+    paddingHorizontal: 8,
+    height: 34,
+    borderRadius: 4,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   categoryChipActive: {
     backgroundColor: '#6200EE',
+    borderColor: '#6200EE',
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#666',
   },
   categoryTextActive: {
     color: '#fff',
+    fontWeight: '600',
+  },
+  moreButton: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: '22%',
+    maxWidth: '48%',
+    paddingHorizontal: 8,
+    height: 34,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  moreButtonText: {
+    fontSize: 13,
+    color: '#6200EE',
     fontWeight: '600',
   },
   listHeader: {
@@ -703,12 +742,14 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 24,
+    padding: 2,
   },
   columnWrapper: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
   },
   cardWrapper: {
-    width: '50%',
+    width: '33.333%',
+    padding: 2,
   },
   loadingFooter: {
     paddingVertical: 20,
