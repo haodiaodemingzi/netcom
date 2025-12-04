@@ -42,7 +42,9 @@ const EbookDetailScreen = () => {
     }
   };
 
-  const handleRead = (chapterId) => {
+  const handleRead = (chapter) => {
+    // 处理传递的可能是对象或字符串的情况
+    const chapterId = typeof chapter === 'object' ? chapter.id : chapter;
     router.push(`/ebook-reader/${chapterId}?bookId=${id}&source=${source}`);
   };
 

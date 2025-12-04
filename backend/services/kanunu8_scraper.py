@@ -594,7 +594,11 @@ class KanuNu8Scraper(BaseEbookScraper):
             
             response = self._make_request(chapter_url)
             if not response:
+                logger.error(f"无法获取章节页面: {chapter_url}")
                 return None
+            
+            logger.info(f"成功获取章节页面,状态码: {response.status_code}")
+            logger.info(f"页面内容长度: {len(response.text)}")
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
@@ -641,6 +645,40 @@ class KanuNu8Scraper(BaseEbookScraper):
                     content = '\n\n'.join(content_parts)
                     logger.info(f"使用备用方法提取 {len(all_p)} 个段落")
             
+            # 如果还是没找到,尝试更通用的方法
+            if not content:
+                logger.info("尝试通用方法提取内容")
+                # 方法3: 查找所有可能包含文本的标签
+                content_parts = []
+                all_tags = soup.find_all(['p', 'div', 'span'])
+                logger.info(f"找到 {len(all_tags)} 个p/div/span标签")
+                
+                for tag in all_tags:
+                    text = tag.get_text(strip=True)
+                    if text and len(text) > 20:  # 过滤掉太短的文本
+                        content_parts.append(text)
+                
+                if content_parts:
+                    content = '\n\n'.join(content_parts)
+                    logger.info(f"使用通用方法提取 {len(content_parts)} 个文本块")
+                else:
+                    logger.warning("通用方法也未找到有效内容")
+            
+            # 最后的备选方案: 提取body的所有文本
+            if not content:
+                logger.info("使用body文本作为最后备选方案")
+                body = soup.find('body')
+                if body:
+                    content = body.get_text(separator='\n', strip=True)
+                    logger.info(f"body文本长度: {len(content)}")
+                else:
+                    logger.error("连body标签都找不到")
+            
+            if not content:
+                logger.error("所有方法都无法提取到内容")
+            else:
+                logger.info(f"最终提取内容长度: {len(content)}")
+            
             return {
                 'id': chapter_id,
                 'title': title,
@@ -654,15 +692,27 @@ class KanuNu8Scraper(BaseEbookScraper):
     
     def _build_chapter_url(self, chapter_id):
         """构建章节URL"""
-        # 示例: book2_11009_119534 -> /book2/11009/119534.html
+        logger.info(f"构建章节URL, chapter_id: {chapter_id}")
+        
+        # 示例: book5_daqiaoxqiao_141687 -> /book5/daqiaoxqiao/141687.html
         parts = chapter_id.split('_')
         if len(parts) >= 3:
             book_folder = parts[0]
-            book_num = parts[1]
+            book_name = parts[1]
             chapter_num = parts[2]
-            return f'{self.base_url}/{book_folder}/{book_num}/{chapter_num}.html'
+            url = f'{self.base_url}/{book_folder}/{book_name}/{chapter_num}.html'
+            logger.info(f"构建的章节URL: {url}")
+            return url
         
-        return f'{self.base_url}/{chapter_id}.html'
+        # 处理其他格式,如 141687.htm
+        if chapter_id.endswith('.htm'):
+            url = f'{self.base_url}/book5/daqiaoxqiao/{chapter_id}'
+            logger.info(f"构建的章节URL(备用格式): {url}")
+            return url
+        
+        url = f'{self.base_url}/{chapter_id}.html'
+        logger.info(f"构建的章节URL(默认): {url}")
+        return url
     
     def search_books(self, keyword, page=1, limit=20):
         """搜索书籍"""
