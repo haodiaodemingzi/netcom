@@ -174,4 +174,16 @@ export const getEbookSources = async () => {
   return apiClient.get('/ebooks/sources');
 };
 
+// 获取所有书籍元数据
+export const getAllBooksMetadata = async (source = null, forceReload = false) => {
+  const params = { force_reload: forceReload };
+  if (source) params.source = source;
+  return apiClient.get('/ebooks/metadata/all', { params });
+};
+
+// 获取元数据加载状态
+export const getMetadataStatus = async () => {
+  return apiClient.get('/ebooks/metadata/status');
+};
+
 export default apiClient;
