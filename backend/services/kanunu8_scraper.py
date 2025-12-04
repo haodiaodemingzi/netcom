@@ -423,9 +423,10 @@ class KanuNu8Scraper(BaseEbookScraper):
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 提取书名和作者
+            # 提取书名、作者和简介
             title = ''
             author = ''
+            description = ''
             
             # 从 .catalog 容器中提取书名和作者
             catalog = soup.select_one('.catalog')
@@ -442,6 +443,21 @@ class KanuNu8Scraper(BaseEbookScraper):
                     # 解析 "作者：桐华" 格式
                     if '：' in info_text or ':' in info_text:
                         author = re.split(r'[：:]', info_text, 1)[1].strip()
+                
+                # 提取简介: body > div.page > div.content > div.catalog > div.summary > div
+                summary_div = catalog.select_one('.summary > div')
+                if summary_div:
+                    description = summary_div.get_text(strip=True)
+                else:
+                    # 尝试其他可能的选择器
+                    summary_div = soup.select_one('body > div.page > div.content > div.catalog > div.summary > div')
+                    if summary_div:
+                        description = summary_div.get_text(strip=True)
+                    else:
+                        # 再尝试其他选择器
+                        summary_div = soup.select_one('.summary')
+                        if summary_div:
+                            description = summary_div.get_text(strip=True)
             
             # 如果没找到,尝试从页面标题提取
             if not title:
@@ -456,6 +472,7 @@ class KanuNu8Scraper(BaseEbookScraper):
                 'id': book_id,
                 'title': title,
                 'author': author,
+                'description': description,
                 'url': book_url,
                 'chapters': chapters_data['chapters'],
                 'totalChapters': chapters_data['total']

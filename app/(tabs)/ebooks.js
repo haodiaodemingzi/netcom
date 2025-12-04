@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,33 +7,120 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BookCard from '../../components/BookCard';
 import {
-  ebookCategories,
-  ebookSources,
-  getBooksByCategory,
-} from '../../mock/ebooks';
+  getEbookCategories,
+  getEbooksByCategory,
+  getEbookSources,
+} from '../../services/api';
 
 const EbookTabScreen = () => {
-  const [selectedSource, setSelectedSource] = useState('localMock');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSource, setSelectedSource] = useState('kanunu8');
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [sources, setSources] = useState({});
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const categories = useMemo(
-    () => [{ id: 'all', name: '全部' }, ...ebookCategories],
-    []
-  );
+  // 加载数据源列表
+  useEffect(() => {
+    loadSources();
+  }, []);
 
-  const books = useMemo(
-    () => getBooksByCategory(selectedCategory),
-    [selectedCategory]
-  );
+  // 加载分类列表
+  useEffect(() => {
+    if (selectedSource) {
+      loadCategories();
+    }
+  }, [selectedSource]);
 
-  const handleRefresh = () => {
+  // 加载书籍列表
+  useEffect(() => {
+    if (selectedCategory) {
+      loadBooks(true);
+    }
+  }, [selectedCategory]);
+
+  const loadSources = async () => {
+    try {
+      const data = await getEbookSources();
+      setSources(data.sources || {});
+    } catch (error) {
+      console.error('加载数据源失败:', error);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const data = await getEbookCategories(selectedSource);
+      // 过滤掉作家相关分类
+      const filteredCategories = ( data.categories?.filter(cat => 
+        cat.type !== 'writer' && 
+        !cat.id.startsWith('writer_') &&
+        cat.group && !cat.group.includes('作家')
+      ) || []);
+      
+      setCategories(filteredCategories);
+      // 默认选择第一个非作家分类
+      if (filteredCategories.length > 0) {
+        setSelectedCategory(filteredCategories[0].id);
+      }
+    } catch (error) {
+      console.error('加载分类失败:', error);
+      setCategories([]);
+    }
+  };
+
+  const loadBooks = async (reset = false) => {
+    if (loading) return;
+    
+    try {
+      setLoading(true);
+      const currentPage = reset ? 1 : page;
+      const data = await getEbooksByCategory(
+        selectedCategory,
+        currentPage,
+        20,
+        selectedSource
+      );
+      
+      if (reset) {
+        setBooks(data.books || []);
+        setPage(1);
+      } else {
+        setBooks(prev => [...prev, ...(data.books || [])]);
+      }
+      
+      setHasMore(data.hasMore || false);
+      if (!reset) {
+        setPage(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('加载书籍失败:', error);
+      if (reset) {
+        setBooks([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+    await loadBooks(true);
+    setRefreshing(false);
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !loading) {
+      loadBooks(false);
+    }
   };
 
   return (
@@ -42,17 +129,13 @@ const EbookTabScreen = () => {
         <Text style={styles.title}>电子书</Text>
         <TouchableOpacity style={styles.sourceButton}>
           <Text style={styles.sourceText}>
-            {ebookSources[selectedSource]?.name || '数据源'}
+            {sources[selectedSource]?.name || '努努书坊'}
           </Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.categoryBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryContent}
-        >
+        <View style={styles.categoryContent}>
           {categories.map((category) => (
             <TouchableOpacity
               key={category.id}
@@ -72,7 +155,7 @@ const EbookTabScreen = () => {
               </Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </View>
       </View>
 
       <FlatList
@@ -92,22 +175,23 @@ const EbookTabScreen = () => {
             colors={['#6200EE']}
           />
         }
-        ListHeaderComponent={() => (
-          <View style={styles.listHeader}>
-            <View style={styles.mockHint}>
-              <Text style={styles.mockHintTitle}>当前展示为 Mock 数据</Text>
-              <Text style={styles.mockHintDesc}>
-                接入真实采集源后，只需替换 API 数据源，即可无缝切换。
-              </Text>
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={() =>
+          loading && !refreshing ? (
+            <View style={styles.loadingFooter}>
+              <ActivityIndicator size="small" color="#6200EE" />
             </View>
-          </View>
-        )}
+          ) : null
+        }
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={() => (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>暂无电子书</Text>
-          </View>
-        )}
+        ListEmptyComponent={() =>
+          !loading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>暂无电子书</Text>
+            </View>
+          ) : null
+        }
       />
     </SafeAreaView>
   );
@@ -150,15 +234,16 @@ const styles = StyleSheet.create({
   },
   categoryContent: {
     paddingHorizontal: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
+    paddingVertical: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   categoryChip: {
-    paddingHorizontal: 16,
-    height: 40,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#f5f5f5',
-    marginHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -166,7 +251,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200EE',
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
   },
   categoryTextActive: {
@@ -181,27 +266,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   columnWrapper: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   cardWrapper: {
     width: '50%',
   },
-  mockHint: {
-    backgroundColor: '#EDE7F6',
-    marginHorizontal: 12,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  mockHintTitle: {
-    fontSize: 14,
-    color: '#4527A0',
-    fontWeight: '600',
-  },
-  mockHintDesc: {
-    fontSize: 12,
-    color: '#4527A0',
-    marginTop: 4,
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   empty: {
     padding: 40,
