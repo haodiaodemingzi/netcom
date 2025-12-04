@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   TextInput,
   Linking,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BookCard from '../../components/BookCard';
@@ -35,6 +36,7 @@ const EbookTabScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [allBooksMetadata, setAllBooksMetadata] = useState([]);
   const [metadataLoading, setMetadataLoading] = useState(false);
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
 
   // 加载数据源列表和元数据
   useEffect(() => {
@@ -103,34 +105,39 @@ const EbookTabScreen = () => {
       // 后台静默更新,不阻塞UI
       setTimeout(async () => {
         try {
-          console.log('开始刷新元数据...');
+          console.log('触发后台元数据加载...');
           setMetadataLoading(true);
           
-          // 强制刷新后端数据
-          const response = await getAllBooksMetadata(selectedSource, true);
+          // 触发后台加载(立即返回)
+          const response = await getAllBooksMetadata(selectedSource, cachedData ? true : false);
           
-          if (response.is_loading) {
-            console.log('元数据正在后台加载中...');
-            // 10秒后再次检查
-            setTimeout(() => checkMetadataStatus(), 10000);
-          } else if (response.books && response.books.length > 0) {
+          console.log(`后台响应: ${response.message}, 当前${response.total}本书`);
+          
+          // 如果有数据,立即更新
+          if (response.books && response.books.length > 0) {
             const saveData = {
               ...response,
-              last_updated: Date.now() / 1000, // 保存当前时间戳
+              last_updated: response.last_updated || Date.now() / 1000,
               cached_at: new Date().toISOString()
             };
             
             setAllBooksMetadata(response.books);
             await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-            console.log(`元数据刷新完成: ${response.books.length}本书籍`);
+            console.log(`元数据已更新: ${response.books.length}本书籍`);
           }
           
-          setMetadataLoading(false);
+          // 如果正在加载,定期检查状态
+          if (response.is_loading) {
+            console.log('后台正在加载元数据,启动定期检查...');
+            setTimeout(() => checkMetadataStatus(), 10000);
+          }
+          
+          setMetadataLoading(response.is_loading);
         } catch (error) {
-          console.error('刷新元数据失败:', error);
+          console.error('触发元数据加载失败:', error);
           setMetadataLoading(false);
         }
-      }, 2000); // 延迟2秒启动,让主界面先加载
+      }, 1000); // 延迟1秒启动,让主界面先加载
       
     } catch (error) {
       console.error('加载缓存失败:', error);
@@ -141,26 +148,35 @@ const EbookTabScreen = () => {
   const checkMetadataStatus = async () => {
     try {
       const status = await getMetadataStatus();
+      
+      console.log(`状态检查: ${status.total}本书, 加载中: ${status.is_loading}`);
+      
       if (!status.is_loading && status.total > 0) {
-        // 加载完成,获取数据
+        // 加载完成,获取最新数据
         const response = await getAllBooksMetadata(selectedSource);
         if (response.books && response.books.length > 0) {
           const saveData = {
             ...response,
-            last_updated: Date.now() / 1000,
+            last_updated: response.last_updated || Date.now() / 1000,
             cached_at: new Date().toISOString()
           };
           
           setAllBooksMetadata(response.books);
           await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-          console.log(`元数据加载完成: ${response.books.length}本书籍`);
+          console.log(`✅ 元数据加载完成: ${response.books.length}本书籍`);
+          setMetadataLoading(false);
         }
       } else if (status.is_loading) {
-        // 还在加载,10秒后再检查
-        setTimeout(() => checkMetadataStatus(), 10000);
+        // 还在加载,15秒后再检查
+        console.log('⏳ 后台仍在加载,15秒后再次检查...');
+        setTimeout(() => checkMetadataStatus(), 15000);
+      } else {
+        // 未加载且无数据,停止检查
+        setMetadataLoading(false);
       }
     } catch (error) {
       console.error('检查元数据状态失败:', error);
+      setMetadataLoading(false);
     }
   };
 
@@ -341,53 +357,100 @@ const EbookTabScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* 顶部导航栏 - 一行布局 */}
       <View style={styles.header}>
-        <Text style={styles.title}>电子书</Text>
-        <TouchableOpacity style={styles.sourceButton}>
-          <Text style={styles.sourceText}>
-            {sources[selectedSource]?.name || '努努书坊'}
+        {/* 标题 - 搜索栏 - 数据源 */}
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>电子书</Text>
+          
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder={allBooksMetadata.length > 0 
+                ? `搜索${allBooksMetadata.length}本...` 
+                : "搜索..."}
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity 
+                style={styles.clearButton}
+                onPress={() => setSearchQuery('')}
+              >
+                <Text style={styles.clearButtonText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.sourceButton}
+            onPress={() => setShowSourcePicker(true)}
+          >
+            <Text style={styles.sourceText}>
+              {sources[selectedSource]?.name || '努努书坊'}
+            </Text>
+            <Text style={styles.sourceArrow}>▼</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* 缓存信息或搜索结果 */}
+        {searchQuery.length > 0 ? (
+          <Text style={styles.infoText}>
+            找到 {filteredBooks.length} 本{allBooksMetadata.length > 0 && ' (全站)'}
           </Text>
-        </TouchableOpacity>
+        ) : allBooksMetadata.length > 0 && cacheInfo ? (
+          <Text style={styles.infoText}>
+            数据库: {allBooksMetadata.length}本 | {cacheInfo}
+          </Text>
+        ) : null}
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={allBooksMetadata.length > 0 
-            ? `搜索全部${allBooksMetadata.length}本书...` 
-            : "搜索当前分类..."}
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity 
-            style={styles.clearButton}
-            onPress={() => setSearchQuery('')}
-          >
-            <Text style={styles.clearButtonText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      {/* 缓存信息提示 */}
-      {allBooksMetadata.length > 0 && cacheInfo && (
-        <View style={styles.cacheInfoHint}>
-          <Text style={styles.cacheInfoText}>
-            数据库: {allBooksMetadata.length}本书 | {cacheInfo}
-          </Text>
-        </View>
-      )}
-      
-      {/* 搜索结果提示 */}
-      {searchQuery.length > 0 && (
-        <View style={styles.searchResultHint}>
-          <Text style={styles.searchResultText}>
-            找到 {filteredBooks.length} 本书籍
-            {allBooksMetadata.length > 0 && ` (全站搜索)`}
-          </Text>
-        </View>
-      )}
+      {/* 数据源选择器 */}
+      <Modal
+        visible={showSourcePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSourcePicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSourcePicker(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>选择数据源</Text>
+              <TouchableOpacity onPress={() => setShowSourcePicker(false)}>
+                <Text style={styles.pickerClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {Object.entries(sources).map(([key, source]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.pickerItem,
+                  selectedSource === key && styles.pickerItemActive
+                ]}
+                onPress={() => {
+                  setSelectedSource(key);
+                  setShowSourcePicker(false);
+                }}
+              >
+                <Text style={[
+                  styles.pickerItemText,
+                  selectedSource === key && styles.pickerItemTextActive
+                ]}>
+                  {source.name}
+                </Text>
+                {selectedSource === key && (
+                  <Text style={styles.pickerCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <View style={styles.categoryBar}>
         <View style={styles.categoryContent}>
@@ -460,48 +523,62 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f7f7',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomColor: '#e0e0e0',
     borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#111',
+    minWidth: 60,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 38,
   },
   sourceButton: {
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 16,
+    borderRadius: 8,
     backgroundColor: '#f0f0f0',
+    height: 38,
+    minWidth: 90,
   },
   sourceText: {
     fontSize: 13,
     color: '#666',
+    fontWeight: '500',
+    marginRight: 4,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  sourceArrow: {
+    fontSize: 10,
+    color: '#999',
+  },
+  infoText: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 8,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingRight: 120,
     fontSize: 14,
     color: '#333',
+    paddingRight: 40,
   },
   googleButton: {
     position: 'absolute',
@@ -519,42 +596,75 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   clearButton: {
-    position: 'absolute',
-    right: 20,
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: '#ccc',
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
   clearButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
   },
-  searchResultHint: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f0f8ff',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '80%',
+    maxWidth: 300,
+    maxHeight: '70%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  searchResultText: {
-    fontSize: 12,
-    color: '#666',
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111',
   },
-  cacheInfoHint: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: '#f8f9fa',
+  pickerClose: {
+    fontSize: 24,
+    color: '#999',
+    fontWeight: '300',
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderBottomColor: '#f0f0f0',
   },
-  cacheInfoText: {
-    fontSize: 11,
-    color: '#6c757d',
-    fontStyle: 'italic',
+  pickerItemActive: {
+    backgroundColor: '#f8f9fa',
+  },
+  pickerItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  pickerItemTextActive: {
+    color: '#6200EE',
+    fontWeight: '600',
+  },
+  pickerCheck: {
+    fontSize: 18,
+    color: '#6200EE',
+    fontWeight: 'bold',
   },
   categoryBar: {
     backgroundColor: '#fff',

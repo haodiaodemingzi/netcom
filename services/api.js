@@ -186,4 +186,14 @@ export const getMetadataStatus = async () => {
   return apiClient.get('/ebooks/metadata/status');
 };
 
+// 获取元数据配置
+export const getMetadataConfig = async () => {
+  return apiClient.get('/ebooks/metadata/config');
+};
+
+// 更新元数据配置
+export const updateMetadataConfig = async (config) => {
+  return apiClient.post('/ebooks/metadata/config', config);
+};
+
 export default apiClient;
