@@ -115,4 +115,85 @@ export const getCategories = async (source = null) => {
   return apiClient.get('/categories', { params });
 };
 
+// ==================== 电子书 API ====================
+
+// 获取电子书分类列表
+export const getEbookCategories = async (source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get('/ebooks/categories', { params });
+};
+
+// 获取分类下的电子书列表
+export const getEbooksByCategory = async (
+  categoryId,
+  page = 1,
+  limit = 20,
+  source = null
+) => {
+  const params = { page, limit };
+  if (source) params.source = source;
+  return apiClient.get(`/ebooks/category/${categoryId}`, { params });
+};
+
+// 获取电子书详情
+export const getEbookDetail = async (bookId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/ebooks/${bookId}`, { params });
+};
+
+// 获取电子书章节列表
+export const getEbookChapters = async (bookId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/ebooks/${bookId}/chapters`, { params });
+};
+
+// 获取章节内容
+export const getChapterContent = async (chapterId, source = null) => {
+  const params = {};
+  if (source) params.source = source;
+  return apiClient.get(`/ebooks/chapters/${chapterId}/content`, { params });
+};
+
+// 搜索电子书
+export const searchEbooks = async (
+  keyword,
+  page = 1,
+  limit = 20,
+  source = null
+) => {
+  const params = { keyword, page, limit };
+  if (source) params.source = source;
+  return apiClient.get('/ebooks/search', { params });
+};
+
+// 获取电子书数据源列表
+export const getEbookSources = async () => {
+  return apiClient.get('/ebooks/sources');
+};
+
+// 获取所有书籍元数据
+export const getAllBooksMetadata = async (source = null, forceReload = false) => {
+  const params = { force_reload: forceReload };
+  if (source) params.source = source;
+  return apiClient.get('/ebooks/metadata/all', { params });
+};
+
+// 获取元数据加载状态
+export const getMetadataStatus = async () => {
+  return apiClient.get('/ebooks/metadata/status');
+};
+
+// 获取元数据配置
+export const getMetadataConfig = async () => {
+  return apiClient.get('/ebooks/metadata/config');
+};
+
+// 更新元数据配置
+export const updateMetadataConfig = async (config) => {
+  return apiClient.post('/ebooks/metadata/config', config);
+};
+
 export default apiClient;

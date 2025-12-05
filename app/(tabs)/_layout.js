@@ -13,10 +13,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '首页',
+          title: '漫画',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons 
-              name="home" 
+              name="book-open-variant" 
               size={size} 
               color={color} 
             />
@@ -24,40 +24,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="series"
+        name="ebooks"
         options={{
-          title: '短剧',
+          title: '电子书',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="play-circle" 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="novel"
-        options={{
-          title: '小说',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="book-open" 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: '搜索',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="magnify" 
-              size={size} 
-              color={color} 
+            <MaterialCommunityIcons
+              name="book-open-page-variant"
+              size={size}
+              color={color}
             />
           ),
         }}
@@ -86,6 +60,12 @@ export default function TabLayout() {
               color={color} 
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
