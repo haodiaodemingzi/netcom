@@ -247,6 +247,15 @@ const ProfileScreen = () => {
             </View>
           )}
           {renderRadioSetting(
+            '显示模式',
+            settings.viewMode || 'card',
+            [
+              { label: '卡片', value: 'card' },
+              { label: '列表', value: 'list' },
+            ],
+            (value) => handleSettingChange('viewMode', value)
+          )}
+          {renderRadioSetting(
             '阅读模式',
             settings.scrollMode || 'horizontal',
             [

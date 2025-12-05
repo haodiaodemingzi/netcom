@@ -2,8 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const BookCard = ({ book }) => {
+const BookCard = ({ book, viewMode = 'card' }) => {
   const router = useRouter();
+  const isList = viewMode === 'list';
 
   const handlePress = () => {
     router.push(`/ebook/${book.id}?source=kanunu8`);
@@ -22,15 +23,19 @@ const BookCard = ({ book }) => {
   const backgroundColor = getRandomColor(book.id);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.7}>
-      <View style={[styles.cover, { backgroundColor }]}>
-        <Text style={styles.bookIcon}>📖</Text>
+    <TouchableOpacity 
+      style={[styles.card, isList && styles.cardList]} 
+      onPress={handlePress} 
+      activeOpacity={0.7}
+    >
+      <View style={[styles.cover, isList && styles.coverList, { backgroundColor }]}>
+        <Text style={[styles.bookIcon, isList && styles.bookIconList]}>📖</Text>
       </View>
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>
+      <View style={[styles.info, isList && styles.infoList]}>
+        <Text style={[styles.title, isList && styles.titleList]} numberOfLines={isList ? 1 : 2}>
           {book.title}
         </Text>
-        <Text style={styles.author} numberOfLines={1}>
+        <Text style={[styles.author, isList && styles.authorList]} numberOfLines={1}>
           {book.author}
         </Text>
       </View>
@@ -51,18 +56,45 @@ const styles = StyleSheet.create({
     shadowRadius: 1,
     overflow: 'hidden',
   },
+  cardList: {
+    flexDirection: 'row',
+    marginHorizontal: 8,
+    marginVertical: 4,
+    borderRadius: 6,
+    borderBottomWidth: 0,
+    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
   cover: {
     width: '100%',
     aspectRatio: 0.9,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  coverList: {
+    width: 65,
+    aspectRatio: 0.75,
+    borderRadius: 4,
+    margin: 6,
+  },
   bookIcon: {
     fontSize: 24,
     color: 'rgba(255, 255, 255, 0.8)',
   },
+  bookIconList: {
+    fontSize: 20,
+  },
   info: {
     padding: 6,
+  },
+  infoList: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingRight: 10,
+    paddingLeft: 0,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 12,
@@ -70,9 +102,16 @@ const styles = StyleSheet.create({
     color: '#111',
     marginBottom: 1,
   },
+  titleList: {
+    fontSize: 15,
+    marginBottom: 3,
+  },
   author: {
     fontSize: 10,
     color: '#666',
+  },
+  authorList: {
+    fontSize: 13,
   },
 });
 

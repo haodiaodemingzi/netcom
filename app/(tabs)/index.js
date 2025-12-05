@@ -23,7 +23,7 @@ import {
   getComicsByCategory,
   searchComics,
 } from '../../services/api';
-import { getCurrentSource, setCurrentSource } from '../../services/storage';
+import { getCurrentSource, setCurrentSource, getSettings } from '../../services/storage';
 import downloadManager from '../../services/downloadManager';
 
 const HomeScreen = () => {
@@ -47,9 +47,11 @@ const HomeScreen = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [viewMode, setViewMode] = useState('card');
 
   useEffect(() => {
     loadInitialData();
+    loadViewMode();
     
     // 监听下载状态更新下载数量
     const unsubscribe = downloadManager.subscribe((state) => {
@@ -61,6 +63,26 @@ const HomeScreen = () => {
     
     return () => unsubscribe();
   }, []);
+
+  // 监听设置变化
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadViewMode();
+    }, 1000); // 每秒检查一次设置变化
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadViewMode = async () => {
+    try {
+      const settings = await getSettings();
+      if (settings.viewMode) {
+        setViewMode(settings.viewMode);
+      }
+    } catch (error) {
+      console.error('加载视图模式设置失败:', error);
+    }
+  };
 
   // 分类或数据源变化时，重置并加载第一页
   useEffect(() => {
@@ -323,8 +345,11 @@ const loadComics = async (isRefresh = false) => {
   };
 
   const renderItem = ({ item }) => (
-    <View style={styles.cardWrapper}>
-      <ComicCard comic={item} />
+    <View style={[
+      styles.cardWrapper,
+      viewMode === 'list' && styles.cardWrapperList
+    ]}>
+      <ComicCard comic={item} viewMode={viewMode} />
     </View>
   );
 
@@ -408,11 +433,16 @@ const loadComics = async (isRefresh = false) => {
         renderLoadingSkeleton()
       ) : (
         <FlatList
+          key={viewMode}
           data={displayComics}
           renderItem={renderItem}
           keyExtractor={(item, index) => `${item.id}-${index}`}
-          numColumns={3}
-          contentContainerStyle={styles.listContent}
+          numColumns={viewMode === 'list' ? 1 : 3}
+          columnWrapperStyle={viewMode === 'list' ? null : undefined}
+          contentContainerStyle={[
+            styles.listContent,
+            viewMode === 'list' && styles.listContentList
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -661,9 +691,18 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 0.5,
   },
+  listContentList: {
+    padding: 0,
+  },
   cardWrapper: {
     width: '33.333%',
     padding: 0.5,
+  },
+  cardWrapperList: {
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginBottom: 0,
   },
   emptyContainer: {
     padding: 40,

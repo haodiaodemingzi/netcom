@@ -143,6 +143,7 @@ export const getSettings = async () => {
       darkMode: false,
       autoLoadHD: false,
       maxConcurrentDownloads: 10,
+      viewMode: 'card', // 默认卡片视图
     };
   } catch (error) {
     return {};

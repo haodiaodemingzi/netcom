@@ -22,6 +22,7 @@ import {
   getMetadataStatus,
 } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSettings } from '../../services/storage';
 
 const EbookTabScreen = () => {
   const [selectedSource, setSelectedSource] = useState('kanunu8');
@@ -38,6 +39,32 @@ const EbookTabScreen = () => {
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [viewMode, setViewMode] = useState('card');
+
+  // 加载设置
+  useEffect(() => {
+    loadViewMode();
+  }, []);
+
+  // 监听设置变化
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadViewMode();
+    }, 1000); // 每秒检查一次设置变化
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadViewMode = async () => {
+    try {
+      const settings = await getSettings();
+      if (settings.viewMode) {
+        setViewMode(settings.viewMode);
+      }
+    } catch (error) {
+      console.error('加载视图模式设置失败:', error);
+    }
+  };
 
   // 加载数据源列表和元数据
   useEffect(() => {
@@ -488,15 +515,19 @@ const EbookTabScreen = () => {
       </View>
 
       <FlatList
+        key={viewMode}
         data={filteredBooks}
         keyExtractor={(item, index) => `${item.id || ''}-${index}`}
         renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <BookCard book={item} />
+          <View style={[
+            styles.cardWrapper,
+            viewMode === 'list' && styles.cardWrapperList
+          ]}>
+            <BookCard book={item} viewMode={viewMode} />
           </View>
         )}
-        numColumns={3}
-        columnWrapperStyle={styles.columnWrapper}
+        numColumns={viewMode === 'list' ? 1 : 3}
+        columnWrapperStyle={viewMode === 'list' ? null : styles.columnWrapper}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -513,7 +544,10 @@ const EbookTabScreen = () => {
             </View>
           ) : null
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          viewMode === 'list' && styles.listContentList
+        ]}
         ListEmptyComponent={() =>
           !loading ? (
             <View style={styles.empty}>
@@ -750,6 +784,15 @@ const styles = StyleSheet.create({
   cardWrapper: {
     width: '33.333%',
     padding: 2,
+  },
+  cardWrapperList: {
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginBottom: 0,
+  },
+  listContentList: {
+    padding: 0,
   },
   loadingFooter: {
     paddingVertical: 20,
