@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -21,13 +21,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PlayerScreen = () => {
   const router = useRouter();
   const { episodeId } = useLocalSearchParams();
-  const videoRef = useRef(null);
   
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(true); // 默认全屏
   const [quality, setQuality] = useState('high'); // high, medium, low
@@ -37,9 +33,42 @@ const PlayerScreen = () => {
   const controlsTimeoutRef = useRef(null);
   const progressBarRef = useRef(null);
 
+  // 使用 expo-video 的 useVideoPlayer hook
+  const player = useVideoPlayer(episode?.videoUrl || '', (player) => {
+    if (player) {
+      player.loop = false;
+      player.muted = false;
+    }
+  });
+
   useEffect(() => {
     loadEpisode();
   }, [episodeId]);
+
+  useEffect(() => {
+    if (episode?.videoUrl && player) {
+      player.replace(episode.videoUrl);
+    }
+  }, [episode?.videoUrl]);
+
+  // 监听播放状态
+  useEffect(() => {
+    if (!player) return;
+
+    const interval = setInterval(() => {
+      if (player.playing) {
+        const currentTime = player.currentTime;
+        const duration = player.duration;
+        
+        // 每 5 秒保存一次进度
+        if (Math.floor(currentTime) % 5 === 0 && duration > 0) {
+          savePlaybackProgress(episodeId, currentTime, duration);
+        }
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [player, episodeId]);
 
   const loadEpisode = async () => {
     setLoading(true);
@@ -59,25 +88,12 @@ const PlayerScreen = () => {
     }
   };
 
-  const handlePlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setCurrentTime(status.positionMillis / 1000);
-      setDuration(status.durationMillis / 1000);
-      setIsPlaying(status.isPlaying);
-
-      // 每 5 秒保存一次进度
-      if (Math.floor(status.positionMillis / 1000) % 5 === 0) {
-        savePlaybackProgress(episodeId, status.positionMillis / 1000, status.durationMillis / 1000);
-      }
-    }
-  };
-
   const handlePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pauseAsync();
+    if (player) {
+      if (player.playing) {
+        player.pause();
       } else {
-        videoRef.current.playAsync();
+        player.play();
       }
     }
   };
@@ -97,21 +113,21 @@ const PlayerScreen = () => {
   };
 
   const handleProgressPress = (event) => {
-    if (!progressBarRef.current) return;
+    if (!progressBarRef.current || !player) return;
     
     progressBarRef.current.measure((x, y, width) => {
       const touchX = event.nativeEvent.locationX;
       const percentage = touchX / width;
-      const newTime = percentage * duration;
+      const newTime = percentage * player.duration;
       
       setIsDraggingProgress(true);
       setDraggedTime(newTime);
     });
   };
 
-  const handleProgressRelease = async () => {
-    if (videoRef.current && isDraggingProgress) {
-      await videoRef.current.setPositionAsync(draggedTime * 1000);
+  const handleProgressRelease = () => {
+    if (player && isDraggingProgress) {
+      player.currentTime = draggedTime;
       setIsDraggingProgress(false);
     }
   };
@@ -167,15 +183,14 @@ const PlayerScreen = () => {
         onPress={handleControlsPress}
         activeOpacity={1}
       >
-        <Video
-          ref={videoRef}
-          source={{ uri: episode.videoUrl }}
-          style={styles.video}
-          useNativeControls={false}
-          resizeMode="contain"
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          progressUpdateIntervalMillis={500}
-        />
+        {player && (
+          <VideoView
+            player={player}
+            style={styles.video}
+            nativeControls={false}
+            contentFit="contain"
+          />
+        )}
 
         {showControls && (
           <View style={styles.controls}>
@@ -228,14 +243,16 @@ const PlayerScreen = () => {
                 onPress={handlePlayPause}
               >
                 <Text style={styles.playButtonText}>
-                  {isPlaying ? '⏸' : '▶'}
+                  {player?.playing ? '⏸' : '▶'}
                 </Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.bottomControls}>
               <View style={styles.progressContainer}>
-                <Text style={styles.timeText}>{formatTime(isDraggingProgress ? draggedTime : currentTime)}</Text>
+                <Text style={styles.timeText}>
+                  {formatTime(isDraggingProgress ? draggedTime : (player?.currentTime || 0))}
+                </Text>
                 <TouchableOpacity
                   ref={progressBarRef}
                   style={styles.progressBar}
@@ -245,17 +262,21 @@ const PlayerScreen = () => {
                   <View
                     style={[
                       styles.progressFill,
-                      { width: `${((isDraggingProgress ? draggedTime : currentTime) / duration) * 100}%` }
+                      { 
+                        width: `${player?.duration ? (((isDraggingProgress ? draggedTime : (player.currentTime || 0)) / player.duration) * 100) : 0}%` 
+                      }
                     ]}
                   />
                   <View
                     style={[
                       styles.progressDot,
-                      { left: `${((isDraggingProgress ? draggedTime : currentTime) / duration) * 100}%` }
+                      { 
+                        left: `${player?.duration ? (((isDraggingProgress ? draggedTime : (player.currentTime || 0)) / player.duration) * 100) : 0}%` 
+                      }
                     ]}
                   />
                 </TouchableOpacity>
-                <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                <Text style={styles.timeText}>{formatTime(player?.duration || 0)}</Text>
               </View>
 
               <View style={styles.bottomButtonsContainer}>

@@ -55,7 +55,7 @@ export default function TabLayout() {
           title: '设置',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons 
-              name="account" 
+              name="account"
               size={size} 
               color={color} 
             />
@@ -64,6 +64,18 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="search"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="novel"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="series"
         options={{
           href: null,
         }}

@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -11,6 +11,14 @@ import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
 import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
+
+// 使用 legacy API 的辅助函数（避免弃用警告，但功能正常）
+const getInfoAsync = FileSystem.getInfoAsync.bind(FileSystem);
+const makeDirectoryAsync = FileSystem.makeDirectoryAsync.bind(FileSystem);
+const readAsStringAsync = FileSystem.readAsStringAsync.bind(FileSystem);
+const writeAsStringAsync = FileSystem.writeAsStringAsync.bind(FileSystem);
+const deleteAsync = FileSystem.deleteAsync.bind(FileSystem);
+const downloadAsync = FileSystem.downloadAsync.bind(FileSystem);
 
 class DownloadManager {
   constructor() {
@@ -126,9 +134,9 @@ class DownloadManager {
   }
 
   async ensureDownloadDir() {
-    const dirInfo = await FileSystem.getInfoAsync(DOWNLOAD_DIR);
+    const dirInfo = await getInfoAsync(DOWNLOAD_DIR);
     if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(DOWNLOAD_DIR, { intermediates: true });
+      await makeDirectoryAsync(DOWNLOAD_DIR, { intermediates: true });
     }
   }
 
@@ -279,7 +287,7 @@ class DownloadManager {
     const chapterDir = `${DOWNLOAD_DIR}${task.comicId}/${task.chapterId}/`;
     const metaPath = `${chapterDir}meta.json`;
     try {
-      await FileSystem.writeAsStringAsync(
+      await writeAsStringAsync(
         metaPath,
         JSON.stringify(chapterData, null, 2)
       );
@@ -381,9 +389,9 @@ class DownloadManager {
       
       // 删除本地文件
       const chapterDir = `${DOWNLOAD_DIR}${chapterData.comicId}/${chapterId}/`;
-      const dirInfo = await FileSystem.getInfoAsync(chapterDir);
+      const dirInfo = await getInfoAsync(chapterDir);
       if (dirInfo.exists) {
-        await FileSystem.deleteAsync(chapterDir, { idempotent: true });
+        await deleteAsync(chapterDir, { idempotent: true });
         console.log(`已删除章节文件: ${chapterDir}`);
       }
       
@@ -415,7 +423,7 @@ class DownloadManager {
     
     try {
       // 检查目录是否存在
-      const dirInfo = await FileSystem.getInfoAsync(chapterDir);
+      const dirInfo = await getInfoAsync(chapterDir);
       
       if (!dirInfo.exists) {
         console.log('❌ 章节目录不存在');
@@ -425,7 +433,7 @@ class DownloadManager {
       console.log('✓ 章节目录存在');
       
       // 检查meta.json
-      const metaInfo = await FileSystem.getInfoAsync(metaPath);
+      const metaInfo = await getInfoAsync(metaPath);
       if (!metaInfo.exists) {
         console.log('❌ meta.json不存在');
         return null;
@@ -434,7 +442,7 @@ class DownloadManager {
       console.log('✓ meta.json存在');
       
       // 读取元数据
-      const metaContent = await FileSystem.readAsStringAsync(metaPath);
+      const metaContent = await readAsStringAsync(metaPath);
       const meta = JSON.parse(metaContent);
       
       console.log('meta.json内容:', meta);
@@ -448,7 +456,7 @@ class DownloadManager {
         const filepath = `${chapterDir}${filename}`;
         
         // 验证文件是否存在
-        const fileInfo = await FileSystem.getInfoAsync(filepath);
+        const fileInfo = await getInfoAsync(filepath);
         
         if (fileInfo.exists && fileInfo.size > 0) {
           images.push({
@@ -508,6 +516,8 @@ class DownloadManager {
 
   async saveToGallery(chapterDir, totalImages, chapterTitle) {
     try {
+      // 注意：expo-media-library 在 Android 上需要 development build 才能完全访问媒体库
+      // Expo Go 可能无法提供完整权限，这是正常的警告，不影响功能
       // 请求相册权限
       const { status } = await MediaLibrary.requestPermissionsAsync();
       
@@ -529,7 +539,7 @@ class DownloadManager {
           const filepath = `${chapterDir}${filename}`;
           
           // 检查文件是否存在
-          const fileInfo = await FileSystem.getInfoAsync(filepath);
+          const fileInfo = await getInfoAsync(filepath);
           if (!fileInfo.exists) {
             failCount++;
             continue;
@@ -568,7 +578,7 @@ class DownloadManager {
     
     try {
       // 删除文件
-      await FileSystem.deleteAsync(chapterDir, { idempotent: true });
+      await deleteAsync(chapterDir, { idempotent: true });
       
       // 从内存中删除
       this.downloadedChapters.delete(chapterId);
@@ -610,7 +620,7 @@ class DownloadManager {
 
       // 2. 创建下载目录
       const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
-      await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
+      await makeDirectoryAsync(chapterDir, { intermediates: true });
 
       // 3. 如果有cookie_urls，先访问这些URL获取cookie
       let cookieHeader = '';
@@ -650,7 +660,7 @@ class DownloadManager {
 
         try {
           // 使用带cookie的headers下载
-          const downloadResult = await FileSystem.downloadAsync(
+          const downloadResult = await downloadAsync(
             image.url,
             filepath,
             {
@@ -659,7 +669,7 @@ class DownloadManager {
           );
           
           // 验证文件是否真的存在并获取文件信息
-          const fileInfo = await FileSystem.getInfoAsync(filepath);
+          const fileInfo = await getInfoAsync(filepath);
           
           if (fileInfo.exists && fileInfo.size > 0) {
             completed++;
@@ -707,7 +717,7 @@ class DownloadManager {
       };
       
       const metaPath = `${chapterDir}meta.json`;
-      await FileSystem.writeAsStringAsync(metaPath, JSON.stringify(metaData));
+      await writeAsStringAsync(metaPath, JSON.stringify(metaData));
 
       // 5. 记录为已下载
       this.downloadedChapters.set(chapterId, {
@@ -750,12 +760,12 @@ class DownloadManager {
 
   async downloadSingleImage(comicId, chapterId, page, imageUrl) {
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
-    await FileSystem.makeDirectoryAsync(chapterDir, { intermediates: true });
+    await makeDirectoryAsync(chapterDir, { intermediates: true });
     
     const filename = `${String(page).padStart(3, '0')}.jpg`;
     const filepath = `${chapterDir}${filename}`;
     
-    const fileInfo = await FileSystem.getInfoAsync(filepath);
+    const fileInfo = await getInfoAsync(filepath);
     if (fileInfo.exists && fileInfo.size > 0) {
       return filepath;
     }
@@ -773,7 +783,7 @@ class DownloadManager {
       downloadHeaders['Cookie'] = cookies;
     }
     
-    await FileSystem.downloadAsync(imageUrl, filepath, {
+    await downloadAsync(imageUrl, filepath, {
       headers: downloadHeaders
     });
     
@@ -785,7 +795,7 @@ class DownloadManager {
     const filename = `${String(page).padStart(3, '0')}.jpg`;
     const filepath = `${chapterDir}${filename}`;
     
-    const fileInfo = await FileSystem.getInfoAsync(filepath);
+    const fileInfo = await getInfoAsync(filepath);
     if (fileInfo.exists && fileInfo.size > 0) {
       return { url: filepath, isLocal: true, page };
     }

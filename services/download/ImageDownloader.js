@@ -1,5 +1,10 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { TaskStatus } from './DownloadTask';
+
+// 使用 legacy API 的辅助函数（避免弃用警告，但功能正常）
+const getInfoAsync = FileSystem.getInfoAsync.bind(FileSystem);
+const makeDirectoryAsync = FileSystem.makeDirectoryAsync.bind(FileSystem);
+const downloadAsync = FileSystem.downloadAsync.bind(FileSystem);
 
 export class ImageDownloader {
   constructor(maxRetries = 3, retryDelay = 1000, maxConcurrent = 10) {
@@ -21,9 +26,9 @@ export class ImageDownloader {
     const taskDir = `${baseDir}${task.comicId}/${task.chapterId}/`;
     
     try {
-      const dirInfo = await FileSystem.getInfoAsync(taskDir);
+      const dirInfo = await getInfoAsync(taskDir);
       if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(taskDir, { intermediates: true });
+        await makeDirectoryAsync(taskDir, { intermediates: true });
       }
 
       let completedCount = 0;
@@ -110,7 +115,7 @@ export class ImageDownloader {
         return { success: false, cancelled: true };
       }
 
-      const fileInfo = await FileSystem.getInfoAsync(localPath);
+      const fileInfo = await getInfoAsync(localPath);
       if (fileInfo.exists && fileInfo.size > 0) {
         return { success: true, size: fileInfo.size, cached: true };
       }
@@ -141,12 +146,12 @@ export class ImageDownloader {
         console.log(`使用${task.source}的Cookie下载`);
       }
 
-      const downloadResult = await FileSystem.downloadAsync(url, localPath, {
+      const downloadResult = await downloadAsync(url, localPath, {
         headers: downloadHeaders
       });
       
       if (downloadResult.status === 200) {
-        const info = await FileSystem.getInfoAsync(localPath);
+        const info = await getInfoAsync(localPath);
         console.log(`✅ 成功: ${info.size} bytes`);
         return { success: true, size: info.size || 0 };
       } else {
