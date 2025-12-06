@@ -30,6 +30,7 @@ const VideosTabScreen = () => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('hot');
   const [selectedSource, setSelectedSource] = useState('thanju');
   const [sources, setSources] = useState({});
@@ -85,14 +86,14 @@ const VideosTabScreen = () => {
     }
   }, [selectedSource, sources]);
 
-  // 分类或数据源变化时，重置并加载第一页
+  // 分类加载完成后，且已选择分类时，加载视频列表
   useEffect(() => {
-    if (selectedCategory && selectedSource) {
+    if (selectedCategory && selectedSource && !categoriesLoading) {
       setPage(1);
       setVideos([]);
       loadVideos(true);
     }
-  }, [selectedCategory, selectedSource]);
+  }, [selectedCategory, selectedSource, categoriesLoading]);
 
   // 页码变化时，加载更多数据
   useEffect(() => {
@@ -134,6 +135,7 @@ const VideosTabScreen = () => {
   };
 
   const loadCategories = async () => {
+    setCategoriesLoading(true);
     try {
       const sourceToUse = selectedSource || 'thanju';
       console.log('加载分类，使用数据源:', sourceToUse);
@@ -161,6 +163,8 @@ const VideosTabScreen = () => {
         { id: 'hot', name: '热门' },
         { id: 'latest', name: '最新' },
       ]);
+    } finally {
+      setCategoriesLoading(false);
     }
   };
 
@@ -341,37 +345,44 @@ const VideosTabScreen = () => {
       {/* 分类标签 */}
       {!isSearching && (
         <View style={styles.categoryBar}>
-          <View style={styles.categoryContent}>
-            {(showAllCategories ? categories : categories.slice(0, 8)).map((category, index) => (
-              <TouchableOpacity
-                key={`${category.id}-${index}`}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category.id && styles.categoryChipActive,
-                ]}
-                onPress={() => setSelectedCategory(category.id)}
-              >
-                <Text
+          {categoriesLoading ? (
+            <View style={styles.categoryLoadingContainer}>
+              <ActivityIndicator size="small" color="#6200EE" />
+              <Text style={styles.categoryLoadingText}>加载分类中...</Text>
+            </View>
+          ) : (
+            <View style={styles.categoryContent}>
+              {(showAllCategories ? categories : categories.slice(0, 8)).map((category, index) => (
+                <TouchableOpacity
+                  key={`${category.id}-${index}`}
                   style={[
-                    styles.categoryText,
-                    selectedCategory === category.id && styles.categoryTextActive,
+                    styles.categoryChip,
+                    selectedCategory === category.id && styles.categoryChipActive,
                   ]}
+                  onPress={() => setSelectedCategory(category.id)}
                 >
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {categories.length > 8 && (
-              <TouchableOpacity
-                style={styles.moreButton}
-                onPress={() => setShowAllCategories(!showAllCategories)}
-              >
-                <Text style={styles.moreButtonText}>
-                  {showAllCategories ? '收起' : '更多'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === category.id && styles.categoryTextActive,
+                    ]}
+                  >
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {categories.length > 8 && (
+                <TouchableOpacity
+                  style={styles.moreButton}
+                  onPress={() => setShowAllCategories(!showAllCategories)}
+                >
+                  <Text style={styles.moreButtonText}>
+                    {showAllCategories ? '收起' : '更多'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       )}
 
@@ -563,6 +574,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomColor: '#e0e0e0',
     borderBottomWidth: 1,
+  },
+  categoryLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  categoryLoadingText: {
+    fontSize: 14,
+    color: '#666',
   },
   categoryContent: {
     paddingHorizontal: 12,

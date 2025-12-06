@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail } from '../../services/videoApi';
+import EpisodeCard from '../../components/EpisodeCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -28,6 +29,8 @@ const SeriesDetailScreen = () => {
   const [playingEpisode, setPlayingEpisode] = useState(null);
   const [videoSource, setVideoSource] = useState('');
   const [showPlayer, setShowPlayer] = useState(false);
+  const [downloadState, setDownloadState] = useState(null);
+  const [preparingDownloads, setPreparingDownloads] = useState(new Set());
   
   // 视频播放器 - useVideoPlayer会自动响应videoSource的变化
   const player = useVideoPlayer(videoSource || null, (player) => {
@@ -110,6 +113,20 @@ const SeriesDetailScreen = () => {
   useEffect(() => {
     loadData();
   }, [id]);
+
+  // 下载状态管理
+  useEffect(() => {
+    // 初始化时获取当前下载状态
+    // TODO: 如果实现了视频下载管理器，这里需要订阅下载状态更新
+    // 目前先设置为null，表示没有下载功能
+    setDownloadState(null);
+    
+    // 如果将来有视频下载管理器，可以这样订阅：
+    // const unsubscribe = videoDownloadManager.subscribe((state) => {
+    //   setDownloadState(state);
+    // });
+    // return unsubscribe;
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -210,46 +227,87 @@ const SeriesDetailScreen = () => {
     }
   };
 
-  const handleDownloadEpisode = (episode) => {
-    // TODO: 实现视频下载功能
-    Alert.alert('提示', `开始下载: ${episode.title}`);
-  };
+  // 获取集数下载状态
+  const getEpisodeDownloadStatus = useCallback((episodeId) => {
+    if (!downloadState) return null;
+    
+    // 检查是否已下载完成
+    if (downloadState.downloadedEpisodes?.includes(episodeId)) {
+      return 'completed';
+    }
+    
+    // 检查是否在下载队列中
+    const task = downloadState.queue?.find(t => t.episodeId === episodeId);
+    if (task) {
+      return {
+        status: task.status,
+        progress: task.progress || 0
+      };
+    }
+    
+    // 检查是否在准备中
+    if (preparingDownloads.has(episodeId)) {
+      return {
+        status: 'pending',
+        progress: 0
+      };
+    }
+    
+    return null;
+  }, [downloadState, preparingDownloads]);
+
+  const handleDownloadEpisode = useCallback(async (episode) => {
+    setPreparingDownloads(prev => new Set([...prev, episode.id]));
+    
+    try {
+      // TODO: 实现视频下载功能
+      // 如果将来有视频下载管理器，可以这样调用：
+      // await videoDownloadManager.downloadEpisode(
+      //   series.id,
+      //   series.title,
+      //   episode,
+      //   'thanju' // source
+      // );
+      
+      // 目前先显示提示
+      Alert.alert('提示', `开始下载: ${episode.title}\n\n视频下载功能正在开发中...`);
+      
+      // 清除准备状态
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        next.delete(episode.id);
+        return next;
+      });
+    } catch (error) {
+      console.error('下载失败:', error);
+      Alert.alert('错误', '下载失败: ' + error.message);
+      setPreparingDownloads(prev => {
+        const next = new Set(prev);
+        next.delete(episode.id);
+        return next;
+      });
+    }
+  }, [series]);
 
   const handleBatchDownload = () => {
     // TODO: 实现批量下载功能
-    Alert.alert('提示', `开始批量下载 ${episodes.length} 集`);
+    Alert.alert('提示', `开始批量下载 ${episodes.length} 集\n\n批量下载功能正在开发中...`);
   };
 
-  const renderEpisodeCard = ({ item, index }) => (
-    <TouchableOpacity
-      style={styles.episodeCard}
-      onPress={() => handleEpisodePress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.episodeNumber}>
-        <Text style={styles.episodeNumberText}>
-          {item.episodeNumber || index + 1}
-        </Text>
-      </View>
-      <View style={styles.episodeInfo}>
-        <Text style={styles.episodeTitle}>{item.title || `第${item.episodeNumber || index + 1}集`}</Text>
-        {item.playUrl && (
-          <Text style={styles.episodeUrl} numberOfLines={1}>
-            {item.playUrl}
-        </Text>
-        )}
-        <TouchableOpacity
-          style={styles.downloadButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleDownloadEpisode(item);
-          }}
-        >
-          <Text style={styles.downloadButtonText}>下载</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderEpisodeCard = useCallback(({ item, index }) => {
+    const downloadStatus = getEpisodeDownloadStatus(item.id);
+    const isActive = playingEpisode?.id === item.id;
+    
+    return (
+      <EpisodeCard
+        item={item}
+        onPress={handleEpisodePress}
+        onDownload={handleDownloadEpisode}
+        downloadStatus={downloadStatus}
+        isActive={isActive}
+      />
+    );
+  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode]);
 
   if (loading) {
     return (
@@ -391,7 +449,7 @@ const SeriesDetailScreen = () => {
 
         <FlatList
           data={episodes}
-          renderItem={({ item, index }) => renderEpisodeCard({ item, index })}
+          renderItem={renderEpisodeCard}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
           contentContainerStyle={styles.episodesList}
@@ -511,68 +569,6 @@ const styles = StyleSheet.create({
   episodesList: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-  },
-  episodeCard: {
-    flexDirection: 'row',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    marginBottom: 12,
-    overflow: 'hidden',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    alignItems: 'center',
-  },
-  episodeNumber: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#6200EE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 12,
-    borderRadius: 25,
-  },
-  episodeNumberText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  episodeInfo: {
-    flex: 1,
-    padding: 12,
-    paddingLeft: 0,
-    justifyContent: 'space-between',
-  },
-  episodeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  episodeUrl: {
-    fontSize: 11,
-    color: '#999',
-    marginBottom: 8,
-  },
-  metaText: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  downloadButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  downloadButtonText: {
-    fontSize: 12,
-    color: '#6200EE',
-    fontWeight: '600',
   },
   coverContainer: {
     width: '100%',
