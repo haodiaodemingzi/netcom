@@ -9,12 +9,12 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  TextInput,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
+import SearchBar from '../../components/SearchBar';
 import { 
   getHotComics, 
   getLatestComics,
@@ -264,25 +264,17 @@ const loadComics = async (isRefresh = false) => {
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>漫画</Text>
         
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="搜索漫画..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => handleSearch(searchQuery)}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={clearSearch}
-            >
-              <Text style={styles.clearButtonText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={(text) => {
+            setSearchQuery(text);
+            if (!text.trim()) {
+              clearSearch();
+            }
+          }}
+          onSubmitEditing={() => handleSearch(searchQuery)}
+          placeholder="搜索漫画..."
+        />
         
         <TouchableOpacity 
           style={styles.sourceButton}
@@ -490,34 +482,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111',
     minWidth: 50,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 38,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-  },
-  clearButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  clearButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   sourceButton: {
     flexDirection: 'row',

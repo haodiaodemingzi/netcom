@@ -8,12 +8,12 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
-  TextInput,
   Linking,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BookCard from '../../components/BookCard';
+import SearchBar from '../../components/SearchBar';
 import {
   getEbookCategories,
   getEbooksByCategory,
@@ -391,25 +391,11 @@ const EbookTabScreen = () => {
         <View style={styles.headerRow}>
           <Text style={styles.title}>电子书</Text>
           
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder={allBooksMetadata.length > 0 
-                ? `搜索${allBooksMetadata.length}本...` 
-                : "搜索..."}
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                style={styles.clearButton}
-                onPress={() => setSearchQuery('')}
-              >
-                <Text style={styles.clearButtonText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={"搜索电子书..."}
+          />
           
           <TouchableOpacity 
             style={styles.sourceButton}
@@ -421,17 +407,6 @@ const EbookTabScreen = () => {
             <Text style={styles.sourceArrow}>▼</Text>
           </TouchableOpacity>
         </View>
-        
-        {/* 缓存信息或搜索结果 */}
-        {searchQuery.length > 0 ? (
-          <Text style={styles.infoText}>
-            找到 {filteredBooks.length} 本{allBooksMetadata.length > 0 && ' (全站)'}
-          </Text>
-        ) : allBooksMetadata.length > 0 && cacheInfo ? (
-          <Text style={styles.infoText}>
-            数据库: {allBooksMetadata.length}本 | {cacheInfo}
-          </Text>
-        ) : null}
       </View>
 
       {/* 数据源选择器 */}
@@ -585,15 +560,6 @@ const styles = StyleSheet.create({
     color: '#111',
     minWidth: 60,
   },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 38,
-  },
   sourceButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,41 +584,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#999',
     marginTop: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-    paddingRight: 40,
-  },
-  googleButton: {
-    position: 'absolute',
-    right: 50,
-    height: 32,
-    paddingHorizontal: 12,
-    backgroundColor: '#4285F4',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  googleButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  clearButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  clearButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,

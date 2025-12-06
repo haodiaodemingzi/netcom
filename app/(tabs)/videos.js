@@ -9,12 +9,12 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  TextInput,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import VideoCard from '../../components/VideoCard';
+import SearchBar from '../../components/SearchBar';
 import {
   getSeriesList,
   getVideoCategories,
@@ -278,31 +278,20 @@ const VideosTabScreen = () => {
         <View style={styles.headerRow}>
           <Text style={styles.title}>视频</Text>
           
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="搜索..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={() => handleSearch(true)}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                style={styles.clearButton}
-                onPress={() => {
-                  setSearchQuery('');
-                  setIsSearching(false);
-                  setSearchResults([]);
-                  setSearchPage(1);
-                  setSearchHasMore(false);
-                }}
-              >
-                <Text style={styles.clearButtonText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              if (!text.trim()) {
+                setIsSearching(false);
+                setSearchResults([]);
+                setSearchPage(1);
+                setSearchHasMore(false);
+              }
+            }}
+            onSubmitEditing={() => handleSearch(true)}
+            placeholder="搜索视频..."
+          />
           
           <TouchableOpacity 
             style={styles.sourceButton}
@@ -481,36 +470,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111',
     minWidth: 50,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    height: 38,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-    paddingRight: 40,
-  },
-  clearButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  clearButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   sourceButton: {
     flexDirection: 'row',
