@@ -417,11 +417,11 @@ const SeriesDetailScreen = () => {
               </Text>
             </View>
           ) : (
-            <Image
-              source={{ uri: series.cover }}
-              style={styles.cover}
+        <Image
+          source={{ uri: series.cover }}
+          style={styles.cover}
               resizeMode="cover"
-            />
+        />
           )}
         </View>
 

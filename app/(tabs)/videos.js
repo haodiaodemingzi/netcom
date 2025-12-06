@@ -136,10 +136,11 @@ const VideosTabScreen = () => {
     }
   };
 
-  const loadCategories = async () => {
+  const loadCategories = async (source = null) => {
     setCategoriesLoading(true);
     try {
-      const sourceToUse = selectedSource || 'thanju';
+      // 使用传入的 source 参数，如果没有则使用 selectedSource
+      const sourceToUse = source || selectedSource || 'thanju';
       console.log('加载分类，使用数据源:', sourceToUse);
       const result = await getVideoCategories(sourceToUse);
       if (result.success) {
@@ -147,24 +148,26 @@ const VideosTabScreen = () => {
         console.log('加载分类成功，数量:', categoriesData.length, categoriesData);
         setCategories(categoriesData);
         // 如果当前选中的分类不在列表中，选择第一个分类
-        if (categoriesData.length > 0 && !categoriesData.find(cat => cat.id === selectedCategory)) {
-          setSelectedCategory(categoriesData[0].id);
+        if (categoriesData.length > 0) {
+          const currentCategoryExists = categoriesData.find(cat => cat.id === selectedCategory);
+          if (!currentCategoryExists) {
+            setSelectedCategory(categoriesData[0].id);
+          }
+        } else {
+          // 如果没有分类，清空选择
+          setSelectedCategory(null);
         }
       } else {
         console.error('加载分类失败:', result.error);
-        // 如果加载失败，设置默认分类
-        setCategories([
-          { id: 'hot', name: '热门' },
-          { id: 'latest', name: '最新' },
-        ]);
+        // 如果加载失败，清空分类
+        setCategories([]);
+        setSelectedCategory(null);
       }
     } catch (error) {
       console.error('加载分类失败:', error);
-      // 如果加载失败，设置默认分类
-      setCategories([
-        { id: 'hot', name: '热门' },
-        { id: 'latest', name: '最新' },
-      ]);
+      // 如果加载失败，清空分类
+      setCategories([]);
+      setSelectedCategory(null);
     } finally {
       setCategoriesLoading(false);
     }
@@ -249,12 +252,16 @@ const VideosTabScreen = () => {
   };
 
   const handleSourceChange = (sourceId) => {
+    console.log('切换数据源:', sourceId);
     setSelectedSource(sourceId);
     setCurrentVideoSource(sourceId);
     setShowSourcePicker(false);
     setPage(1);
     setVideos([]);
-    loadCategories();
+    // 重置分类选择
+    setSelectedCategory(null);
+    // 传入新的 sourceId 确保使用正确的数据源加载分类
+    loadCategories(sourceId);
   };
 
   const renderItem = ({ item }) => (

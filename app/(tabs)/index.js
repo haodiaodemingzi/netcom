@@ -265,16 +265,16 @@ const loadComics = async (isRefresh = false) => {
         <Text style={styles.headerTitle}>漫画</Text>
         
         <SearchBar
-          value={searchQuery}
+            value={searchQuery}
           onChangeText={(text) => {
             setSearchQuery(text);
             if (!text.trim()) {
               clearSearch();
             }
           }}
-          onSubmitEditing={() => handleSearch(searchQuery)}
+            onSubmitEditing={() => handleSearch(searchQuery)}
           placeholder="搜索漫画..."
-        />
+          />
         
         <TouchableOpacity 
           style={styles.sourceButton}

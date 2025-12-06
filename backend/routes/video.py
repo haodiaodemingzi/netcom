@@ -160,6 +160,69 @@ def search_videos():
             'total': 0
         }), 200
 
+@video_bp.route('/videos/tags', methods=['GET'])
+def get_tags():
+    """获取视频标签列表（热搜标签）"""
+    source = request.args.get('source', 'thanju')
+    limit = int(request.args.get('limit', 100))
+    
+    try:
+        scraper = VideoScraperFactory.create_scraper(source)
+        # 检查爬虫是否支持获取标签
+        if hasattr(scraper, 'get_tags'):
+            tags = scraper.get_tags(limit)
+            return jsonify({
+                'tags': tags,
+                'total': len(tags)
+            }), 200
+        else:
+            return jsonify({
+                'tags': [],
+                'total': 0,
+                'message': '该数据源不支持标签功能'
+            }), 200
+    except Exception as e:
+        logger.error(f"获取标签列表失败: {str(e)}")
+        return jsonify({
+            'tags': [],
+            'total': 0,
+            'error': str(e)
+        }), 200
+
+@video_bp.route('/videos/tags/<tag_id>', methods=['GET'])
+def get_videos_by_tag(tag_id):
+    """根据标签获取视频列表"""
+    source = request.args.get('source', 'thanju')
+    page = int(request.args.get('page', 1))
+    limit = int(request.args.get('limit', 30))
+    
+    try:
+        scraper = VideoScraperFactory.create_scraper(source)
+        # 检查爬虫是否支持按标签获取视频
+        if hasattr(scraper, 'get_videos_by_tag'):
+            videos = scraper.get_videos_by_tag(tag_id, page, limit)
+            return jsonify({
+                'series': videos,
+                'hasMore': len(videos) >= limit,
+                'total': len(videos),
+                'tag': tag_id
+            }), 200
+        else:
+            return jsonify({
+                'series': [],
+                'hasMore': False,
+                'total': 0,
+                'message': '该数据源不支持标签功能'
+            }), 200
+    except Exception as e:
+        logger.error(f"按标签获取视频失败: {str(e)}")
+        return jsonify({
+            'series': [],
+            'hasMore': False,
+            'total': 0,
+            'error': str(e)
+        }), 200
+
 @video_bp.route('/videos/proxy', methods=['GET'])
 def proxy_video():
     """代理视频流，添加必要的请求头（Referer、Cookie等）"""
@@ -189,6 +252,9 @@ def proxy_video():
                 headers['Referer'] = f'https://www.thanju.com/detail/{series_id}.html'
             else:
                 headers['Referer'] = 'https://www.thanju.com/'
+        elif source == 'badnews':
+            headers['Referer'] = 'https://bad.news/'
+            headers['Origin'] = 'https://bad.news'
         
         # 转发Range请求头（用于视频断点续传）
         if 'Range' in request.headers:

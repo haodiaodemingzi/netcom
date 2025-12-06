@@ -407,3 +407,49 @@ export const savePlaybackProgress = async (episodeId, currentTime, duration) => 
     };
   }
 };
+
+// 获取视频标签列表（热搜标签）
+export const getVideoTags = async (source = null, limit = 100) => {
+  try {
+    const params = { limit };
+    if (source) params.source = source;
+    const response = await axios.get(`${API_BASE_URL}/videos/tags`, { params });
+    return {
+      success: true,
+      data: response.data.tags || [],
+      total: response.data.total || 0,
+    };
+  } catch (error) {
+    console.error('获取视频标签失败:', error);
+    return {
+      success: false,
+      data: [],
+      total: 0,
+      error: error.message,
+    };
+  }
+};
+
+// 根据标签获取视频列表
+export const getVideosByTag = async (tagId, page = 1, limit = 30, source = null) => {
+  try {
+    const params = { page, limit };
+    if (source) params.source = source;
+    const response = await axios.get(`${API_BASE_URL}/videos/tags/${encodeURIComponent(tagId)}`, { params });
+    return {
+      success: true,
+      data: response.data.series || [],
+      hasMore: response.data.hasMore || false,
+      total: response.data.total || 0,
+    };
+  } catch (error) {
+    console.error('根据标签获取视频失败:', error);
+    return {
+      success: false,
+      data: [],
+      hasMore: false,
+      total: 0,
+      error: error.message,
+    };
+  }
+};
