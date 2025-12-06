@@ -31,7 +31,7 @@ const VideosTabScreen = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('hot');
-  const [selectedSource, setSelectedSource] = useState('source1');
+  const [selectedSource, setSelectedSource] = useState('thanju');
   const [sources, setSources] = useState({});
   const [categories, setCategories] = useState([]);
   const [page, setPage] = useState(1);
@@ -73,11 +73,17 @@ const VideosTabScreen = () => {
     loadInitialData();
   }, []);
 
-  // 加载数据源和分类
+  // 加载数据源
   useEffect(() => {
     loadSources();
-    loadCategories();
   }, []);
+
+  // 数据源加载完成后，加载分类
+  useEffect(() => {
+    if (selectedSource && Object.keys(sources).length > 0) {
+      loadCategories();
+    }
+  }, [selectedSource, sources]);
 
   // 分类或数据源变化时，重置并加载第一页
   useEffect(() => {
@@ -106,13 +112,21 @@ const VideosTabScreen = () => {
     try {
       const result = await getVideoSources();
       if (result.success) {
-        setSources(result.data || {});
+        const sourcesData = result.data || {};
+        console.log('加载数据源成功:', sourcesData);
+        setSources(sourcesData);
         // 如果没有当前源，设置默认源
-        if (!result.data[selectedSource] && Object.keys(result.data).length > 0) {
-          const firstSource = Object.keys(result.data)[0];
+        if (!sourcesData[selectedSource] && Object.keys(sourcesData).length > 0) {
+          const firstSource = Object.keys(sourcesData)[0];
+          console.log('设置默认数据源:', firstSource);
           setSelectedSource(firstSource);
           setCurrentVideoSource(firstSource);
+        } else if (sourcesData[selectedSource]) {
+          // 确保当前数据源已设置
+          setCurrentVideoSource(selectedSource);
         }
+      } else {
+        console.error('加载数据源失败:', result.error);
       }
     } catch (error) {
       console.error('加载数据源失败:', error);
@@ -121,12 +135,32 @@ const VideosTabScreen = () => {
 
   const loadCategories = async () => {
     try {
-      const result = await getVideoCategories(selectedSource);
+      const sourceToUse = selectedSource || 'thanju';
+      console.log('加载分类，使用数据源:', sourceToUse);
+      const result = await getVideoCategories(sourceToUse);
       if (result.success) {
-        setCategories(result.data || []);
+        const categoriesData = result.data || [];
+        console.log('加载分类成功，数量:', categoriesData.length, categoriesData);
+        setCategories(categoriesData);
+        // 如果当前选中的分类不在列表中，选择第一个分类
+        if (categoriesData.length > 0 && !categoriesData.find(cat => cat.id === selectedCategory)) {
+          setSelectedCategory(categoriesData[0].id);
+        }
+      } else {
+        console.error('加载分类失败:', result.error);
+        // 如果加载失败，设置默认分类
+        setCategories([
+          { id: 'hot', name: '热门' },
+          { id: 'latest', name: '最新' },
+        ]);
       }
     } catch (error) {
       console.error('加载分类失败:', error);
+      // 如果加载失败，设置默认分类
+      setCategories([
+        { id: 'hot', name: '热门' },
+        { id: 'latest', name: '最新' },
+      ]);
     }
   };
 

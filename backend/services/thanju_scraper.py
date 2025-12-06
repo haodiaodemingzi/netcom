@@ -85,12 +85,19 @@ class ThanjuScraper(BaseVideoScraper):
             
             seen_ids = set()
             
-            # 查找所有包含/detail/链接的元素
-            for container in video_containers:
-                detail_links = container.find_all('a', href=re.compile(r'/detail/\d+\.html'))
-                
-                for link in detail_links:
-                    href = link.get('href', '')
+            # 优先查找新的HTML结构：class="myui-vodlist__box" 的div
+            video_boxes = soup.find_all('div', class_=re.compile(r'myui-vodlist__box'))
+            if video_boxes:
+                for box in video_boxes:
+                    if len(videos) >= limit:
+                        break
+                    
+                    # 查找detail链接
+                    detail_link = box.find('a', href=re.compile(r'/detail/\d+\.html'))
+                    if not detail_link:
+                        continue
+                    
+                    href = detail_link.get('href', '')
                     video_id_match = re.search(r'/detail/(\d+)\.html', href)
                     if not video_id_match:
                         continue
@@ -100,23 +107,42 @@ class ThanjuScraper(BaseVideoScraper):
                         continue
                     seen_ids.add(video_id)
                     
-                    # 向上查找父容器（通常是li或div）
-                    parent = link.find_parent(['li', 'div'])
-                    if not parent:
-                        # 继续向上查找
-                        parent = link.find_parent(['article', 'section'])
-                    if not parent:
-                        parent = link.parent
+                    video = self._parse_video_item_new(box, video_id)
+                    if video:
+                        videos.append(video)
+            else:
+                # 备用方案：查找所有包含/detail/链接的元素
+                for container in video_containers:
+                    detail_links = container.find_all('a', href=re.compile(r'/detail/\d+\.html'))
                     
-                    if parent:
-                        video = self._parse_video_item_from_link(link, parent, video_id)
-                        if video:
-                            videos.append(video)
-                            if len(videos) >= limit:
-                                break
-                
-                if len(videos) >= limit:
-                    break
+                    for link in detail_links:
+                        href = link.get('href', '')
+                        video_id_match = re.search(r'/detail/(\d+)\.html', href)
+                        if not video_id_match:
+                            continue
+                        
+                        video_id = video_id_match.group(1)
+                        if video_id in seen_ids:
+                            continue
+                        seen_ids.add(video_id)
+                        
+                        # 向上查找父容器（通常是li或div）
+                        parent = link.find_parent(['li', 'div'])
+                        if not parent:
+                            # 继续向上查找
+                            parent = link.find_parent(['article', 'section'])
+                        if not parent:
+                            parent = link.parent
+                        
+                        if parent:
+                            video = self._parse_video_item_from_link(link, parent, video_id)
+                            if video:
+                                videos.append(video)
+                                if len(videos) >= limit:
+                                    break
+                    
+                    if len(videos) >= limit:
+                        break
             
         except Exception as e:
             print(f'获取视频列表失败: {e}')
@@ -125,6 +151,102 @@ class ThanjuScraper(BaseVideoScraper):
         
         return videos
 
+    def _parse_video_item_new(self, box, video_id):
+        """从新的HTML结构解析单个视频项（myui-vodlist__box）"""
+        try:
+            # 标题 - 从 h4.title > a 中获取
+            title = None
+            title_elem = box.find('h4', class_='title')
+            if title_elem:
+                title_link = title_elem.find('a')
+                if title_link:
+                    title = title_link.get_text(strip=True) or title_link.get('title', '')
+            
+            if not title:
+                return None
+            
+            # 封面 - 从 a.myui-vodlist__thumb 的 style 属性中获取
+            cover = ''
+            thumb_link = box.find('a', class_='myui-vodlist__thumb')
+            if thumb_link:
+                style = thumb_link.get('style', '')
+                # 提取 background: url(...) 中的URL
+                url_match = re.search(r'background:\s*url\(([^)]+)\)', style)
+                if url_match:
+                    cover = url_match.group(1).strip('\'"')
+                    # 处理协议相对路径
+                    if cover.startswith('//'):
+                        cover = 'https:' + cover
+                    elif cover.startswith('/'):
+                        cover = self.base_url + cover
+                    elif not cover.startswith('http'):
+                        cover = 'https://' + cover.lstrip('/')
+            
+            # 评分 - 从 span.pic-tag 中获取
+            rating = None
+            pic_tag = box.find('span', class_='pic-tag')
+            if pic_tag:
+                rating_text = pic_tag.get_text(strip=True)
+                rating_match = re.search(r'豆瓣\s*([\d.]+)\s*分', rating_text)
+                if rating_match:
+                    try:
+                        rating = float(rating_match.group(1))
+                    except:
+                        pass
+            
+            # 集数/状态 - 从 span.pic-text 中获取
+            episodes = None
+            status = '连载中'
+            pic_text = box.find('span', class_='pic-text')
+            if pic_text:
+                episode_text = pic_text.get_text(strip=True)
+                if '集全' in episode_text:
+                    episodes_match = re.search(r'(\d+)集全', episode_text)
+                    if episodes_match:
+                        try:
+                            episodes = int(episodes_match.group(1))
+                            status = '完结'
+                        except:
+                            pass
+                elif re.search(r'第\d+集', episode_text):
+                    # 提取当前集数
+                    episode_match = re.search(r'第(\d+)集', episode_text)
+                    if episode_match:
+                        try:
+                            episodes = int(episode_match.group(1))
+                        except:
+                            pass
+                    status = '连载中'
+            
+            # 演员 - 从 p.text > a 中获取
+            actors = []
+            text_elem = box.find('p', class_='text')
+            if text_elem:
+                actor_links = text_elem.find_all('a', href=re.compile(r'/search/'))
+                for actor_link in actor_links[:4]:  # 最多取4个
+                    actor_name = actor_link.get_text(strip=True)
+                    if actor_name and actor_name not in actors:
+                        actors.append(actor_name)
+            
+            video = {
+                'id': video_id,
+                'title': title,
+                'cover': cover or f'https://via.placeholder.com/200x300?text={title}',
+                'rating': rating,
+                'episodes': episodes,
+                'status': status,
+                'actors': actors,
+                'source': self.source_id,
+            }
+            
+            return video
+            
+        except Exception as e:
+            print(f'解析视频项错误: {e}')
+            import traceback
+            traceback.print_exc()
+            return None
+    
     def _parse_video_item_from_link(self, link, parent, video_id):
         """从链接和父容器解析视频项"""
         try:
@@ -156,14 +278,42 @@ class ThanjuScraper(BaseVideoScraper):
             if not title:
                 return None
             
-            # 查找封面
+            # 查找封面 - 优先从 style 属性中获取（新HTML结构）
             cover = ''
-            # 在父容器中查找图片
-            img_elem = parent.find('img')
-            if img_elem:
-                cover = img_elem.get('src', '') or img_elem.get('data-src', '')
-                if cover and not cover.startswith('http'):
-                    cover = self.base_url + cover
+            thumb_link = parent.find('a', class_=re.compile(r'thumb|vodlist__thumb'))
+            if thumb_link:
+                style = thumb_link.get('style', '')
+                # 提取 background: url(...) 中的URL
+                url_match = re.search(r'background:\s*url\(([^)]+)\)', style)
+                if url_match:
+                    cover = url_match.group(1).strip('\'"')
+                    # 处理协议相对路径
+                    if cover.startswith('//'):
+                        cover = 'https:' + cover
+                    elif cover.startswith('/'):
+                        cover = self.base_url + cover
+                    elif not cover.startswith('http'):
+                        cover = 'https://' + cover.lstrip('/')
+            
+            # 如果没有从style获取到，尝试从img标签获取
+            if not cover:
+                img_elem = parent.find('img')
+                if not img_elem:
+                    # 尝试查找包含图片的div
+                    img_container = parent.find('div', class_=re.compile(r'pic|img|cover|poster'))
+                    if img_container:
+                        img_elem = img_container.find('img')
+                
+                if img_elem:
+                    cover = img_elem.get('src', '') or img_elem.get('data-src', '') or img_elem.get('data-original', '')
+                    if cover:
+                        # 处理相对路径
+                        if cover.startswith('//'):
+                            cover = 'https:' + cover
+                        elif cover.startswith('/'):
+                            cover = self.base_url + cover
+                        elif not cover.startswith('http'):
+                            cover = self.base_url + '/' + cover
             
             # 查找评分
             rating = None
@@ -229,19 +379,39 @@ class ThanjuScraper(BaseVideoScraper):
             title_elem = soup.find('h1')
             title = title_elem.get_text(strip=True) if title_elem else ''
             
-            # 封面
+            # 封面 - 尝试多种方式查找
             cover = ''
-            img_elem = soup.find('img', alt=title) or soup.find('div', class_=re.compile(r'cover|poster'))
-            if img_elem:
-                if img_elem.name == 'img':
-                    cover = img_elem.get('src', '') or img_elem.get('data-src', '')
-                else:
-                    img = img_elem.find('img')
-                    if img:
-                        cover = img.get('src', '') or img.get('data-src', '')
+            # 1. 查找包含alt属性的图片（匹配标题）
+            img_elem = soup.find('img', alt=title)
+            if not img_elem and title:
+                # 尝试部分匹配
+                img_elem = soup.find('img', alt=re.compile(re.escape(title[:5]) if len(title) > 5 else title))
             
-            if cover and not cover.startswith('http'):
-                cover = self.base_url + cover
+            # 2. 查找封面容器
+            if not img_elem:
+                cover_container = soup.find('div', class_=re.compile(r'cover|poster|pic|img'))
+                if cover_container:
+                    img_elem = cover_container.find('img')
+            
+            # 3. 查找所有图片，选择包含 /U/vod/ 的图片（这是封面图片的特征）
+            if not img_elem:
+                all_imgs = soup.find_all('img')
+                for img in all_imgs:
+                    src = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '')
+                    if src and '/U/vod/' in src:
+                        img_elem = img
+                        break
+            
+            if img_elem:
+                cover = img_elem.get('src', '') or img_elem.get('data-src', '') or img_elem.get('data-original', '')
+                if cover:
+                    # 处理相对路径
+                    if cover.startswith('//'):
+                        cover = 'https:' + cover
+                    elif cover.startswith('/'):
+                        cover = self.base_url + cover
+                    elif not cover.startswith('http'):
+                        cover = 'https://' + cover.lstrip('/')
             
             # 评分
             rating = None
@@ -411,39 +581,85 @@ class ThanjuScraper(BaseVideoScraper):
             video_url = None
             
             # 尝试多种方式查找视频链接
-            # 1. iframe中的src
+            # 1. iframe中的src - 可能是播放器iframe
             iframe = soup.find('iframe')
             if iframe:
-                video_url = iframe.get('src', '')
+                iframe_src = iframe.get('src', '')
+                if iframe_src:
+                    # 如果是iframe，可能需要进一步解析iframe内容
+                    # 但通常iframe指向的是播放器页面，不是直接视频链接
+                    # 先尝试从iframe URL中提取
+                    if 'play' in iframe_src or 'player' in iframe_src:
+                        # 可能需要请求iframe页面获取真实视频链接
+                        # 这里先记录iframe URL
+                        video_url = iframe_src
+                    else:
+                        video_url = iframe_src
             
             # 2. video标签
             if not video_url:
                 video_tag = soup.find('video')
                 if video_tag:
-                    video_url = video_tag.get('src', '') or video_tag.get('data-src', '')
+                    video_url = video_tag.get('src', '') or video_tag.get('data-src', '') or video_tag.get('data-url', '')
+                    # 查找source标签
+                    if not video_url:
+                        source_tag = video_tag.find('source')
+                        if source_tag:
+                            video_url = source_tag.get('src', '')
             
-            # 3. script中的视频链接
+            # 3. script中的视频链接 - 更详细的模式
             if not video_url:
                 scripts = soup.find_all('script')
                 for script in scripts:
                     script_text = script.string or ''
+                    if not script_text:
+                        continue
                     # 查找常见的视频链接模式
                     url_patterns = [
                         r'["\'](https?://[^"\']+\.mp4[^"\']*)["\']',
                         r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']',
                         r'url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                        r'video["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                        r'src["\']?\s*[:=]\s*["\'](https?://[^"\']+\.(?:mp4|m3u8)[^"\']*)["\']',
+                        r'playurl["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                        r'play_url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
                     ]
                     for pattern in url_patterns:
-                        match = re.search(pattern, script_text)
+                        match = re.search(pattern, script_text, re.IGNORECASE)
                         if match:
                             video_url = match.group(1)
                             break
                     if video_url:
                         break
             
+            # 4. 如果还是没有找到，尝试从页面中查找所有可能的视频链接
+            if not video_url:
+                # 查找所有包含视频扩展名的链接
+                all_links = soup.find_all('a', href=re.compile(r'\.(mp4|m3u8)', re.IGNORECASE))
+                if all_links:
+                    video_url = all_links[0].get('href', '')
+                    if video_url and not video_url.startswith('http'):
+                        video_url = self.base_url + video_url
+            
+            # 获取剧集标题（从URL或页面中提取）
+            episode_title = f'第{episode_num}集'
+            title_elem = soup.find('h1') or soup.find('title')
+            if title_elem:
+                title_text = title_elem.get_text(strip=True)
+                # 尝试从标题中提取集数信息
+                title_match = re.search(r'第?(\d+)集', title_text)
+                if title_match:
+                    episode_title = f'第{title_match.group(1)}集'
+                elif episode_num:
+                    episode_title = f'第{episode_num}集'
+            
             episode = {
                 'id': episode_id,
+                'seriesId': series_id,
+                'title': episode_title,
+                'episodeNumber': int(episode_num) if episode_num else None,
                 'videoUrl': video_url,
+                'playUrl': url,  # 原始播放页面URL
                 'source': self.source_id,
             }
             

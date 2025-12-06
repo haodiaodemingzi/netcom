@@ -23,9 +23,12 @@ const VideoCard = ({ video, darkMode = false, viewMode = 'card' }) => {
       activeOpacity={0.7}
     >
       <Image 
-        source={{ uri: video.cover }} 
+        source={{ uri: video.cover || 'https://via.placeholder.com/200x300?text=No+Image' }} 
         style={[styles.cover, isList && styles.coverList]}
         resizeMode="cover"
+        onError={(e) => {
+          console.log('封面图片加载失败:', video.cover);
+        }}
       />
       <View style={[styles.info, isList && styles.infoList]}>
         <Text 

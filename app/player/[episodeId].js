@@ -84,13 +84,17 @@ const PlayerScreen = () => {
       const result = await getEpisodeDetail(episodeId);
       if (result.success) {
         setEpisode(result.data);
-        console.log('剧集加载成功:', result.data.title);
+        console.log('剧集加载成功:', result.data);
+        console.log('视频URL:', result.data.videoUrl);
+        if (!result.data.videoUrl) {
+          Alert.alert('提示', '未找到视频播放链接，可能需要使用播放页面URL');
+        }
       } else {
-        Alert.alert('错误', '加载剧集失败');
+        Alert.alert('错误', result.error || '加载剧集失败');
       }
     } catch (error) {
       console.error('加载剧集失败:', error);
-      Alert.alert('错误', '加载剧集失败');
+      Alert.alert('错误', '加载剧集失败: ' + error.message);
     } finally {
       setLoading(false);
     }

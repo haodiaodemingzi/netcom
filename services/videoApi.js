@@ -9,8 +9,8 @@ import {
 } from './mockVideoData';
 
 // 数据源配置
-let currentDataSource = 'mock'; // 'mock' 或 'api'
-let currentSource = 'source1'; // 当前选择的视频源
+let currentDataSource = 'api'; // 'mock' 或 'api'
+let currentSource = 'thanju'; // 当前选择的视频源
 
 export const setVideoDataSource = (source) => {
   currentDataSource = source;
@@ -39,7 +39,7 @@ export const getVideoCategories = async (source = null) => {
     } else {
       const params = {};
       if (source) params.source = source;
-      const response = await axios.get(`${API_BASE_URL}/api/videos/categories`, { params });
+      const response = await axios.get(`${API_BASE_URL}/videos/categories`, { params });
       return {
         success: true,
         data: response.data,
@@ -67,10 +67,13 @@ export const getVideoSources = async () => {
         source: 'mock',
       };
     } else {
-      const response = await axios.get(`${API_BASE_URL}/api/videos/sources`);
+      const response = await axios.get(`${API_BASE_URL}/videos/sources`);
+      // 后端返回格式: { sources: { thanju: { name: '...', description: '...' } } }
+      // 转换为前端需要的格式: { thanju: { name: '...', description: '...' } }
+      const sourcesData = response.data.sources || response.data;
       return {
         success: true,
-        data: response.data,
+        data: sourcesData,
         source: 'api',
       };
     }
@@ -119,7 +122,7 @@ export const getSeriesList = async (category = 'hot', page = 1, limit = 20, sour
     } else {
       const params = { category, page, limit };
       if (source) params.source = source;
-      const response = await axios.get(`${API_BASE_URL}/api/videos/series`, { params });
+      const response = await axios.get(`${API_BASE_URL}/videos/series`, { params });
       return {
         success: true,
         data: response.data.series || response.data,
@@ -163,7 +166,7 @@ export const searchVideos = async (keyword, page = 1, limit = 20, source = null)
     } else {
       const params = { keyword, page, limit };
       if (source) params.source = source;
-      const response = await axios.get(`${API_BASE_URL}/api/videos/search`, { params });
+      const response = await axios.get(`${API_BASE_URL}/videos/search`, { params });
       return {
         success: true,
         data: response.data.series || response.data,
@@ -199,7 +202,9 @@ export const getSeriesDetail = async (seriesId) => {
         source: 'mock',
       };
     } else {
-      const response = await axios.get(`${API_BASE_URL}/api/series/${seriesId}`);
+      const params = {};
+      if (currentSource) params.source = currentSource;
+      const response = await axios.get(`${API_BASE_URL}/videos/series/${seriesId}`, { params });
       return {
         success: true,
         data: response.data,
@@ -228,7 +233,9 @@ export const getEpisodes = async (seriesId) => {
         source: 'mock',
       };
     } else {
-      const response = await axios.get(`${API_BASE_URL}/api/series/${seriesId}/episodes`);
+      const params = {};
+      if (currentSource) params.source = currentSource;
+      const response = await axios.get(`${API_BASE_URL}/videos/series/${seriesId}/episodes`, { params });
       return {
         success: true,
         data: response.data,
@@ -262,7 +269,9 @@ export const getEpisodeDetail = async (episodeId) => {
       }
       throw new Error('剧集不存在');
     } else {
-      const response = await axios.get(`${API_BASE_URL}/api/episodes/${episodeId}`);
+      const params = {};
+      if (currentSource) params.source = currentSource;
+      const response = await axios.get(`${API_BASE_URL}/videos/episodes/${episodeId}`, { params });
       return {
         success: true,
         data: response.data,

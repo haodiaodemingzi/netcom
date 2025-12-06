@@ -60,24 +60,24 @@ const SeriesDetailScreen = () => {
     Alert.alert('提示', `开始批量下载 ${episodes.length} 集`);
   };
 
-  const renderEpisodeCard = ({ item }) => (
+  const renderEpisodeCard = ({ item, index }) => (
     <TouchableOpacity
       style={styles.episodeCard}
       onPress={() => handleEpisodePress(item)}
       activeOpacity={0.7}
     >
-      <Image
-        source={{ uri: item.thumbnail }}
-        style={styles.thumbnail}
-      />
+      <View style={styles.episodeNumber}>
+        <Text style={styles.episodeNumberText}>
+          {item.episodeNumber || index + 1}
+        </Text>
+      </View>
       <View style={styles.episodeInfo}>
-        <Text style={styles.episodeTitle}>{item.title}</Text>
-        <Text style={styles.episodeDuration}>
-          {Math.floor(item.duration / 60)} 分钟
-        </Text>
-        <Text style={styles.episodeDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
+        <Text style={styles.episodeTitle}>{item.title || `第${item.episodeNumber || index + 1}集`}</Text>
+        {item.playUrl && (
+          <Text style={styles.episodeUrl} numberOfLines={1}>
+            {item.playUrl}
+          </Text>
+        )}
         <TouchableOpacity
           style={styles.downloadButton}
           onPress={(e) => {
@@ -127,22 +127,40 @@ const SeriesDetailScreen = () => {
           <Text style={styles.title}>{series.title}</Text>
           
           <View style={styles.meta}>
-            <Text style={styles.rating}>⭐ {series.rating}</Text>
-            <Text style={styles.episodes}>{series.episodes} 集</Text>
-            <Text style={[
-              styles.status,
-              series.status === '完结' ? styles.completed : styles.ongoing
-            ]}>
-              {series.status}
-            </Text>
+            {series.rating && (
+              <Text style={styles.rating}>⭐ {series.rating}</Text>
+            )}
+            {series.episodes && (
+              <Text style={styles.episodes}>{series.episodes} 集</Text>
+            )}
+            {series.status && (
+              <Text style={[
+                styles.status,
+                series.status === '完结' ? styles.completed : styles.ongoing
+              ]}>
+                {series.status}
+              </Text>
+            )}
           </View>
 
-          <Text style={styles.description}>{series.description}</Text>
+          {series.year && (
+            <Text style={styles.metaText}>年份: {series.year}</Text>
+          )}
+          {series.director && (
+            <Text style={styles.metaText}>导演: {series.director}</Text>
+          )}
+          {series.actors && series.actors.length > 0 && (
+            <Text style={styles.metaText}>主演: {series.actors.join(', ')}</Text>
+          )}
+
+          {series.description && (
+            <Text style={styles.description}>{series.description}</Text>
+          )}
 
           <View style={styles.divider} />
 
           <View style={styles.episodesHeader}>
-            <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+          <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
             {episodes.length > 0 && (
               <TouchableOpacity
                 style={styles.batchDownloadButton}
@@ -156,7 +174,7 @@ const SeriesDetailScreen = () => {
 
         <FlatList
           data={episodes}
-          renderItem={renderEpisodeCard}
+          renderItem={({ item, index }) => renderEpisodeCard({ item, index })}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
           contentContainerStyle={styles.episodesList}
@@ -288,15 +306,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
+    alignItems: 'center',
   },
-  thumbnail: {
-    width: 140,
-    height: 80,
-    backgroundColor: '#e0e0e0',
+  episodeNumber: {
+    width: 50,
+    height: 50,
+    backgroundColor: '#6200EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 12,
+    borderRadius: 25,
+  },
+  episodeNumberText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   episodeInfo: {
     flex: 1,
     padding: 12,
+    paddingLeft: 0,
     justifyContent: 'space-between',
   },
   episodeTitle: {
@@ -305,15 +334,15 @@ const styles = StyleSheet.create({
     color: '#000',
     marginBottom: 4,
   },
-  episodeDuration: {
-    fontSize: 12,
+  episodeUrl: {
+    fontSize: 11,
     color: '#999',
-    marginBottom: 4,
-  },
-  episodeDescription: {
-    fontSize: 12,
-    color: '#666',
     marginBottom: 8,
+  },
+  metaText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 4,
   },
   downloadButton: {
     alignSelf: 'flex-start',

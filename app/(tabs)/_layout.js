@@ -68,7 +68,7 @@ export default function TabLayout() {
           title: '设置',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons 
-              name="account"
+              name="account" 
               size={size} 
               color={color} 
             />
