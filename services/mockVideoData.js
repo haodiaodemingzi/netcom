@@ -1,5 +1,28 @@
 // Mock 短剧数据
 
+// 视频分类
+export const mockVideoCategories = [
+  { id: 'hot', name: '热门' },
+  { id: 'latest', name: '最新' },
+  { id: 'romance', name: '爱情' },
+  { id: 'comedy', name: '喜剧' },
+  { id: 'drama', name: '剧情' },
+  { id: 'fantasy', name: '奇幻' },
+  { id: 'action', name: '动作' },
+];
+
+// 视频数据源
+export const mockVideoSources = {
+  'source1': {
+    name: '视频源1',
+    description: '默认视频数据源',
+  },
+  'source2': {
+    name: '视频源2',
+    description: '备用视频数据源',
+  },
+};
+
 export const mockSeriesList = [
   {
     id: 'series_001',
@@ -9,6 +32,8 @@ export const mockSeriesList = [
     rating: 8.5,
     episodes: 12,
     status: '完结',
+    category: 'drama',
+    source: 'source1',
   },
   {
     id: 'series_002',
@@ -18,6 +43,8 @@ export const mockSeriesList = [
     rating: 8.2,
     episodes: 24,
     status: '连载中',
+    category: 'comedy',
+    source: 'source1',
   },
   {
     id: 'series_003',
@@ -27,6 +54,8 @@ export const mockSeriesList = [
     rating: 7.8,
     episodes: 18,
     status: '完结',
+    category: 'fantasy',
+    source: 'source1',
   },
   {
     id: 'series_004',
@@ -36,6 +65,52 @@ export const mockSeriesList = [
     rating: 7.5,
     episodes: 15,
     status: '完结',
+    category: 'romance',
+    source: 'source1',
+  },
+  {
+    id: 'series_005',
+    title: '霸道总裁爱上我',
+    cover: 'https://via.placeholder.com/200x300?text=霸道总裁',
+    description: '职场女强人与霸道总裁的甜蜜爱情',
+    rating: 8.0,
+    episodes: 20,
+    status: '完结',
+    category: 'romance',
+    source: 'source1',
+  },
+  {
+    id: 'series_006',
+    title: '都市修仙传',
+    cover: 'https://via.placeholder.com/200x300?text=都市修仙',
+    description: '现代都市中的修仙者传奇',
+    rating: 7.9,
+    episodes: 30,
+    status: '连载中',
+    category: 'fantasy',
+    source: 'source1',
+  },
+  {
+    id: 'series_007',
+    title: '爆笑办公室',
+    cover: 'https://via.placeholder.com/200x300?text=爆笑办公室',
+    description: '办公室里的搞笑日常',
+    rating: 8.3,
+    episodes: 16,
+    status: '完结',
+    category: 'comedy',
+    source: 'source1',
+  },
+  {
+    id: 'series_008',
+    title: '特工行动',
+    cover: 'https://via.placeholder.com/200x300?text=特工行动',
+    description: '特工执行秘密任务的惊险故事',
+    rating: 8.1,
+    episodes: 22,
+    status: '完结',
+    category: 'action',
+    source: 'source1',
   },
 ];
 

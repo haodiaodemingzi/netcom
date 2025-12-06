@@ -438,7 +438,7 @@ const loadComics = async (isRefresh = false) => {
           renderItem={renderItem}
           keyExtractor={(item, index) => `${item.id}-${index}`}
           numColumns={viewMode === 'list' ? 1 : 3}
-          columnWrapperStyle={viewMode === 'list' ? null : undefined}
+          columnWrapperStyle={viewMode === 'list' ? null : styles.columnWrapper}
           contentContainerStyle={[
             styles.listContent,
             viewMode === 'list' && styles.listContentList
@@ -693,6 +693,9 @@ const styles = StyleSheet.create({
   },
   listContentList: {
     padding: 0,
+  },
+  columnWrapper: {
+    paddingHorizontal: 0,
   },
   cardWrapper: {
     width: '33.333%',

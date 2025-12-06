@@ -50,6 +50,16 @@ const SeriesDetailScreen = () => {
     router.push(`/player/${episode.id}`);
   };
 
+  const handleDownloadEpisode = (episode) => {
+    // TODO: 实现视频下载功能
+    Alert.alert('提示', `开始下载: ${episode.title}`);
+  };
+
+  const handleBatchDownload = () => {
+    // TODO: 实现批量下载功能
+    Alert.alert('提示', `开始批量下载 ${episodes.length} 集`);
+  };
+
   const renderEpisodeCard = ({ item }) => (
     <TouchableOpacity
       style={styles.episodeCard}
@@ -68,6 +78,15 @@ const SeriesDetailScreen = () => {
         <Text style={styles.episodeDescription} numberOfLines={2}>
           {item.description}
         </Text>
+        <TouchableOpacity
+          style={styles.downloadButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleDownloadEpisode(item);
+          }}
+        >
+          <Text style={styles.downloadButtonText}>下载</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -122,7 +141,17 @@ const SeriesDetailScreen = () => {
 
           <View style={styles.divider} />
 
-          <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+          <View style={styles.episodesHeader}>
+            <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+            {episodes.length > 0 && (
+              <TouchableOpacity
+                style={styles.batchDownloadButton}
+                onPress={handleBatchDownload}
+              >
+                <Text style={styles.batchDownloadText}>批量下载</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <FlatList
@@ -222,11 +251,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee',
     marginVertical: 16,
   },
+  episodesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   episodesTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 12,
+  },
+  batchDownloadButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#6200EE',
+    borderRadius: 6,
+  },
+  batchDownloadText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   episodesList: {
     paddingHorizontal: 16,
@@ -268,6 +313,20 @@ const styles = StyleSheet.create({
   episodeDescription: {
     fontSize: 12,
     color: '#666',
+    marginBottom: 8,
+  },
+  downloadButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  downloadButtonText: {
+    fontSize: 12,
+    color: '#6200EE',
+    fontWeight: '600',
   },
 });
 

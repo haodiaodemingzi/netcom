@@ -34,7 +34,9 @@ const PlayerScreen = () => {
   const progressBarRef = useRef(null);
 
   // 使用 expo-video 的 useVideoPlayer hook
-  const player = useVideoPlayer(episode?.videoUrl || '', (player) => {
+  // 注意：useVideoPlayer需要传入source URL，如果URL变化需要重新创建player
+  const [videoSource, setVideoSource] = useState('');
+  const player = useVideoPlayer(videoSource, (player) => {
     if (player) {
       player.loop = false;
       player.muted = false;
@@ -45,27 +47,33 @@ const PlayerScreen = () => {
     loadEpisode();
   }, [episodeId]);
 
+  // 当episode加载完成后，更新video source
   useEffect(() => {
-    if (episode?.videoUrl && player) {
-      player.replace(episode.videoUrl);
+    if (episode?.videoUrl) {
+      setVideoSource(episode.videoUrl);
     }
   }, [episode?.videoUrl]);
 
-  // 监听播放状态
+  // 监听播放状态和进度
   useEffect(() => {
     if (!player) return;
 
     const interval = setInterval(() => {
-      if (player.playing) {
-        const currentTime = player.currentTime;
-        const duration = player.duration;
-        
-        // 每 5 秒保存一次进度
-        if (Math.floor(currentTime) % 5 === 0 && duration > 0) {
-          savePlaybackProgress(episodeId, currentTime, duration);
+      try {
+        // expo-video: playing是属性，currentTime和duration也是属性
+        if (player.playing) {
+          const currentTime = player.currentTime || 0;
+          const duration = player.duration || 0;
+          
+          // 每 5 秒保存一次进度
+          if (duration > 0 && Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) > 0) {
+            savePlaybackProgress(episodeId, currentTime, duration);
+          }
         }
+      } catch (error) {
+        console.error('获取播放状态失败:', error);
       }
-    }, 500);
+    }, 1000); // 改为每秒检查一次，减少频率
 
     return () => clearInterval(interval);
   }, [player, episodeId]);
@@ -90,10 +98,11 @@ const PlayerScreen = () => {
 
   const handlePlayPause = () => {
     if (player) {
-      if (player.playing) {
-        player.pause();
-      } else {
-        player.play();
+      try {
+        // expo-video: playing是属性，通过设置它来控制播放/暂停
+        player.playing = !player.playing;
+      } catch (error) {
+        console.error('播放控制失败:', error);
       }
     }
   };
@@ -127,8 +136,14 @@ const PlayerScreen = () => {
 
   const handleProgressRelease = () => {
     if (player && isDraggingProgress) {
-      player.currentTime = draggedTime;
+      try {
+        // expo-video: currentTime是属性，直接设置
+        player.currentTime = draggedTime;
+        setIsDraggingProgress(false);
+      } catch (error) {
+        console.error('设置播放进度失败:', error);
       setIsDraggingProgress(false);
+      }
     }
   };
 
@@ -186,10 +201,10 @@ const PlayerScreen = () => {
         {player && (
           <VideoView
             player={player}
-            style={styles.video}
+          style={styles.video}
             nativeControls={false}
             contentFit="contain"
-          />
+        />
         )}
 
         {showControls && (

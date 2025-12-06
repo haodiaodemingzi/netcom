@@ -37,6 +37,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="videos"
+        options={{
+          title: '视频',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="play-circle"
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="favorite"
         options={{
           title: '收藏',

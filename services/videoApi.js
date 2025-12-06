@@ -1,9 +1,16 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/constants';
-import { mockSeriesList, mockEpisodes, mockPlaybackProgress } from './mockVideoData';
+import { 
+  mockSeriesList, 
+  mockEpisodes, 
+  mockPlaybackProgress,
+  mockVideoCategories,
+  mockVideoSources,
+} from './mockVideoData';
 
 // 数据源配置
 let currentDataSource = 'mock'; // 'mock' 或 'api'
+let currentSource = 'source1'; // 当前选择的视频源
 
 export const setVideoDataSource = (source) => {
   currentDataSource = source;
@@ -12,23 +19,112 @@ export const setVideoDataSource = (source) => {
 
 export const getVideoDataSource = () => currentDataSource;
 
-// 获取短剧列表
-export const getSeriesList = async () => {
+export const setCurrentVideoSource = (source) => {
+  currentSource = source;
+  console.log(`当前视频源已切换为: ${source}`);
+};
+
+export const getCurrentVideoSource = () => currentSource;
+
+// 获取视频分类列表
+export const getVideoCategories = async (source = null) => {
+  try {
+    if (currentDataSource === 'mock') {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return {
+        success: true,
+        data: mockVideoCategories,
+        source: 'mock',
+      };
+    } else {
+      const params = {};
+      if (source) params.source = source;
+      const response = await axios.get(`${API_BASE_URL}/api/videos/categories`, { params });
+      return {
+        success: true,
+        data: response.data,
+        source: 'api',
+      };
+    }
+  } catch (error) {
+    console.error('获取视频分类失败:', error);
+    return {
+      success: false,
+      data: [],
+      error: error.message,
+    };
+  }
+};
+
+// 获取视频数据源列表
+export const getVideoSources = async () => {
+  try {
+    if (currentDataSource === 'mock') {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return {
+        success: true,
+        data: mockVideoSources,
+        source: 'mock',
+      };
+    } else {
+      const response = await axios.get(`${API_BASE_URL}/api/videos/sources`);
+      return {
+        success: true,
+        data: response.data,
+        source: 'api',
+      };
+    }
+  } catch (error) {
+    console.error('获取视频数据源失败:', error);
+    return {
+      success: false,
+      data: {},
+      error: error.message,
+    };
+  }
+};
+
+// 获取短剧列表（支持分类和分页）
+export const getSeriesList = async (category = 'hot', page = 1, limit = 20, source = null) => {
   try {
     if (currentDataSource === 'mock') {
       // 模拟网络延迟
       await new Promise(resolve => setTimeout(resolve, 500));
+      let filteredList = [...mockSeriesList];
+      
+      // 按分类过滤
+      if (category === 'hot') {
+        // 热门：按评分排序
+        filteredList = filteredList.sort((a, b) => b.rating - a.rating);
+      } else if (category === 'latest') {
+        // 最新：按ID倒序
+        filteredList = filteredList.reverse();
+      } else {
+        // 其他分类
+        filteredList = filteredList.filter(item => item.category === category);
+      }
+      
+      // 分页
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedList = filteredList.slice(start, end);
+      
       return {
         success: true,
-        data: mockSeriesList,
+        data: paginatedList,
+        hasMore: end < filteredList.length,
+        total: filteredList.length,
         source: 'mock',
       };
     } else {
-      // 真实 API 调用
-      const response = await axios.get(`${API_BASE_URL}/api/series`);
+      const params = { category, page, limit };
+      if (source) params.source = source;
+      const response = await axios.get(`${API_BASE_URL}/api/videos/series`, { params });
       return {
         success: true,
-        data: response.data,
+        data: response.data.series || response.data,
+        hasMore: response.data.hasMore || false,
+        total: response.data.total || 0,
         source: 'api',
       };
     }
@@ -37,6 +133,52 @@ export const getSeriesList = async () => {
     return {
       success: false,
       data: [],
+      hasMore: false,
+      total: 0,
+      error: error.message,
+    };
+  }
+};
+
+// 搜索视频
+export const searchVideos = async (keyword, page = 1, limit = 20, source = null) => {
+  try {
+    if (currentDataSource === 'mock') {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const filteredList = mockSeriesList.filter(item => 
+        item.title.includes(keyword) || item.description.includes(keyword)
+      );
+      
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedList = filteredList.slice(start, end);
+      
+      return {
+        success: true,
+        data: paginatedList,
+        hasMore: end < filteredList.length,
+        total: filteredList.length,
+        source: 'mock',
+      };
+    } else {
+      const params = { keyword, page, limit };
+      if (source) params.source = source;
+      const response = await axios.get(`${API_BASE_URL}/api/videos/search`, { params });
+      return {
+        success: true,
+        data: response.data.series || response.data,
+        hasMore: response.data.hasMore || false,
+        total: response.data.total || 0,
+        source: 'api',
+      };
+    }
+  } catch (error) {
+    console.error('搜索视频失败:', error);
+    return {
+      success: false,
+      data: [],
+      hasMore: false,
+      total: 0,
       error: error.message,
     };
   }
