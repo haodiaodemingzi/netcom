@@ -12,6 +12,10 @@ const EpisodeCard = ({
   item, 
   onPress, 
   onDownload, 
+  onPause,
+  onResume,
+  onCancel,
+  onRetry,
   downloadStatus,
   isActive = false,
 }) => {
@@ -137,8 +141,9 @@ const EpisodeCard = ({
               style={styles.pauseButton}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现暂停下载
-                Alert.alert('提示', '暂停下载功能待实现');
+                if (onPause) {
+                  onPause();
+                }
               }}
             >
               <Text style={styles.pauseButtonText}>暂停</Text>
@@ -155,8 +160,9 @@ const EpisodeCard = ({
               style={styles.cancelButton}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现取消下载
-                Alert.alert('提示', '取消下载功能待实现');
+                if (onCancel) {
+                  onCancel();
+                }
               }}
             >
               <Text style={styles.cancelButtonText}>取消</Text>
@@ -173,8 +179,9 @@ const EpisodeCard = ({
               style={styles.resumeButton}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现继续下载
-                Alert.alert('提示', '继续下载功能待实现');
+                if (onResume) {
+                  onResume();
+                }
               }}
             >
               <Text style={styles.resumeButtonText}>继续</Text>
@@ -183,8 +190,9 @@ const EpisodeCard = ({
               style={styles.cancelButton}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现取消下载
-                Alert.alert('提示', '取消下载功能待实现');
+                if (onCancel) {
+                  onCancel();
+                }
               }}
             >
               <Text style={styles.cancelButtonText}>取消</Text>
@@ -198,8 +206,9 @@ const EpisodeCard = ({
               style={styles.failedBadge}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现重试下载
-                Alert.alert('提示', '重试下载功能待实现');
+                if (onRetry) {
+                  onRetry();
+                }
               }}
             >
               <Text style={styles.failedText}>重试</Text>
@@ -208,8 +217,9 @@ const EpisodeCard = ({
               style={styles.cancelButton}
               onPress={(e) => {
                 e.stopPropagation();
-                // TODO: 实现取消下载
-                Alert.alert('提示', '取消下载功能待实现');
+                if (onCancel) {
+                  onCancel();
+                }
               }}
             >
               <Text style={styles.cancelButtonText}>取消</Text>

@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail } from '../../services/videoApi';
 import EpisodeCard from '../../components/EpisodeCard';
+import videoDownloadManager from '../../services/videoDownloadManager';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -116,16 +117,15 @@ const SeriesDetailScreen = () => {
 
   // 下载状态管理
   useEffect(() => {
-    // 初始化时获取当前下载状态
-    // TODO: 如果实现了视频下载管理器，这里需要订阅下载状态更新
-    // 目前先设置为null，表示没有下载功能
-    setDownloadState(null);
+    // 订阅视频下载管理器状态更新
+    const unsubscribe = videoDownloadManager.subscribe((state) => {
+      setDownloadState(state);
+    });
     
-    // 如果将来有视频下载管理器，可以这样订阅：
-    // const unsubscribe = videoDownloadManager.subscribe((state) => {
-    //   setDownloadState(state);
-    // });
-    // return unsubscribe;
+    // 初始化时获取当前下载状态
+    setDownloadState(videoDownloadManager.getState());
+    
+    return unsubscribe;
   }, []);
 
   const loadData = async () => {
@@ -229,22 +229,6 @@ const SeriesDetailScreen = () => {
 
   // 获取集数下载状态
   const getEpisodeDownloadStatus = useCallback((episodeId) => {
-    if (!downloadState) return null;
-    
-    // 检查是否已下载完成
-    if (downloadState.downloadedEpisodes?.includes(episodeId)) {
-      return 'completed';
-    }
-    
-    // 检查是否在下载队列中
-    const task = downloadState.queue?.find(t => t.episodeId === episodeId);
-    if (task) {
-      return {
-        status: task.status,
-        progress: task.progress || 0
-      };
-    }
-    
     // 检查是否在准备中
     if (preparingDownloads.has(episodeId)) {
       return {
@@ -253,24 +237,34 @@ const SeriesDetailScreen = () => {
       };
     }
     
-    return null;
-  }, [downloadState, preparingDownloads]);
+    // 从下载管理器获取状态
+    const status = videoDownloadManager.getDownloadStatus(episodeId);
+    return status;
+  }, [preparingDownloads]);
 
   const handleDownloadEpisode = useCallback(async (episode) => {
+    if (!series) return;
+    
     setPreparingDownloads(prev => new Set([...prev, episode.id]));
     
     try {
-      // TODO: 实现视频下载功能
-      // 如果将来有视频下载管理器，可以这样调用：
-      // await videoDownloadManager.downloadEpisode(
-      //   series.id,
-      //   series.title,
-      //   episode,
-      //   'thanju' // source
-      // );
+      const source = 'thanju'; // 默认数据源
+      const result = await videoDownloadManager.downloadEpisode(
+        series.id,
+        series.title,
+        episode,
+        source,
+        (progress) => {
+          // 进度回调已在下载管理器中处理
+          console.log('下载进度:', progress);
+        }
+      );
       
-      // 目前先显示提示
-      Alert.alert('提示', `开始下载: ${episode.title}\n\n视频下载功能正在开发中...`);
+      if (result.success && !result.alreadyDownloaded) {
+        console.log(`剧集 ${episode.title} 已添加到下载队列`);
+      } else if (result.alreadyDownloaded) {
+        Alert.alert('提示', '该剧集已下载');
+      }
       
       // 清除准备状态
       setPreparingDownloads(prev => {
@@ -289,10 +283,39 @@ const SeriesDetailScreen = () => {
     }
   }, [series]);
 
-  const handleBatchDownload = () => {
-    // TODO: 实现批量下载功能
-    Alert.alert('提示', `开始批量下载 ${episodes.length} 集\n\n批量下载功能正在开发中...`);
+  const handleBatchDownload = async () => {
+    if (!series || episodes.length === 0) return;
+    
+    try {
+      const source = 'thanju'; // 默认数据源
+      const count = await videoDownloadManager.batchDownloadEpisodes(
+        series.id,
+        series.title,
+        episodes,
+        source
+      );
+      Alert.alert('提示', `已添加 ${count} 个剧集到下载队列`);
+    } catch (error) {
+      console.error('批量下载失败:', error);
+      Alert.alert('错误', '批量下载失败: ' + error.message);
+    }
   };
+
+  const handlePauseDownload = useCallback((episodeId) => {
+    videoDownloadManager.pauseDownload(episodeId);
+  }, []);
+
+  const handleResumeDownload = useCallback((episodeId) => {
+    videoDownloadManager.resumeDownload(episodeId);
+  }, []);
+
+  const handleCancelDownload = useCallback((episodeId) => {
+    videoDownloadManager.cancelDownload(episodeId);
+  }, []);
+
+  const handleRetryDownload = useCallback((episode) => {
+    videoDownloadManager.retryDownload(episode.id);
+  }, []);
 
   const renderEpisodeCard = useCallback(({ item, index }) => {
     const downloadStatus = getEpisodeDownloadStatus(item.id);
@@ -303,11 +326,15 @@ const SeriesDetailScreen = () => {
         item={item}
         onPress={handleEpisodePress}
         onDownload={handleDownloadEpisode}
+        onPause={() => handlePauseDownload(item.id)}
+        onResume={() => handleResumeDownload(item.id)}
+        onCancel={() => handleCancelDownload(item.id)}
+        onRetry={() => handleRetryDownload(item)}
         downloadStatus={downloadStatus}
         isActive={isActive}
       />
     );
-  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode]);
+  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload]);
 
   if (loading) {
     return (

@@ -1,10 +1,12 @@
 from .thanju_scraper import ThanjuScraper
+from .badnews_scraper import BadNewsScraper
 
 class VideoScraperFactory:
     """视频爬虫工厂类"""
     
     _scrapers = {
         'thanju': ThanjuScraper,
+        'badnews': BadNewsScraper,
     }
     
     @classmethod
@@ -23,6 +25,11 @@ class VideoScraperFactory:
                 'id': 'thanju',
                 'name': '热播韩剧网',
                 'description': '热播韩剧网(thanju.com) - 提供最新韩剧资源'
+            },
+            {
+                'id': 'badnews',
+                'name': 'Bad.news H动漫',
+                'description': 'Bad.news - H动漫/里番在线观看'
             }
         ]
     
