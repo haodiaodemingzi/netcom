@@ -40,6 +40,8 @@ const VideosTabScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchHasMore, setSearchHasMore] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [viewMode, setViewMode] = useState('card');
@@ -204,25 +206,45 @@ const VideosTabScreen = () => {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (reset = true) => {
     if (!searchQuery.trim()) {
       setIsSearching(false);
       setSearchResults([]);
+      setSearchPage(1);
+      setSearchHasMore(false);
       return;
     }
 
     setIsSearching(true);
     setLoading(true);
     try {
-      const result = await searchVideos(searchQuery.trim(), 1, 20, selectedSource);
+      const currentPage = reset ? 1 : searchPage;
+      const result = await searchVideos(searchQuery.trim(), currentPage, 20, selectedSource);
       if (result.success) {
-        setSearchResults(result.data || []);
+        if (reset) {
+          setSearchResults(result.data || []);
+          setSearchPage(1);
+        } else {
+          setSearchResults(prev => [...prev, ...(result.data || [])]);
+        }
+        setSearchHasMore(result.hasMore || false);
+        if (!reset) {
+          setSearchPage(prev => prev + 1);
+        }
       }
     } catch (error) {
       console.error('搜索失败:', error);
-      setSearchResults([]);
+      if (reset) {
+        setSearchResults([]);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSearchLoadMore = () => {
+    if (!loading && searchHasMore && isSearching && searchQuery.trim()) {
+      handleSearch(false);
     }
   };
 
@@ -263,7 +285,7 @@ const VideosTabScreen = () => {
               placeholderTextColor="#999"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearch}
+              onSubmitEditing={() => handleSearch(true)}
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
@@ -273,6 +295,8 @@ const VideosTabScreen = () => {
                   setSearchQuery('');
                   setIsSearching(false);
                   setSearchResults([]);
+                  setSearchPage(1);
+                  setSearchHasMore(false);
                 }}
               >
                 <Text style={styles.clearButtonText}>✕</Text>
@@ -406,7 +430,7 @@ const VideosTabScreen = () => {
               colors={['#6200EE']}
             />
           }
-          onEndReached={searchQuery.trim() ? null : handleLoadMore}
+          onEndReached={searchQuery.trim() ? handleSearchLoadMore : handleLoadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={() =>
             loading && !refreshing ? (

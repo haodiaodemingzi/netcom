@@ -136,10 +136,15 @@ def search_videos():
         scraper = VideoScraperFactory.create_scraper(source)
         videos = scraper.search_videos(keyword, page, limit)
         
+        # 判断是否还有更多结果（如果返回的结果数等于limit，可能还有更多）
+        has_more = len(videos) >= limit
+        
         return jsonify({
             'series': videos,
-            'hasMore': len(videos) >= limit,
-            'total': len(videos)
+            'hasMore': has_more,
+            'total': len(videos),
+            'page': page,
+            'limit': limit
         }), 200
     except Exception as e:
         logger.error(f"搜索视频失败: {str(e)}")

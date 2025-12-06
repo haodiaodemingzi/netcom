@@ -800,38 +800,230 @@ class ThanjuScraper(BaseVideoScraper):
         try:
             from urllib.parse import quote
             encoded_keyword = quote(keyword)
-            url = f'{self.base_url}/search/{encoded_keyword}.html'
             
-            response = self._make_request(url)
+            # 构建搜索URL - 根据实际搜索页面格式
+            if page > 1:
+                url = f'{self.base_url}/vod-search-wd-{encoded_keyword}-p-{page}.html'
+            else:
+                # 第一页可能是 /search/{keyword}.html 或 /vod-search-wd-{keyword}.html
+                url = f'{self.base_url}/vod-search-wd-{encoded_keyword}.html'
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': f'{self.base_url}/',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            }
+            
+            self._delay()
+            try:
+                response = self.session.get(url, headers=headers, timeout=10, verify=True)
+                response.raise_for_status()
+                if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
+                    response.encoding = response.apparent_encoding
+            except requests.RequestException as e:
+                print(f'搜索请求失败: {url}, 错误: {e}')
+                return videos
+            
             if not response:
                 return videos
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 查找搜索结果
-            video_items = soup.find_all('div', class_=re.compile(r'item|card|video'))
-            if not video_items:
-                video_items = soup.select('ul li, .list-item, .video-item')
+            # 根据提供的HTML结构查找搜索结果
+            # 路径: body > div.wrap > div > div > div.col-md-wide-7.col-xs-1 > div > div > div.myui-panel_bd.col-pd.clearfix > ul > li
+            search_results = soup.select('div.myui-panel_bd ul li, ul.myui-content__list li')
+            if not search_results:
+                # 备用方案：查找所有包含detail链接的li
+                search_results = soup.find_all('li', class_=re.compile(r'clearfix|active'))
             
-            for item in video_items[:limit]:
+            seen_ids = set()
+            
+            for item in search_results:
+                if len(videos) >= limit:
+                    break
+                
                 try:
-                    # 查找链接
-                    link = item.find('a', href=re.compile(r'/detail/\d+\.html'))
-                    if link:
-                        href = link.get('href', '')
-                        video_id_match = re.search(r'/detail/(\d+)\.html', href)
-                        if video_id_match:
-                            video_id = video_id_match.group(1)
-                            parent = item
-                            video = self._parse_video_item_from_link(link, parent, video_id)
-                            if video:
-                                videos.append(video)
+                    # 查找detail链接
+                    detail_link = item.find('a', href=re.compile(r'/detail/\d+\.html'))
+                    if not detail_link:
+                        continue
+                    
+                    href = detail_link.get('href', '')
+                    video_id_match = re.search(r'/detail/(\d+)\.html', href)
+                    if not video_id_match:
+                        continue
+                    
+                    video_id = video_id_match.group(1)
+                    if video_id in seen_ids:
+                        continue
+                    seen_ids.add(video_id)
+                    
+                    # 解析视频信息
+                    video = self._parse_search_result_item(item, video_id)
+                    if video:
+                        videos.append(video)
+                        
                 except Exception as e:
                     print(f'解析搜索结果失败: {e}')
+                    import traceback
+                    traceback.print_exc()
                     continue
             
         except Exception as e:
             print(f'搜索视频失败: {e}')
+            import traceback
+            traceback.print_exc()
         
         return videos
+    
+    def _parse_search_result_item(self, item, video_id):
+        """解析搜索结果中的单个视频项"""
+        try:
+            # 标题 - 从 h4.title > a 中获取
+            title = None
+            title_elem = item.find('h4', class_='title')
+            if title_elem:
+                title_link = title_elem.find('a', href=re.compile(r'/detail/\d+\.html'))
+                if title_link:
+                    title = title_link.get_text(strip=True)
+            
+            if not title:
+                return None
+            
+            # 封面 - 从 a.myui-vodlist__thumb 的 style 或 data-original 中获取
+            cover = ''
+            thumb_link = item.find('a', class_=re.compile(r'myui-vodlist__thumb|thumb'))
+            if thumb_link:
+                # 优先从 style 属性获取
+                style = thumb_link.get('style', '')
+                if style:
+                    url_match = re.search(r'background-image:\s*url\(["\']?([^"\']+)["\']?\)', style)
+                    if url_match:
+                        cover = url_match.group(1).strip('\'"')
+                else:
+                    # 从 data-original 获取
+                    cover = thumb_link.get('data-original', '')
+                
+                # 处理协议相对路径
+                if cover.startswith('//'):
+                    cover = 'https:' + cover
+                elif cover.startswith('/'):
+                    cover = self.base_url + cover
+                elif not cover.startswith('http'):
+                    cover = 'https://' + cover.lstrip('/')
+            
+            # 评分 - 从 span.pic-tag 中获取
+            rating = None
+            pic_tag = item.find('span', class_=re.compile(r'pic-tag'))
+            if pic_tag:
+                rating_text = pic_tag.get_text(strip=True)
+                rating_match = re.search(r'(\d+\.?\d*)分', rating_text)
+                if rating_match:
+                    try:
+                        rating = float(rating_match.group(1))
+                    except:
+                        pass
+            
+            # 集数/状态 - 从 span.pic-text 中获取
+            episodes = None
+            status = '连载中'
+            pic_text = item.find('span', class_='pic-text')
+            if pic_text:
+                episode_text = pic_text.get_text(strip=True)
+                if '集全' in episode_text:
+                    episodes_match = re.search(r'(\d+)集全', episode_text)
+                    if episodes_match:
+                        try:
+                            episodes = int(episodes_match.group(1))
+                            status = '完结'
+                        except:
+                            pass
+                elif re.search(r'第\d+[期集]', episode_text):
+                    # 提取当前集数/期数
+                    episode_match = re.search(r'第(\d+)[期集]', episode_text)
+                    if episode_match:
+                        try:
+                            episodes = int(episode_match.group(1))
+                        except:
+                            pass
+                    status = '连载中'
+            
+            # 导演 - 从 p > span.text-muted 中获取（如果有）
+            director = None
+            detail_paragraphs = item.find_all('p')
+            for p in detail_paragraphs:
+                text_muted = p.find('span', class_='text-muted')
+                if text_muted and '导演' in text_muted.get_text():
+                    director_text = p.get_text(strip=True).replace('导演：', '').strip()
+                    if director_text:
+                        director = director_text
+                    break
+            
+            # 主演 - 从 p 中获取（包含"主演："的p）
+            actors = []
+            for p in detail_paragraphs:
+                text_muted = p.find('span', class_='text-muted')
+                if text_muted and '主演' in text_muted.get_text():
+                    # 提取主演名称（可能是链接或纯文本）
+                    actor_links = p.find_all('a')
+                    if actor_links:
+                        for actor_link in actor_links:
+                            actor_name = actor_link.get_text(strip=True)
+                            if actor_name and actor_name not in actors:
+                                actors.append(actor_name)
+                    else:
+                        # 如果没有链接，从文本中提取
+                        actor_text = p.get_text(strip=True).replace('主演：', '').strip()
+                        if actor_text:
+                            # 按逗号或空格分割
+                            actor_names = re.split(r'[,，\s]+', actor_text)
+                            actors.extend([name.strip() for name in actor_names if name.strip()][:4])
+                    break
+            
+            # 分类、地区、年份 - 从包含"分类："的p中获取
+            category = None
+            area = None
+            year = None
+            for p in detail_paragraphs:
+                if '分类：' in p.get_text():
+                    text = p.get_text(strip=True)
+                    # 提取分类
+                    category_match = re.search(r'分类：([^\s]+)', text)
+                    if category_match:
+                        category = category_match.group(1).strip()
+                    
+                    # 提取地区
+                    area_match = re.search(r'地区：([^\s]+)', text)
+                    if area_match:
+                        area = area_match.group(1).strip()
+                    
+                    # 提取年份
+                    year_match = re.search(r'年份：(\d{4})', text)
+                    if year_match:
+                        year = year_match.group(1)
+                    break
+            
+            video = {
+                'id': video_id,
+                'title': title,
+                'cover': cover or f'https://via.placeholder.com/200x300?text={title}',
+                'rating': rating,
+                'episodes': episodes,
+                'status': status,
+                'actors': actors,
+                'director': director,
+                'category': category,
+                'area': area,
+                'year': year,
+                'source': self.source_id,
+            }
+            
+            return video
+            
+        except Exception as e:
+            print(f'解析搜索结果项错误: {e}')
+            import traceback
+            traceback.print_exc()
+            return None
 
