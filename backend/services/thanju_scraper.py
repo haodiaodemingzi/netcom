@@ -1,4 +1,6 @@
 import re
+import json
+import requests
 from bs4 import BeautifulSoup
 from .base_video_scraper import BaseVideoScraper
 
@@ -560,8 +562,13 @@ class ThanjuScraper(BaseVideoScraper):
         
         return episodes
 
-    def get_episode_detail(self, episode_id):
-        """获取单个剧集详情（包含播放链接）"""
+    def get_episode_detail(self, episode_id, try_other_sources=True):
+        """获取单个剧集详情（包含播放链接）
+        
+        Args:
+            episode_id: 剧集ID，格式: seriesId_playlistId_episodeNum
+            try_other_sources: 如果第一个播放源失败，是否尝试其他播放源（默认True）
+        """
         try:
             # episode_id格式: seriesId_playlistId_episodeNum
             parts = episode_id.split('_')
@@ -569,13 +576,78 @@ class ThanjuScraper(BaseVideoScraper):
                 return None
             
             series_id, playlist_id, episode_num = parts
+            
+            # 尝试获取剧集详情，如果失败且允许，尝试其他播放源
+            result = self._get_episode_detail_from_source(series_id, playlist_id, episode_num)
+            
+            # 如果第一个播放源失败且允许尝试其他播放源，尝试其他播放源（2-5）
+            if not result or not result.get('videoUrl'):
+                if try_other_sources and playlist_id == '1':
+                    print(f'第一个播放源失败，尝试其他播放源...')
+                    for alt_playlist_id in ['2', '3', '4', '5']:
+                        print(f'尝试播放源 {alt_playlist_id}...')
+                        alt_result = self._get_episode_detail_from_source(series_id, alt_playlist_id, episode_num)
+                        if alt_result and alt_result.get('videoUrl'):
+                            print(f'播放源 {alt_playlist_id} 成功获取视频URL')
+                            # 更新episode_id以反映实际使用的播放源
+                            alt_result['id'] = f'{series_id}_{alt_playlist_id}_{episode_num}'
+                            return alt_result
+                    print('所有播放源都失败')
+            
+            return result
+            
+        except Exception as e:
+            print(f'获取剧集详情失败: {e}')
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _get_episode_detail_from_source(self, series_id, playlist_id, episode_num):
+        """从指定播放源获取剧集详情"""
+        try:
             url = f'{self.base_url}/play/{series_id}/{playlist_id}-{episode_num}.html'
             
-            response = self._make_request(url)
+            # 播放页面需要携带Referer和更完整的请求头
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': f'{self.base_url}/detail/{series_id}.html',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            # 使用自定义请求头
+            self._delay()
+            try:
+                response = self.session.get(url, headers=headers, timeout=10, verify=True)
+                response.raise_for_status()
+                
+                # 如果响应编码不正确,尝试自动检测
+                if response.encoding is None or response.encoding.lower() == 'iso-8859-1':
+                    response.encoding = response.apparent_encoding
+            except requests.RequestException as e:
+                print(f'请求播放页面失败: {url}, 错误: {e}')
+                return None
+            
             if not response:
                 return None
             
             soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # 检查页面是否包含错误信息（但不立即返回，先尝试解析）
+            title = soup.find('title')
+            title_text = title.get_text() if title else ''
+            has_error = title and ('错误' in title_text or '系统发生错误' in title_text)
+            if has_error:
+                print(f'警告: 播放页面可能返回错误: {url}')
+                print(f'页面标题: {title_text}')
+                # 尝试查找错误信息
+                error_elem = soup.find(string=re.compile(r'错误|无法加载'))
+                if error_elem:
+                    print(f'错误信息: {error_elem.strip()}')
+                print('继续尝试解析视频URL...')
             
             # 查找视频播放链接
             video_url = None
@@ -607,28 +679,80 @@ class ThanjuScraper(BaseVideoScraper):
                         if source_tag:
                             video_url = source_tag.get('src', '')
             
-            # 3. script中的视频链接 - 更详细的模式
+            # 3. script中的视频链接 - 优先查找 cms_player 配置
             if not video_url:
                 scripts = soup.find_all('script')
                 for script in scripts:
                     script_text = script.string or ''
                     if not script_text:
                         continue
-                    # 查找常见的视频链接模式
-                    url_patterns = [
-                        r'["\'](https?://[^"\']+\.mp4[^"\']*)["\']',
-                        r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']',
-                        r'url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
-                        r'video["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
-                        r'src["\']?\s*[:=]\s*["\'](https?://[^"\']+\.(?:mp4|m3u8)[^"\']*)["\']',
-                        r'playurl["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
-                        r'play_url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
-                    ]
-                    for pattern in url_patterns:
-                        match = re.search(pattern, script_text, re.IGNORECASE)
-                        if match:
-                            video_url = match.group(1)
-                            break
+                    
+                    # 优先查找 cms_player 配置（这是主要的视频URL来源）
+                    # 匹配更灵活的JSON格式，支持嵌套对象和转义字符
+                    # 先尝试匹配完整的JSON对象（包含所有字段，支持多行）
+                    cms_player_match = re.search(r'var\s+cms_player\s*=\s*(\{.*?"url".*?\})', script_text, re.DOTALL)
+                    if not cms_player_match:
+                        # 如果失败，尝试匹配单行JSON（不包含换行）
+                        cms_player_match = re.search(r'var\s+cms_player\s*=\s*(\{[^}]*"url"[^}]*\})', script_text)
+                    if not cms_player_match:
+                        # 尝试匹配不包含var关键字的JSON对象
+                        cms_player_match = re.search(r'cms_player\s*=\s*(\{.*?"url".*?\})', script_text, re.DOTALL)
+                    if not cms_player_match:
+                        # 最后尝试匹配单行JSON（不包含var关键字）
+                        cms_player_match = re.search(r'cms_player\s*=\s*(\{[^}]*"url"[^}]*\})', script_text)
+                    
+                    if cms_player_match:
+                        try:
+                            # 解析JSON配置
+                            config_str = cms_player_match.group(1)
+                            print(f'[Scraper] 找到cms_player配置，原始字符串: {config_str[:300]}')
+                            # 处理转义的引号和换行
+                            config_str = config_str.replace('\\/', '/').replace('\\"', '"').replace('\\n', '').replace('\\r', '')
+                            print(f'[Scraper] 处理后的配置字符串: {config_str[:300]}')
+                            config = json.loads(config_str)
+                            print(f'[Scraper] JSON解析成功: {config}')
+                            if config.get('url'):
+                                video_url = config['url']
+                                print(f'[Scraper] 从cms_player获取视频URL: {video_url}')
+                                break
+                            else:
+                                print(f'[Scraper] 警告: cms_player配置中没有url字段')
+                        except json.JSONDecodeError as e:
+                            print(f'[Scraper] JSON解析失败: {e}')
+                            print(f'[Scraper] 配置字符串: {config_str[:300] if "config_str" in locals() else "N/A"}')
+                            # 如果JSON解析失败，尝试直接提取url字段（支持转义字符）
+                            url_match = re.search(r'"url"\s*:\s*"((?:[^"\\]|\\.)+)"', script_text)
+                            if url_match:
+                                video_url = url_match.group(1).replace('\\/', '/').replace('\\"', '"')
+                                print(f'[Scraper] 从cms_player直接提取URL: {video_url}')
+                                break
+                        except Exception as e:
+                            print(f'[Scraper] 解析cms_player配置异常: {e}')
+                            import traceback
+                            traceback.print_exc()
+                            # 如果JSON解析失败，尝试直接提取url字段（支持转义字符）
+                            url_match = re.search(r'"url"\s*:\s*"((?:[^"\\]|\\.)+)"', script_text)
+                            if url_match:
+                                video_url = url_match.group(1).replace('\\/', '/').replace('\\"', '"')
+                                print(f'[Scraper] 从cms_player直接提取URL: {video_url}')
+                                break
+                    
+                    # 如果没找到cms_player，尝试其他模式
+                    if not video_url:
+                        url_patterns = [
+                            r'["\'](https?://[^"\']+\.mp4[^"\']*)["\']',
+                            r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']',
+                            r'url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                            r'video["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                            r'src["\']?\s*[:=]\s*["\'](https?://[^"\']+\.(?:mp4|m3u8)[^"\']*)["\']',
+                            r'playurl["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                            r'play_url["\']?\s*[:=]\s*["\'](https?://[^"\']+)["\']',
+                        ]
+                        for pattern in url_patterns:
+                            match = re.search(pattern, script_text, re.IGNORECASE)
+                            if match:
+                                video_url = match.group(1)
+                                break
                     if video_url:
                         break
             
@@ -654,7 +778,7 @@ class ThanjuScraper(BaseVideoScraper):
                     episode_title = f'第{episode_num}集'
             
             episode = {
-                'id': episode_id,
+                'id': f'{series_id}_{playlist_id}_{episode_num}',
                 'seriesId': series_id,
                 'title': episode_title,
                 'episodeNumber': int(episode_num) if episode_num else None,

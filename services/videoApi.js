@@ -269,9 +269,65 @@ export const getEpisodeDetail = async (episodeId) => {
       }
       throw new Error('剧集不存在');
     } else {
+      console.log('=== 调用后端API获取剧集详情 ===');
+      console.log('剧集ID:', episodeId);
+      console.log('数据源:', currentSource);
+      console.log('API地址:', `${API_BASE_URL}/videos/episodes/${episodeId}`);
+      
       const params = {};
       if (currentSource) params.source = currentSource;
+      
+      console.log('请求参数:', params);
       const response = await axios.get(`${API_BASE_URL}/videos/episodes/${episodeId}`, { params });
+      console.log('后端API响应状态:', response.status);
+      console.log('后端API响应数据:', response.data);
+      
+      // 如果返回的视频URL是外部链接，转换为代理URL
+      if (response.data) {
+        console.log('后端返回的完整数据:', response.data);
+        console.log('videoUrl值:', response.data.videoUrl);
+        console.log('videoUrl类型:', typeof response.data.videoUrl);
+        console.log('videoUrl是否为null:', response.data.videoUrl === null);
+        console.log('videoUrl是否为空字符串:', response.data.videoUrl === '');
+        console.log('videoUrl是否存在:', !!response.data.videoUrl);
+        
+        if (response.data.videoUrl) {
+          const originalUrl = response.data.videoUrl;
+          console.log('原始视频URL:', originalUrl);
+          
+          // m3u8文件可以直接播放，不需要代理
+          const isM3u8 = originalUrl.includes('.m3u8') || originalUrl.includes('m3u8');
+          
+          if (isM3u8) {
+            console.log('检测到m3u8文件，直接使用原始URL，不经过代理');
+            // m3u8文件直接使用，不转换
+            response.data.videoUrl = originalUrl;
+          } else if (originalUrl.startsWith('http://') || originalUrl.startsWith('https://')) {
+            // 非m3u8的外部URL需要代理
+            const proxyParams = new URLSearchParams({
+              url: originalUrl,
+              source: currentSource || 'thanju',
+            });
+            // 如果有seriesId，也传递过去
+            if (response.data.seriesId) {
+              proxyParams.append('series_id', response.data.seriesId);
+            }
+            const proxyUrl = `${API_BASE_URL}/videos/proxy?${proxyParams.toString()}`;
+            console.log('转换为代理URL:', proxyUrl);
+            response.data.videoUrl = proxyUrl;
+          } else {
+            console.log('视频URL不是外部链接，保持原样:', originalUrl);
+          }
+        } else {
+          console.warn('=== 后端返回的数据中没有videoUrl ===');
+          console.warn('返回的数据:', JSON.stringify(response.data, null, 2));
+          console.warn('playUrl:', response.data.playUrl);
+          console.warn('可能原因: 播放页面返回错误或解析失败');
+        }
+      } else {
+        console.error('后端返回的数据为空');
+      }
+      
       return {
         success: true,
         data: response.data,

@@ -25,7 +25,7 @@ const PlayerScreen = () => {
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(true); // 默认全屏
+  const [isFullscreen, setIsFullscreen] = useState(false); // 默认非全屏，在上半屏播放
   const [quality, setQuality] = useState('high'); // high, medium, low
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -38,10 +38,35 @@ const PlayerScreen = () => {
   const [videoSource, setVideoSource] = useState('');
   const player = useVideoPlayer(videoSource, (player) => {
     if (player) {
+      console.log('=== 播放器初始化 ===');
+      console.log('播放器对象:', player);
+      console.log('视频源:', videoSource);
       player.loop = false;
       player.muted = false;
+      
+      // 监听播放器状态
+      try {
+        console.log('播放器状态 - playing:', player.playing);
+        console.log('播放器状态 - currentTime:', player.currentTime);
+        console.log('播放器状态 - duration:', player.duration);
+      } catch (e) {
+        console.error('获取播放器状态失败:', e);
+      }
+    } else {
+      console.log('播放器未初始化，视频源:', videoSource);
     }
   });
+  
+  // 监听视频源变化
+  useEffect(() => {
+    console.log('=== 视频源变化 ===');
+    console.log('新视频源:', videoSource);
+    if (videoSource) {
+      console.log('视频源URL:', videoSource);
+      console.log('视频源是否为代理URL:', videoSource.includes('/videos/proxy'));
+      console.log('视频源是否为m3u8:', videoSource.includes('.m3u8') || videoSource.includes('m3u8'));
+    }
+  }, [videoSource]);
 
   useEffect(() => {
     loadEpisode();
@@ -50,7 +75,12 @@ const PlayerScreen = () => {
   // 当episode加载完成后，更新video source
   useEffect(() => {
     if (episode?.videoUrl) {
+      console.log('=== 更新视频源 ===');
+      console.log('原始视频URL:', episode.videoUrl);
       setVideoSource(episode.videoUrl);
+      console.log('视频源已设置');
+    } else {
+      console.log('剧集数据中没有视频URL');
     }
   }, [episode?.videoUrl]);
 
@@ -81,19 +111,33 @@ const PlayerScreen = () => {
   const loadEpisode = async () => {
     setLoading(true);
     try {
+      console.log('=== 开始加载剧集 ===');
+      console.log('剧集ID:', episodeId);
+      
       const result = await getEpisodeDetail(episodeId);
+      console.log('剧集详情响应:', result);
+      
       if (result.success) {
         setEpisode(result.data);
-        console.log('剧集加载成功:', result.data);
+        console.log('=== 剧集加载成功 ===');
+        console.log('剧集数据:', result.data);
         console.log('视频URL:', result.data.videoUrl);
+        console.log('视频URL类型:', typeof result.data.videoUrl);
+        console.log('视频URL是否为空:', !result.data.videoUrl);
+        console.log('视频URL是否为代理URL:', result.data.videoUrl?.includes('/videos/proxy'));
+        
         if (!result.data.videoUrl) {
+          console.error('视频URL为空');
           Alert.alert('提示', '未找到视频播放链接，可能需要使用播放页面URL');
         }
       } else {
+        console.error('获取剧集详情失败:', result.error);
         Alert.alert('错误', result.error || '加载剧集失败');
       }
     } catch (error) {
-      console.error('加载剧集失败:', error);
+      console.error('=== 加载剧集异常 ===');
+      console.error('错误信息:', error);
+      console.error('错误堆栈:', error.stack);
       Alert.alert('错误', '加载剧集失败: ' + error.message);
     } finally {
       setLoading(false);
@@ -184,12 +228,13 @@ const PlayerScreen = () => {
     );
   }
 
-  const videoContainerHeight = isFullscreen ? SCREEN_HEIGHT - 80 : SCREEN_WIDTH * 0.5625;
+  // 非全屏时，视频容器占屏幕上半部分（16:9比例）
   const videoContainerWidth = SCREEN_WIDTH;
+  const videoContainerHeight = isFullscreen ? SCREEN_HEIGHT : SCREEN_WIDTH * 0.5625; // 16:9比例
 
   return (
-    <View style={[styles.container, isFullscreen && styles.fullscreenContainer]}>
-      <StatusBar hidden={isFullscreen} />
+    <SafeAreaView style={[styles.container, isFullscreen && styles.fullscreenContainer]} edges={isFullscreen ? [] : ['top']}>
+      <StatusBar hidden={isFullscreen} barStyle="light-content" />
       
       <TouchableOpacity
         style={[
@@ -202,13 +247,34 @@ const PlayerScreen = () => {
         onPress={handleControlsPress}
         activeOpacity={1}
       >
-        {player && (
+        {player ? (
           <VideoView
             player={player}
           style={styles.video}
             nativeControls={false}
             contentFit="contain"
-        />
+            onLoadStart={() => {
+              console.log('=== 视频开始加载 ===');
+              console.log('视频源:', videoSource);
+            }}
+            onLoad={(event) => {
+              console.log('=== 视频加载完成 ===');
+              console.log('加载事件:', event);
+              console.log('视频源:', videoSource);
+            }}
+            onError={(error) => {
+              console.error('=== 视频加载错误 ===');
+              console.error('错误信息:', error);
+              console.error('视频源:', videoSource);
+              Alert.alert('播放错误', '视频加载失败，请检查网络连接或视频链接');
+            }}
+          />
+        ) : (
+          <View style={styles.video}>
+            <Text style={{ color: '#fff', textAlign: 'center', padding: 20 }}>
+              正在初始化播放器...
+            </Text>
+          </View>
         )}
 
         {showControls && (
@@ -327,7 +393,7 @@ const PlayerScreen = () => {
           <Text style={styles.episodeDescriptionCompact}>{episode.description}</Text>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -335,11 +401,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    justifyContent: 'space-between',
   },
   fullscreenContainer: {
     backgroundColor: '#000',
-    justifyContent: 'space-between',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
   },
   loadingContainer: {
     flex: 1,
@@ -498,9 +568,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   infoContainer: {
-    flex: 1,
     padding: 16,
     backgroundColor: '#fff',
+    maxHeight: SCREEN_HEIGHT * 0.4, // 限制最大高度，确保视频在上半屏
   },
   infoContainerFullscreen: {
     flex: 0,
