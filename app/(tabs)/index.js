@@ -653,7 +653,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContent: {
-    padding: 0.5,
+    paddingBottom: 24,
+    padding: 2,
   },
   listContentList: {
     padding: 0,
@@ -663,7 +664,7 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     width: '33.333%',
-    padding: 0.5,
+    padding: 2,
   },
   cardWrapperList: {
     width: '100%',

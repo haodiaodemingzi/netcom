@@ -35,6 +35,7 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
             isList && styles.titleList
           ]} 
           numberOfLines={isList ? 1 : 2}
+          ellipsizeMode="tail"
         >
           {comic.title}
         </Text>
@@ -46,6 +47,7 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
               isList && styles.chapterList
             ]} 
             numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {comic.latestChapter}
           </Text>
@@ -58,6 +60,8 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
                 darkMode && styles.statusTextDark,
                 isList && styles.statusTextList
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {comic.status === 'completed' ? '完结' : '连载'}
             </Text>
@@ -69,6 +73,8 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
                 darkMode && styles.ratingDark,
                 isList && styles.ratingList
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               ⭐ {comic.rating}
             </Text>
@@ -81,16 +87,16 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
-    margin: 8,
-    borderRadius: 8,
     backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 12,
+    overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    overflow: 'hidden',
+    height: 280, // 固定高度，确保卡片高度一致
   },
   cardList: {
     flexDirection: 'row',
@@ -102,20 +108,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
+    height: 100, // 列表模式固定高度
   },
   cover: {
     width: '100%',
-    aspectRatio: 0.7,
+    height: 200, // 固定封面高度
     backgroundColor: '#f0f0f0',
   },
   coverList: {
     width: 75,
-    aspectRatio: 0.66,
+    height: 88, // 固定封面高度，与列表卡片高度匹配
     borderRadius: 4,
     margin: 6,
   },
   info: {
     padding: 12,
+    height: 80, // 固定信息区域高度
+    justifyContent: 'space-between',
   },
   infoList: {
     flex: 1,
@@ -123,16 +132,21 @@ const styles = StyleSheet.create({
     paddingRight: 10,
     paddingLeft: 0,
     justifyContent: 'center',
+    height: 88, // 与封面高度匹配
   },
   title: {
     fontSize: 14,
     fontWeight: '600',
     color: '#000',
     marginBottom: 4,
+    minHeight: 40, // 确保标题区域有最小高度（2行）
+    lineHeight: 20,
   },
   titleList: {
     fontSize: 15,
     marginBottom: 3,
+    minHeight: 20, // 列表模式单行高度
+    lineHeight: 20,
   },
   titleDark: {
     color: '#fff',
@@ -141,10 +155,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginBottom: 8,
+    minHeight: 16, // 确保章节区域有固定高度
+    lineHeight: 16,
   },
   chapterList: {
     fontSize: 12,
     marginBottom: 4,
+    minHeight: 16,
+    lineHeight: 16,
   },
   chapterDark: {
     color: '#aaa',
@@ -153,6 +171,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 20, // 确保元数据区域有固定高度
   },
   metaList: {
     justifyContent: 'flex-start',
@@ -171,7 +190,8 @@ const styles = StyleSheet.create({
   },
   rating: {
     fontSize: 12,
-    color: '#666',
+    color: '#ff9800',
+    fontWeight: '600',
   },
   ratingList: {
     fontSize: 12,

@@ -45,16 +45,16 @@ const BookCard = ({ book, viewMode = 'card' }) => {
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
-    margin: 4,
-    borderRadius: 4,
     backgroundColor: '#fff',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1,
+    borderRadius: 8,
+    marginBottom: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    height: 280, // 固定高度，确保卡片高度一致
   },
   cardList: {
     flexDirection: 'row',
@@ -66,16 +66,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
+    height: 100, // 列表模式固定高度
   },
   cover: {
     width: '100%',
-    aspectRatio: 0.9,
+    height: 200, // 固定封面高度
     justifyContent: 'center',
     alignItems: 'center',
   },
   coverList: {
-    width: 65,
-    aspectRatio: 0.75,
+    width: 75,
+    height: 88, // 固定封面高度，与列表卡片高度匹配
     borderRadius: 4,
     margin: 6,
   },
@@ -87,7 +88,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   info: {
-    padding: 6,
+    padding: 12,
+    height: 80, // 固定信息区域高度
+    justifyContent: 'space-between',
   },
   infoList: {
     flex: 1,
@@ -95,23 +98,32 @@ const styles = StyleSheet.create({
     paddingRight: 10,
     paddingLeft: 0,
     justifyContent: 'center',
+    height: 88, // 与封面高度匹配
   },
   title: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: '#111',
-    marginBottom: 1,
+    marginBottom: 4,
+    minHeight: 40, // 确保标题区域有最小高度（2行）
+    lineHeight: 20,
   },
   titleList: {
     fontSize: 15,
     marginBottom: 3,
+    minHeight: 20, // 列表模式单行高度
+    lineHeight: 20,
   },
   author: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#666',
+    minHeight: 16, // 确保作者区域有固定高度
+    lineHeight: 16,
   },
   authorList: {
     fontSize: 13,
+    minHeight: 16,
+    lineHeight: 16,
   },
 });
 
