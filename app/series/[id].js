@@ -446,20 +446,25 @@ const SeriesDetailScreen = () => {
     try {
       const source = getCurrentVideoSource() || 'thanju';
       
-      // 仅下载已选择的剧集；未选择则直接返回
-      const selectedList = episodes.filter(e => selectedEpisodes.has(e.id));
-      if (selectedList.length === 0) {
-        console.warn('未选择任何剧集，已取消批量下载');
-        return;
+      // 如果是多选模式，只下载选中的
+      if (isMultiSelectMode && selectedEpisodes.size > 0) {
+        const selectedList = episodes.filter(e => selectedEpisodes.has(e.id));
+        await videoDownloadManager.batchDownloadEpisodes(
+          series.id,
+          series.title,
+          selectedList,
+          source
+        );
+        exitMultiSelectMode();
+      } else {
+        // 下载所有
+        await videoDownloadManager.batchDownloadEpisodes(
+          series.id,
+          series.title,
+          episodes,
+          source
+        );
       }
-      
-      await videoDownloadManager.batchDownloadEpisodes(
-        series.id,
-        series.title,
-        selectedList,
-        source
-      );
-      exitMultiSelectMode();
     } catch (error) {
       console.error('批量下载失败:', error);
     }
@@ -467,12 +472,19 @@ const SeriesDetailScreen = () => {
 
   // 批量暂停所有下载
   const handleBatchPause = useCallback(() => {
-    videoDownloadManager.pauseAll();
+    const allTasks = videoDownloadManager.queue.getAllTasks();
+    const runningTasks = [...allTasks.running, ...allTasks.pending];
+    runningTasks.forEach(task => {
+      videoDownloadManager.pauseDownload(task.episodeId);
+    });
   }, []);
 
   // 批量继续所有下载
   const handleBatchResume = useCallback(() => {
-    videoDownloadManager.resumeAll();
+    const allTasks = videoDownloadManager.queue.getAllTasks();
+    allTasks.paused.forEach(task => {
+      videoDownloadManager.resumeDownload(task.episodeId);
+    });
   }, []);
 
   const handlePauseDownload = useCallback((episodeId) => {

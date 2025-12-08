@@ -85,8 +85,6 @@ const VideosTabScreen = () => {
       setHasMore(true);
       setSelectedCategory('hot');
       setCategoriesLoading(true);
-      setSelectedSource(null);
-      setSources({});
       loadSources();
     });
     
