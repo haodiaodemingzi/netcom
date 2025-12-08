@@ -12,6 +12,7 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import eventBus, { EVENTS } from '../../services/eventBus';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -33,6 +34,14 @@ const SeriesDetailScreen = () => {
   const [showPlayer, setShowPlayer] = useState(false);
   const [downloadState, setDownloadState] = useState(null);
   const [preparingDownloads, setPreparingDownloads] = useState(new Set());
+  
+  // 多选模式状态
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedEpisodes, setSelectedEpisodes] = useState(new Set());
+  
+  // 分区显示状态（每50集一个分区）
+  const EPISODES_PER_GROUP = 50;
+  const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
   
   // 视频播放器 - useVideoPlayer会自动响应videoSource的变化
   const player = useVideoPlayer(videoSource || null, (player) => {
@@ -308,23 +317,117 @@ const SeriesDetailScreen = () => {
     }
   }, [series]);
 
+  // 计算分组信息
+  const episodeGroups = useMemo(() => {
+    if (episodes.length <= EPISODES_PER_GROUP) return [episodes];
+    
+    const groups = [];
+    for (let i = 0; i < episodes.length; i += EPISODES_PER_GROUP) {
+      groups.push(episodes.slice(i, i + EPISODES_PER_GROUP));
+    }
+    return groups;
+  }, [episodes]);
+
+  // 当前显示的剧集（根据分区）
+  const displayedEpisodes = useMemo(() => {
+    if (episodeGroups.length <= 1) return episodes;
+    return episodeGroups[currentGroupIndex] || [];
+  }, [episodeGroups, currentGroupIndex, episodes]);
+
+  // 多选模式：切换选中状态
+  const toggleEpisodeSelection = useCallback((episodeId) => {
+    setSelectedEpisodes(prev => {
+      const next = new Set(prev);
+      if (next.has(episodeId)) {
+        next.delete(episodeId);
+      } else {
+        next.add(episodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  // 全选/取消全选当前分区
+  const toggleSelectAll = useCallback(() => {
+    const currentEpisodeIds = displayedEpisodes.map(e => e.id);
+    const allSelected = currentEpisodeIds.every(id => selectedEpisodes.has(id));
+    
+    if (allSelected) {
+      // 取消全选
+      setSelectedEpisodes(prev => {
+        const next = new Set(prev);
+        currentEpisodeIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      // 全选
+      setSelectedEpisodes(prev => {
+        const next = new Set(prev);
+        currentEpisodeIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [displayedEpisodes, selectedEpisodes]);
+
+  // 进入多选模式
+  const enterMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(true);
+    setSelectedEpisodes(new Set());
+  }, []);
+
+  // 退出多选模式
+  const exitMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(false);
+    setSelectedEpisodes(new Set());
+  }, []);
+
+  // 批量下载选中的剧集（不弹窗提示，与漫画风格一致）
   const handleBatchDownload = async () => {
     if (!series || episodes.length === 0) return;
     
     try {
-      const source = getCurrentVideoSource() || 'thanju'; // 使用当前选择的数据源
-      const count = await videoDownloadManager.batchDownloadEpisodes(
-        series.id,
-        series.title,
-        episodes,
-        source
-      );
-      Alert.alert('提示', `已添加 ${count} 个剧集到下载队列`);
+      const source = getCurrentVideoSource() || 'thanju';
+      
+      // 如果是多选模式，只下载选中的
+      if (isMultiSelectMode && selectedEpisodes.size > 0) {
+        const selectedList = episodes.filter(e => selectedEpisodes.has(e.id));
+        await videoDownloadManager.batchDownloadEpisodes(
+          series.id,
+          series.title,
+          selectedList,
+          source
+        );
+        exitMultiSelectMode();
+      } else {
+        // 下载所有
+        await videoDownloadManager.batchDownloadEpisodes(
+          series.id,
+          series.title,
+          episodes,
+          source
+        );
+      }
     } catch (error) {
       console.error('批量下载失败:', error);
-      Alert.alert('错误', '批量下载失败: ' + error.message);
     }
   };
+
+  // 批量暂停所有下载
+  const handleBatchPause = useCallback(() => {
+    const allTasks = videoDownloadManager.queue.getAllTasks();
+    const runningTasks = [...allTasks.running, ...allTasks.pending];
+    runningTasks.forEach(task => {
+      videoDownloadManager.pauseDownload(task.episodeId);
+    });
+  }, []);
+
+  // 批量继续所有下载
+  const handleBatchResume = useCallback(() => {
+    const allTasks = videoDownloadManager.queue.getAllTasks();
+    allTasks.paused.forEach(task => {
+      videoDownloadManager.resumeDownload(task.episodeId);
+    });
+  }, []);
 
   const handlePauseDownload = useCallback((episodeId) => {
     videoDownloadManager.pauseDownload(episodeId);
@@ -342,14 +445,31 @@ const SeriesDetailScreen = () => {
     videoDownloadManager.retryDownload(episode.id);
   }, []);
 
+  // 获取下载任务统计
+  const downloadStats = useMemo(() => {
+    if (!downloadState) return { running: 0, paused: 0, pending: 0 };
+    const allTasks = videoDownloadManager.queue.getAllTasks();
+    return {
+      running: allTasks.running.length,
+      paused: allTasks.paused.length,
+      pending: allTasks.pending.length,
+    };
+  }, [downloadState]);
+
   const renderEpisodeCard = useCallback(({ item, index }) => {
     const downloadStatus = getEpisodeDownloadStatus(item.id);
     const isActive = playingEpisode?.id === item.id;
+    const isSelected = selectedEpisodes.has(item.id);
+    
+    // 多选模式下点击切换选中状态
+    const handlePress = isMultiSelectMode 
+      ? () => toggleEpisodeSelection(item.id)
+      : () => handleEpisodePress(item);
     
     return (
       <EpisodeCard
         item={item}
-        onPress={handleEpisodePress}
+        onPress={handlePress}
         onDownload={handleDownloadEpisode}
         onPause={() => handlePauseDownload(item.id)}
         onResume={() => handleResumeDownload(item.id)}
@@ -357,9 +477,11 @@ const SeriesDetailScreen = () => {
         onRetry={() => handleRetryDownload(item)}
         downloadStatus={downloadStatus}
         isActive={isActive}
+        isMultiSelectMode={isMultiSelectMode}
+        isSelected={isSelected}
       />
     );
-  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload]);
+  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload, isMultiSelectMode, selectedEpisodes, toggleEpisodeSelection]);
 
   if (loading) {
     return (
@@ -491,20 +613,110 @@ const SeriesDetailScreen = () => {
           <View style={styles.divider} />
 
           <View style={styles.episodesHeader}>
-          <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
-            {episodes.length > 0 && (
-              <TouchableOpacity
-                style={styles.batchDownloadButton}
-                onPress={handleBatchDownload}
-              >
-                <Text style={styles.batchDownloadText}>批量下载</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+            <View style={styles.headerActions}>
+              {isMultiSelectMode ? (
+                <>
+                  <Text style={styles.selectedCount}>已选 {selectedEpisodes.size}</Text>
+                  <TouchableOpacity
+                    style={styles.selectAllButton}
+                    onPress={toggleSelectAll}
+                  >
+                    <Text style={styles.selectAllText}>
+                      {displayedEpisodes.every(e => selectedEpisodes.has(e.id)) ? '取消全选' : '全选'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelSelectButton}
+                    onPress={exitMultiSelectMode}
+                  >
+                    <Text style={styles.cancelSelectText}>取消</Text>
+                  </TouchableOpacity>
+                  {selectedEpisodes.size > 0 && (
+                    <TouchableOpacity
+                      style={styles.batchDownloadButton}
+                      onPress={handleBatchDownload}
+                    >
+                      <Text style={styles.batchDownloadText}>下载({selectedEpisodes.size})</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                <>
+                  {episodes.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.multiSelectButton}
+                      onPress={enterMultiSelectMode}
+                    >
+                      <Text style={styles.multiSelectText}>多选</Text>
+                    </TouchableOpacity>
+                  )}
+                  {episodes.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.batchDownloadButton}
+                      onPress={handleBatchDownload}
+                    >
+                      <Text style={styles.batchDownloadText}>全部下载</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
           </View>
+          
+          {/* 批量下载控制区（有下载任务时显示） */}
+          {(downloadStats.running > 0 || downloadStats.paused > 0 || downloadStats.pending > 0) && (
+            <View style={styles.batchControlBar}>
+              <Text style={styles.batchControlText}>
+                下载中: {downloadStats.running} | 暂停: {downloadStats.paused} | 排队: {downloadStats.pending}
+              </Text>
+              <View style={styles.batchControlButtons}>
+                {(downloadStats.running > 0 || downloadStats.pending > 0) && (
+                  <TouchableOpacity style={styles.batchPauseButton} onPress={handleBatchPause}>
+                    <Text style={styles.batchPauseText}>全部暂停</Text>
+                  </TouchableOpacity>
+                )}
+                {downloadStats.paused > 0 && (
+                  <TouchableOpacity style={styles.batchResumeButton} onPress={handleBatchResume}>
+                    <Text style={styles.batchResumeText}>全部继续</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+          
+          {/* 分区标签（超过50集显示） */}
+          {episodeGroups.length > 1 && (
+            <View style={styles.groupTabs}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {episodeGroups.map((group, index) => {
+                  const start = index * EPISODES_PER_GROUP + 1;
+                  const end = Math.min((index + 1) * EPISODES_PER_GROUP, episodes.length);
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.groupTab,
+                        currentGroupIndex === index && styles.groupTabActive
+                      ]}
+                      onPress={() => setCurrentGroupIndex(index)}
+                    >
+                      <Text style={[
+                        styles.groupTabText,
+                        currentGroupIndex === index && styles.groupTabTextActive
+                      ]}>
+                        {start}-{end}集
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         <FlatList
-          data={episodes}
+          data={displayedEpisodes}
           renderItem={renderEpisodeCard}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
@@ -605,21 +817,131 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    flexWrap: 'wrap',
   },
   episodesTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  multiSelectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+  },
+  multiSelectText: {
+    color: '#6200EE',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  selectAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 6,
+  },
+  selectAllText: {
+    color: '#2196F3',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  cancelSelectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 6,
+  },
+  cancelSelectText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  selectedCount: {
+    fontSize: 13,
+    color: '#6200EE',
+    fontWeight: '600',
+  },
   batchDownloadButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: '#6200EE',
     borderRadius: 6,
   },
   batchDownloadText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  batchControlBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  batchControlText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  batchControlButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  batchPauseButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ff9800',
+    borderRadius: 4,
+  },
+  batchPauseText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  batchResumeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#4caf50',
+    borderRadius: 4,
+  },
+  batchResumeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  groupTabs: {
+    marginBottom: 12,
+  },
+  groupTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  groupTabActive: {
+    backgroundColor: '#6200EE',
+  },
+  groupTabText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  groupTabTextActive: {
+    color: '#fff',
     fontWeight: '600',
   },
   episodesList: {

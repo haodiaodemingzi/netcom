@@ -18,6 +18,8 @@ const EpisodeCard = ({
   onRetry,
   downloadStatus,
   isActive = false,
+  isMultiSelectMode = false,
+  isSelected = false,
 }) => {
   const isDownloading = downloadStatus && typeof downloadStatus === 'object' && 
                        downloadStatus.status === 'downloading';
@@ -85,10 +87,21 @@ const EpisodeCard = ({
       style={[
         styles.episodeCard,
         isActive && styles.episodeCardActive,
+        isMultiSelectMode && isSelected && styles.episodeCardSelected,
       ]}
       onPress={() => onPress(item)}
       activeOpacity={0.7}
     >
+      {/* 多选模式复选框 */}
+      {isMultiSelectMode && (
+        <View style={[
+          styles.checkbox,
+          isSelected && styles.checkboxSelected
+        ]}>
+          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+      )}
+      
       <View style={styles.episodeInfo}>
         <Text 
           style={[
@@ -289,6 +302,29 @@ const styles = StyleSheet.create({
   episodeCardActive: {
     backgroundColor: '#e3f2fd',
     borderColor: '#2196F3',
+  },
+  episodeCardSelected: {
+    backgroundColor: '#f3e5f5',
+    borderColor: '#6200EE',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#6200EE',
+    borderColor: '#6200EE',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   episodeInfo: {
     flex: 1,

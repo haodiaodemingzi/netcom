@@ -25,6 +25,7 @@ import {
 } from '../../services/videoApi';
 import { getSettings } from '../../services/storage';
 import { filterInstalledSources, getInstalledSourcesByCategory } from '../../services/sourceFilter';
+import eventBus, { EVENTS } from '../../services/eventBus';
 
 const VideosTabScreen = () => {
   const router = useRouter();
@@ -75,6 +76,29 @@ const VideosTabScreen = () => {
   // 初始化加载
   useEffect(() => {
     loadInitialData();
+    
+    // 监听缓存清除事件
+    const unsubscribeCacheClear = eventBus.on(EVENTS.CACHE_CLEARED, () => {
+      // 清空当前数据，重新加载
+      setVideos([]);
+      setPage(1);
+      setHasMore(true);
+      setSelectedCategory('hot');
+      setCategoriesLoading(true);
+      loadSources();
+    });
+    
+    // 监听数据源变化事件
+    const unsubscribeSourceChange = eventBus.on(EVENTS.SOURCE_CHANGED, () => {
+      setPage(1);
+      setVideos([]);
+      loadVideos(true);
+    });
+    
+    return () => {
+      unsubscribeCacheClear();
+      unsubscribeSourceChange();
+    };
   }, []);
 
   // 加载数据源

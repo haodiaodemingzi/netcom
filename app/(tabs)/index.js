@@ -26,6 +26,7 @@ import {
 import { getCurrentSource, setCurrentSource, getSettings } from '../../services/storage';
 import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
 import downloadManager from '../../services/downloadManager';
+import eventBus, { EVENTS } from '../../services/eventBus';
 
 const HomeScreen = () => {
   const router = useRouter();
@@ -62,7 +63,28 @@ const HomeScreen = () => {
     // 初始化下载数量
     setDownloadCount(downloadManager.downloadedChapters.size);
     
-    return () => unsubscribe();
+    // 监听缓存清除事件
+    const unsubscribeCacheClear = eventBus.on(EVENTS.CACHE_CLEARED, () => {
+      // 清空当前数据，重新加载
+      setComics([]);
+      setPage(1);
+      setHasMore(true);
+      setInitialized(false);
+      loadInitialData();
+    });
+    
+    // 监听数据源变化事件
+    const unsubscribeSourceChange = eventBus.on(EVENTS.SOURCE_CHANGED, () => {
+      setPage(1);
+      setComics([]);
+      loadComics(true);
+    });
+    
+    return () => {
+      unsubscribe();
+      unsubscribeCacheClear();
+      unsubscribeSourceChange();
+    };
   }, []);
 
   // 页面获得焦点时重新加载数据源（安装/卸载后更新）

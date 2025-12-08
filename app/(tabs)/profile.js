@@ -24,6 +24,7 @@ import { getAvailableSources } from '../../services/api';
 import downloadManager from '../../services/downloadManager';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import { useToast } from '../../components/MessageToast';
+import eventBus, { EVENTS } from '../../services/eventBus';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -122,6 +123,9 @@ const ProfileScreen = () => {
               // 重新加载数据源（因为已清除）
               await loadSourceData();
               
+              // 发布缓存清除事件，通知所有页面刷新
+              eventBus.emit(EVENTS.CACHE_CLEARED);
+              
               toast.success('缓存已清除，应用已恢复到初始状态');
             } catch (error) {
               console.error('清除缓存失败:', error);
@@ -137,6 +141,10 @@ const ProfileScreen = () => {
     setCurrentSourceState(sourceId);
     await setCurrentSource(sourceId);
     setShowSourceMenu(false);
+    
+    // 发布数据源变化事件
+    eventBus.emit(EVENTS.SOURCE_CHANGED, { sourceId });
+    
     toast.success(`已切换到 ${sources[sourceId]?.name}`);
   };
 

@@ -1,43 +1,30 @@
-export const VideoTaskStatus = {
-  PENDING: 'pending',
-  DOWNLOADING: 'downloading',
-  PAUSED: 'paused',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  CANCELLED: 'cancelled',
-};
+import { BaseDownloadTask, TaskStatus } from './BaseDownloadTask';
 
-export class VideoDownloadTask {
+export const VideoTaskStatus = TaskStatus;
+
+/**
+ * 视频剧集下载任务 - 继承基础下载任务类
+ */
+export class VideoDownloadTask extends BaseDownloadTask {
   constructor(episodeId, seriesId, seriesTitle, episodeTitle, videoUrl, source) {
+    super(episodeId, seriesId, seriesTitle, episodeTitle, source);
+    
+    // 视频任务的 id 直接使用 episodeId（与原实现保持一致）
     this.id = episodeId;
+    
+    // 视频特有的别名属性（向后兼容）
     this.episodeId = episodeId;
     this.seriesId = seriesId;
     this.seriesTitle = seriesTitle;
     this.episodeTitle = episodeTitle;
+    
+    // 视频特有属性
     this.videoUrl = videoUrl;
     this.videoType = this.detectVideoType(videoUrl);
-    this.source = source;
-    
-    this.status = VideoTaskStatus.PENDING;
-    this.progress = 0;
-    this.speed = 0;
-    this.error = null;
-    
-    this.startTime = null;
-    this.endTime = null;
-    this.pausedAt = null;
-    
-    this.downloadedBytes = 0;
-    this.totalBytes = 0;
     this.currentTime = 0; // FFmpeg转换的当前时间
-    this.duration = 0; // 视频总时长
-    
+    this.duration = 0;    // 视频总时长
     this.outputPath = null;
-    this.session = null; // FFmpegKit session
-    
-    this.onProgress = null;
-    this.onComplete = null;
-    this.onError = null;
+    this.session = null;  // FFmpegKit session
   }
 
   detectVideoType(url) {
@@ -59,15 +46,8 @@ export class VideoDownloadTask {
     return this.videoType === 'mp4';
   }
 
-  start() {
-    this.status = VideoTaskStatus.DOWNLOADING;
-    this.startTime = Date.now();
-    this.pausedAt = null;
-  }
-
   pause() {
-    this.status = VideoTaskStatus.PAUSED;
-    this.pausedAt = Date.now();
+    super.pause();
     // 如果FFmpegKit session存在，尝试取消
     if (this.session) {
       try {
@@ -78,16 +58,8 @@ export class VideoDownloadTask {
     }
   }
 
-  resume() {
-    this.status = VideoTaskStatus.DOWNLOADING;
-    this.pausedAt = null;
-    // 注意：FFmpegKit不支持真正的暂停/继续，需要重新开始
-    // 这里只是更新状态，实际需要重新执行转换
-  }
-
   cancel() {
-    this.status = VideoTaskStatus.CANCELLED;
-    this.endTime = Date.now();
+    super.cancel();
     // 取消FFmpegKit session
     if (this.session) {
       try {
@@ -95,24 +67,6 @@ export class VideoDownloadTask {
       } catch (e) {
         console.error('取消FFmpeg session失败:', e);
       }
-    }
-  }
-
-  complete() {
-    this.status = VideoTaskStatus.COMPLETED;
-    this.endTime = Date.now();
-    this.progress = 1;
-    if (this.onComplete) {
-      this.onComplete(this);
-    }
-  }
-
-  fail(error) {
-    this.status = VideoTaskStatus.FAILED;
-    this.error = error;
-    this.endTime = Date.now();
-    if (this.onError) {
-      this.onError(this, error);
     }
   }
 
@@ -144,18 +98,13 @@ export class VideoDownloadTask {
 
   getInfo() {
     return {
-      id: this.id,
+      ...this.getBaseInfo(),
       episodeId: this.episodeId,
       seriesId: this.seriesId,
       seriesTitle: this.seriesTitle,
       episodeTitle: this.episodeTitle,
       videoUrl: this.videoUrl,
       videoType: this.videoType,
-      source: this.source,
-      status: this.status,
-      progress: this.progress,
-      speed: this.speed,
-      error: this.error,
       outputPath: this.outputPath,
       currentTime: this.currentTime,
       duration: this.duration,

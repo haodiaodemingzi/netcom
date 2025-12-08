@@ -1,4 +1,4 @@
-import { TaskStatus } from './DownloadTask';
+import { TaskStatus } from './BaseDownloadTask';
 
 export class DownloadQueue {
   constructor(maxConcurrent = 10) {

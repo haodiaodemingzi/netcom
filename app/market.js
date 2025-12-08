@@ -20,6 +20,7 @@ import {
   isSourceInstalled,
   getInstalledSources,
 } from '../services/storage';
+import eventBus, { EVENTS } from '../services/eventBus';
 
 const MarketScreen = () => {
   const router = useRouter();
@@ -101,12 +102,11 @@ const MarketScreen = () => {
       const success = await installSource(sourceId, category);
       if (success) {
         await loadInstalledSources();
-        // 显示提示
-        // Alert.alert('成功', '数据源已安装');
+        // 发布数据源安装事件
+        eventBus.emit(EVENTS.SOURCE_INSTALLED, { sourceId, category });
       }
     } catch (error) {
       console.error('安装数据源失败:', error);
-      // Alert.alert('错误', '安装失败');
     }
   };
 
@@ -115,12 +115,11 @@ const MarketScreen = () => {
       const success = await uninstallSource(sourceId);
       if (success) {
         await loadInstalledSources();
-        // 显示提示
-        // Alert.alert('成功', '数据源已卸载');
+        // 发布数据源卸载事件
+        eventBus.emit(EVENTS.SOURCE_UNINSTALLED, { sourceId });
       }
     } catch (error) {
       console.error('卸载数据源失败:', error);
-      // Alert.alert('错误', '卸载失败');
     }
   };
 
