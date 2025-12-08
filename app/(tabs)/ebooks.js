@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,10 +19,7 @@ import {
   getEbookCategories,
   getEbooksByCategory,
   getEbookSources,
-  getAllBooksMetadata,
-  getMetadataStatus,
 } from '../../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSettings } from '../../services/storage';
 import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
 
@@ -37,8 +34,6 @@ const EbookTabScreen = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [allBooksMetadata, setAllBooksMetadata] = useState([]);
-  const [metadataLoading, setMetadataLoading] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [viewMode, setViewMode] = useState('card');
@@ -68,20 +63,9 @@ const EbookTabScreen = () => {
     }
   };
 
-  // 加载数据源列表和元数据
+  // 加载数据源列表
   useEffect(() => {
     loadSources();
-    loadMetadataInBackground();
-    
-    // 启动定时刷新
-    const intervalId = scheduleMetadataRefresh();
-    
-    // 清理定时器
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
   }, []);
 
   // 页面获得焦点时重新加载数据源（安装/卸载后更新）
@@ -105,204 +89,8 @@ const EbookTabScreen = () => {
     }
   }, [selectedCategory]);
 
-  // 检查缓存是否需要刷新
-  const shouldRefreshCache = async (cachedData) => {
-    if (!cachedData || !cachedData.last_updated) {
-      return true;
-    }
-    
-    const now = Date.now();
-    const lastUpdated = cachedData.last_updated * 1000; // 后端返回的是秒
-    const hoursSinceUpdate = (now - lastUpdated) / (1000 * 60 * 60);
-    
-    // 24小时后刷新
-    return hoursSinceUpdate > 24;
-  };
-
-  // 后台加载所有书籍元数据
-  const loadMetadataInBackground = async () => {
-    try {
-      // 先从缓存加载
-      const cached = await AsyncStorage.getItem('allBooksMetadata');
-      let cachedData = null;
-      
-      if (cached) {
-        cachedData = JSON.parse(cached);
-        setAllBooksMetadata(cachedData.books || []);
-        
-        // 检查是否需要刷新
-        const needRefresh = await shouldRefreshCache(cachedData);
-        if (!needRefresh) {
-          return;
-        }
-      }
-      
-      // 后台静默更新,不阻塞UI
-      setTimeout(async () => {
-        try {
-          setMetadataLoading(true);
-          
-          // 触发后台加载(立即返回)
-          const response = await getAllBooksMetadata(selectedSource, cachedData ? true : false);
-          
-          // 如果有数据,立即更新
-          if (response.books && response.books.length > 0) {
-            const saveData = {
-              ...response,
-              last_updated: response.last_updated || Date.now() / 1000,
-              cached_at: new Date().toISOString()
-            };
-            
-            setAllBooksMetadata(response.books);
-            await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-          }
-          
-          // 如果正在加载,定期检查状态
-          if (response.is_loading) {
-            setTimeout(() => checkMetadataStatus(), 10000);
-          }
-          
-          setMetadataLoading(response.is_loading);
-        } catch (error) {
-          console.error('触发元数据加载失败:', error);
-          setMetadataLoading(false);
-        }
-      }, 1000); // 延迟1秒启动,让主界面先加载
-      
-    } catch (error) {
-      console.error('加载缓存失败:', error);
-    }
-  };
-
-  // 检查元数据加载状态
-  const checkMetadataStatus = async () => {
-    try {
-      const status = await getMetadataStatus();
-      
-      if (!status.is_loading && status.total > 0) {
-        // 加载完成,获取最新数据
-        const response = await getAllBooksMetadata(selectedSource);
-        if (response.books && response.books.length > 0) {
-          const saveData = {
-            ...response,
-            last_updated: response.last_updated || Date.now() / 1000,
-            cached_at: new Date().toISOString()
-          };
-          
-          setAllBooksMetadata(response.books);
-          await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-          setMetadataLoading(false);
-        }
-      } else if (status.is_loading) {
-        // 还在加载,15秒后再检查
-        setTimeout(() => checkMetadataStatus(), 15000);
-      } else {
-        // 未加载且无数据,停止检查
-        setMetadataLoading(false);
-      }
-    } catch (error) {
-      console.error('检查元数据状态失败:', error);
-      setMetadataLoading(false);
-    }
-  };
-
-  // 定时刷新元数据 (每24小时)
-  const scheduleMetadataRefresh = () => {
-    // 每小时检查一次是否需要刷新
-    const checkAndRefresh = async () => {
-      try {
-        const cached = await AsyncStorage.getItem('allBooksMetadata');
-        if (cached) {
-          const cachedData = JSON.parse(cached);
-          const needRefresh = await shouldRefreshCache(cachedData);
-          
-          if (needRefresh) {
-            await loadMetadataInBackground();
-          }
-        }
-      } catch (error) {
-        console.error('定时刷新检查失败:', error);
-      }
-    };
-
-    // 立即检查一次
-    checkAndRefresh();
-    
-    // 设置定时器,每小时检查一次
-    const intervalId = setInterval(checkAndRefresh, 60 * 60 * 1000);
-    
-    return intervalId;
-  };
-
-  // 获取缓存时间信息
-  const [cacheInfo, setCacheInfo] = useState('');
-  
-  const updateCacheInfo = async () => {
-    try {
-      const cached = await AsyncStorage.getItem('allBooksMetadata');
-      if (cached) {
-        const data = JSON.parse(cached);
-        if (data.cached_at) {
-          const cacheTime = new Date(data.cached_at);
-          const now = new Date();
-          const hoursAgo = Math.floor((now - cacheTime) / (1000 * 60 * 60));
-          
-          let info = '';
-          if (hoursAgo < 1) {
-            info = '刚刚更新';
-          } else if (hoursAgo < 24) {
-            info = `${hoursAgo}小时前更新`;
-          } else {
-            info = `${Math.floor(hoursAgo / 24)}天前更新`;
-          }
-          
-          setCacheInfo(info);
-        }
-      }
-    } catch (error) {
-      console.error('获取缓存信息失败:', error);
-    }
-  };
-
-  // 定时更新缓存信息显示
-  useEffect(() => {
-    updateCacheInfo();
-    const intervalId = setInterval(updateCacheInfo, 5 * 60 * 1000); // 每5分钟更新一次
-    
-    return () => clearInterval(intervalId);
-  }, [allBooksMetadata.length]);
-
-  // 搜索过滤书籍 - 优先搜索全部元数据
-  const filteredBooks = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return books;
-    }
-    
-    const query = searchQuery.toLowerCase().trim();
-    
-    // 如果有全部元数据,在全部数据中搜索
-    if (allBooksMetadata.length > 0) {
-      const filtered = allBooksMetadata.filter(book => 
-        book.title?.toLowerCase().includes(query) ||
-        book.author?.toLowerCase().includes(query)
-      );
-      
-      // 调试: 检查重复ID
-      const ids = filtered.map(book => book.id);
-      const uniqueIds = [...new Set(ids)];
-      if (ids.length !== uniqueIds.length) {
-        // 发现重复ID时静默处理
-      }
-      
-      return filtered;
-    }
-    
-    // 否则只在当前列表中搜索
-    return books.filter(book => 
-      book.title?.toLowerCase().includes(query) ||
-      book.author?.toLowerCase().includes(query)
-    );
-  }, [searchQuery, books, allBooksMetadata]);
+  // 不支持元数据搜索，直接使用当前列表
+  const filteredBooks = books;
 
   const loadSources = async () => {
     try {
@@ -403,7 +191,8 @@ const EbookTabScreen = () => {
           <SearchBar
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder={"搜索电子书..."}
+            placeholder={"当前数据源不支持搜索"}
+            editable={true}
           />
           
           <TouchableOpacity 
@@ -416,6 +205,9 @@ const EbookTabScreen = () => {
             <Text style={styles.sourceArrow}>▼</Text>
           </TouchableOpacity>
         </View>
+        {searchQuery.trim().length > 0 && (
+          <Text style={styles.infoText}>当前数据源不支持搜索</Text>
+        )}
       </View>
 
       {/* 数据源选择器 */}
