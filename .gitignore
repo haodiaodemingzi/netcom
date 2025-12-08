@@ -22,3 +22,5 @@ venv/
 *.log
 .idea/
 .vscode/
+nul
+backend/nul

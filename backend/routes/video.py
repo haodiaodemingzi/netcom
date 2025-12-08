@@ -19,9 +19,13 @@ def get_sources():
     """获取所有可用的视频数据源"""
     try:
         sources = VideoScraperFactory.get_sources_dict()
+        logger.info(f"获取数据源: {sources}")
+        logger.info(f"可用数据源: {VideoScraperFactory.get_available_sources()}")
         return jsonify({'sources': sources}), 200
     except Exception as e:
         logger.error(f"获取数据源列表失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'sources': {
                 'thanju': {
@@ -252,7 +256,7 @@ def proxy_video():
                 headers['Referer'] = f'https://www.thanju.com/detail/{series_id}.html'
             else:
                 headers['Referer'] = 'https://www.thanju.com/'
-        elif source == 'badnews':
+        elif source == 'badnews' or source == 'badnews_av':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
         
@@ -388,7 +392,7 @@ def convert_video():
                     else:
                         referer = 'https://www.thanju.com/'
                     headers.append(f'Referer: {referer}')
-                elif source == 'badnews':
+                elif source == 'badnews' or source == 'badnews_av':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')
                 

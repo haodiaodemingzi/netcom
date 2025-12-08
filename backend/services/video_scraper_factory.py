@@ -1,5 +1,6 @@
 from .thanju_scraper import ThanjuScraper
 from .badnews_scraper import BadNewsScraper
+from .badnews_av_scraper import BadNewsAVScraper
 
 class VideoScraperFactory:
     """视频爬虫工厂类"""
@@ -7,6 +8,7 @@ class VideoScraperFactory:
     _scrapers = {
         'thanju': ThanjuScraper,
         'badnews': BadNewsScraper,
+        'badnews_av': BadNewsAVScraper,
     }
     
     @classmethod
@@ -29,7 +31,12 @@ class VideoScraperFactory:
             {
                 'id': 'badnews',
                 'name': 'Bad.news H动漫',
-                'description': 'Bad.news - H动漫/里番在线观看'
+                'description': 'Bad.news - H动漫在线观看'
+            },
+            {
+                'id': 'badnews_av',
+                'name': 'Bad.news AV',
+                'description': 'Bad.news - 日本AV在线观看'
             }
         ]
     
