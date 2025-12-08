@@ -6,6 +6,7 @@ const KEYS = {
   SETTINGS: '@settings',
   SEARCH_HISTORY: '@search_history',
   CURRENT_SOURCE: '@current_source',
+  INSTALLED_SOURCES: '@installed_sources',
 };
 
 // 内存缓存，减少 AsyncStorage 读取次数
@@ -214,5 +215,92 @@ export const setCurrentSource = async (source) => {
     return true;
   } catch (error) {
     return false;
+  }
+};
+
+// 已安装数据源相关
+export const getInstalledSources = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.INSTALLED_SOURCES);
+    return data ? JSON.parse(data) : {
+      video: [],
+      comic: [],
+      ebook: [],
+      novel: [],
+      news: [],
+    };
+  } catch (error) {
+    return {
+      video: [],
+      comic: [],
+      ebook: [],
+      novel: [],
+      news: [],
+    };
+  }
+};
+
+export const installSource = async (sourceId, category) => {
+  try {
+    const installed = await getInstalledSources();
+    if (!installed[category]) {
+      installed[category] = [];
+    }
+    
+    if (!installed[category].includes(sourceId)) {
+      installed[category].push(sourceId);
+      await AsyncStorage.setItem(KEYS.INSTALLED_SOURCES, JSON.stringify(installed));
+    }
+    return true;
+  } catch (error) {
+    console.error('安装数据源失败:', error);
+    return false;
+  }
+};
+
+export const uninstallSource = async (sourceId) => {
+  try {
+    const installed = await getInstalledSources();
+    let changed = false;
+    
+    // 从所有分类中移除
+    for (const category in installed) {
+      const index = installed[category].indexOf(sourceId);
+      if (index !== -1) {
+        installed[category].splice(index, 1);
+        changed = true;
+      }
+    }
+    
+    if (changed) {
+      await AsyncStorage.setItem(KEYS.INSTALLED_SOURCES, JSON.stringify(installed));
+    }
+    return true;
+  } catch (error) {
+    console.error('卸载数据源失败:', error);
+    return false;
+  }
+};
+
+export const isSourceInstalled = async (sourceId) => {
+  try {
+    const installed = await getInstalledSources();
+    for (const category in installed) {
+      if (installed[category].includes(sourceId)) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const getInstalledSourcesByCategory = async (category) => {
+  try {
+    const installed = await getInstalledSources();
+    return installed[category] || [];
+  } catch (error) {
+    return [];
   }
 };

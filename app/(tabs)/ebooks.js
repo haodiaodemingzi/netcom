@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import BookCard from '../../components/BookCard';
 import SearchBar from '../../components/SearchBar';
 import {
@@ -23,6 +24,7 @@ import {
 } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSettings } from '../../services/storage';
+import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
 
 const EbookTabScreen = () => {
   const [selectedSource, setSelectedSource] = useState('kanunu8');
@@ -81,6 +83,13 @@ const EbookTabScreen = () => {
       }
     };
   }, []);
+
+  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  useFocusEffect(
+    useCallback(() => {
+      loadSources();
+    }, [])
+  );
 
   // 加载分类列表
   useEffect(() => {
@@ -309,8 +318,20 @@ const EbookTabScreen = () => {
 
   const loadSources = async () => {
     try {
-      const data = await getEbookSources();
-      setSources(data.sources || {});
+      const allSourcesData = await getEbookSources();
+      const allSources = allSourcesData.sources || {};
+      
+      // 只显示已安装的数据源
+      const installedIds = await getInstalledSourcesByCategory('ebook');
+      const installedSources = {};
+      
+      for (const [id, source] of Object.entries(allSources)) {
+        if (installedIds.includes(id)) {
+          installedSources[id] = source;
+        }
+      }
+      
+      setSources(installedSources);
     } catch (error) {
       console.error('加载数据源失败:', error);
     }

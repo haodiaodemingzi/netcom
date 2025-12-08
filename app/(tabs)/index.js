@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
 import SearchBar from '../../components/SearchBar';
 import { 
@@ -24,6 +24,7 @@ import {
   searchComics,
 } from '../../services/api';
 import { getCurrentSource, setCurrentSource, getSettings } from '../../services/storage';
+import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
 import downloadManager from '../../services/downloadManager';
 
 const HomeScreen = () => {
@@ -64,6 +65,43 @@ const HomeScreen = () => {
     return () => unsubscribe();
   }, []);
 
+  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  useFocusEffect(
+    useCallback(() => {
+      // 只重新加载数据源列表，不重新加载所有数据
+      const reloadSources = async () => {
+        try {
+          const allSourcesData = await getAvailableSources();
+          const savedSource = await getCurrentSource();
+          
+          // 只显示已安装的数据源
+          const installedIds = await getInstalledSourcesByCategory('comic');
+          const installedSources = {};
+          
+          for (const [id, source] of Object.entries(allSourcesData)) {
+            if (installedIds.includes(id)) {
+              installedSources[id] = source;
+            }
+          }
+          
+          setSources(installedSources);
+          
+          // 如果当前数据源未安装，切换到第一个已安装的数据源
+          if (currentSource && (!installedSources[currentSource] || !installedIds.includes(currentSource))) {
+            const firstAvailableSource = Object.keys(installedSources)[0];
+            if (firstAvailableSource) {
+              setCurrentSourceState(firstAvailableSource);
+              await setCurrentSource(firstAvailableSource);
+            }
+          }
+        } catch (error) {
+          console.error('重新加载数据源失败:', error);
+        }
+      };
+      reloadSources();
+    }, [currentSource])
+  );
+
   // 监听设置变化
   useEffect(() => {
     const interval = setInterval(() => {
@@ -102,20 +140,34 @@ const HomeScreen = () => {
 
   const loadInitialData = async () => {
     try {
-      const sourcesData = await getAvailableSources();
+      const allSourcesData = await getAvailableSources();
       const savedSource = await getCurrentSource();
       
-      setSources(sourcesData);
+      // 只显示已安装的数据源
+      const installedIds = await getInstalledSourcesByCategory('comic');
+      const installedSources = {};
+      
+      for (const [id, source] of Object.entries(allSourcesData)) {
+        if (installedIds.includes(id)) {
+          installedSources[id] = source;
+        }
+      }
+      
+      setSources(installedSources);
       
       // 获取第一个可用的数据源作为默认值
-      const firstAvailableSource = Object.keys(sourcesData)[0];
+      const firstAvailableSource = Object.keys(installedSources)[0];
       
       // 确保有有效的数据源
-      const validSource = savedSource && sourcesData[savedSource] ? savedSource : firstAvailableSource;
+      const validSource = savedSource && installedSources[savedSource] && installedIds.includes(savedSource) 
+        ? savedSource 
+        : firstAvailableSource;
       
       // 如果没有保存的数据源，保存当前选择的为默认
-      if (!savedSource || !sourcesData[savedSource]) {
-        await setCurrentSource(validSource);
+      if (!savedSource || !installedSources[savedSource] || !installedIds.includes(savedSource)) {
+        if (validSource) {
+          await setCurrentSource(validSource);
+        }
       }
       setCurrentSourceState(validSource);
       

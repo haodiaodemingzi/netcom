@@ -198,6 +198,9 @@ const ProfileScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>我的</Text>
+          {renderMenuItem('数据源市场', () => {
+            router.push('/market');
+          })}
           {renderMenuItem('阅读历史', () => {
             router.push('/history');
           })}

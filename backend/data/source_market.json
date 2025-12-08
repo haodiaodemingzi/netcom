@@ -1,0 +1,109 @@
+{
+  "sources": [
+    {
+      "id": "thanju",
+      "name": "热播韩剧网",
+      "description": "热播韩剧网(thanju.com) - 提供最新韩剧资源",
+      "url": "https://www.thanju.com",
+      "icon": "https://via.placeholder.com/128/FF6B6B/FFFFFF?text=韩剧",
+      "category": "video",
+      "tags": ["韩剧", "电视剧", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "badnews",
+      "name": "Bad.news H动漫",
+      "description": "Bad.news - H动漫在线观看",
+      "url": "https://bad.news",
+      "icon": "https://via.placeholder.com/128/4ECDC4/FFFFFF?text=H动漫",
+      "category": "video",
+      "tags": ["动漫", "H动漫", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "badnews_av",
+      "name": "Bad.news AV",
+      "description": "Bad.news - 日本AV在线观看",
+      "url": "https://bad.news",
+      "icon": "https://via.placeholder.com/128/95E1D3/FFFFFF?text=AV",
+      "category": "video",
+      "tags": ["AV", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "xmanhua",
+      "name": "X漫画",
+      "description": "X漫画网 - 提供海量漫画资源",
+      "url": "https://xmanhua.com",
+      "icon": "https://via.placeholder.com/128/FFE66D/000000?text=X漫画",
+      "category": "comic",
+      "tags": ["漫画", "日漫", "国漫"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "hmzxa",
+      "name": "HMZXA漫画",
+      "description": "HMZXA漫画网 - 提供最新漫画更新",
+      "url": "https://hmzxa.com",
+      "icon": "https://via.placeholder.com/128/FF6B9D/FFFFFF?text=HMZXA",
+      "category": "comic",
+      "tags": ["漫画", "日漫"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "kanunu8",
+      "name": "努努书坊",
+      "description": "努努书坊(kanunu8.com) - 提供大量免费电子书",
+      "url": "https://kanunu8.com",
+      "icon": "https://via.placeholder.com/128/A8E6CF/000000?text=努努",
+      "category": "ebook",
+      "tags": ["电子书", "小说", "阅读"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    }
+  ],
+  "categories": [
+    {
+      "id": "all",
+      "name": "全部",
+      "icon": "📦"
+    },
+    {
+      "id": "video",
+      "name": "视频",
+      "icon": "🎬"
+    },
+    {
+      "id": "comic",
+      "name": "漫画",
+      "icon": "📚"
+    },
+    {
+      "id": "ebook",
+      "name": "电子书",
+      "icon": "📖"
+    },
+    {
+      "id": "novel",
+      "name": "小说",
+      "icon": "📝"
+    },
+    {
+      "id": "news",
+      "name": "新闻",
+      "icon": "📰"
+    }
+  ]
+}
+

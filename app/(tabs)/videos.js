@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import VideoCard from '../../components/VideoCard';
 import SearchBar from '../../components/SearchBar';
 import {
@@ -24,6 +24,7 @@ import {
   getCurrentVideoSource,
 } from '../../services/videoApi';
 import { getSettings } from '../../services/storage';
+import { filterInstalledSources, getInstalledSourcesByCategory } from '../../services/sourceFilter';
 
 const VideosTabScreen = () => {
   const router = useRouter();
@@ -81,6 +82,13 @@ const VideosTabScreen = () => {
     loadSources();
   }, []);
 
+  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  useFocusEffect(
+    useCallback(() => {
+      loadSources();
+    }, [])
+  );
+
   // 数据源加载完成后，加载分类
   useEffect(() => {
     if (selectedSource && Object.keys(sources).length > 0) {
@@ -115,16 +123,28 @@ const VideosTabScreen = () => {
     try {
       const result = await getVideoSources();
       if (result.success) {
-        const sourcesData = result.data || {};
-        console.log('加载数据源成功:', sourcesData);
-        setSources(sourcesData);
-        // 如果没有当前源，设置默认源
-        if (!sourcesData[selectedSource] && Object.keys(sourcesData).length > 0) {
-          const firstSource = Object.keys(sourcesData)[0];
+        const allSourcesData = result.data || {};
+        
+        // 只显示已安装的数据源
+        const installedIds = await getInstalledSourcesByCategory('video');
+        const installedSources = {};
+        
+        for (const [id, source] of Object.entries(allSourcesData)) {
+          if (installedIds.includes(id)) {
+            installedSources[id] = source;
+          }
+        }
+        
+        console.log('已安装的视频数据源:', installedSources);
+        setSources(installedSources);
+        
+        // 如果没有当前源或当前源未安装，设置默认源
+        if ((!installedSources[selectedSource] || !installedIds.includes(selectedSource)) && Object.keys(installedSources).length > 0) {
+          const firstSource = Object.keys(installedSources)[0];
           console.log('设置默认数据源:', firstSource);
           setSelectedSource(firstSource);
           setCurrentVideoSource(firstSource);
-        } else if (sourcesData[selectedSource]) {
+        } else if (installedSources[selectedSource] && installedIds.includes(selectedSource)) {
           // 确保当前数据源已设置
           setCurrentVideoSource(selectedSource);
         }

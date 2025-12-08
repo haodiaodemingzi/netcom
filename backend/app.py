@@ -4,6 +4,7 @@ from routes.comic import comic_bp
 from routes.search import search_bp
 from routes.ebook import ebook_bp
 from routes.video import video_bp
+from routes.market import market_bp
 from services.scraper_factory import ScraperFactory
 from services.ebook_scraper_factory import EbookScraperFactory
 import os
@@ -16,6 +17,7 @@ app.register_blueprint(comic_bp, url_prefix='/api')
 app.register_blueprint(search_bp, url_prefix='/api')
 app.register_blueprint(ebook_bp, url_prefix='/api')
 app.register_blueprint(video_bp, url_prefix='/api')
+app.register_blueprint(market_bp, url_prefix='/api')
 
 @app.route('/')
 def index():
