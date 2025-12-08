@@ -304,3 +304,40 @@ export const getInstalledSourcesByCategory = async (category) => {
     return [];
   }
 };
+
+// 清理所有缓存数据
+export const clearAllCache = async () => {
+  try {
+    // 清除安装的数据源
+    await AsyncStorage.setItem(KEYS.INSTALLED_SOURCES, JSON.stringify({
+      video: [],
+      comic: [],
+      ebook: [],
+      novel: [],
+      news: [],
+    }));
+    
+    // 清除当前数据源（重置为null，让应用重新选择）
+    await AsyncStorage.removeItem(KEYS.CURRENT_SOURCE);
+    
+    // 清除下载记录
+    await AsyncStorage.removeItem('downloaded_chapters');
+    await AsyncStorage.removeItem('downloaded_videos');
+    
+    // 清除历史记录
+    historyCache = [];
+    historyCacheTime = Date.now();
+    await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify([]));
+    
+    // 清除收藏
+    await AsyncStorage.setItem(KEYS.FAVORITES, JSON.stringify([]));
+    
+    // 清除搜索历史
+    await AsyncStorage.setItem(KEYS.SEARCH_HISTORY, JSON.stringify([]));
+    
+    return true;
+  } catch (error) {
+    console.error('清理缓存失败:', error);
+    return false;
+  }
+};

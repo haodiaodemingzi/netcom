@@ -17,10 +17,12 @@ import {
   saveSettings, 
   clearHistory,
   getCurrentSource,
-  setCurrentSource
+  setCurrentSource,
+  clearAllCache
 } from '../../services/storage';
 import { getAvailableSources } from '../../services/api';
 import downloadManager from '../../services/downloadManager';
+import videoDownloadManager from '../../services/videoDownloadManager';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -89,6 +91,40 @@ const ProfileScreen = () => {
           onPress: async () => {
             await clearHistory();
             Alert.alert('提示', '历史记录已清除');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearCache = () => {
+    Alert.alert(
+      '清除缓存',
+      '确定要清除所有缓存数据吗？这将删除：\n\n• 安装的数据源\n• 下载的漫画\n• 下载的视频\n• 所有下载记录\n• 阅读历史\n• 收藏记录\n• 搜索历史\n\n此操作不可恢复！',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 清理下载文件
+              await Promise.all([
+                downloadManager.clearAllDownloads(),
+                videoDownloadManager.clearAllDownloads(),
+              ]);
+              
+              // 清理存储数据
+              await clearAllCache();
+              
+              // 重新加载数据源（因为已清除）
+              await loadSourceData();
+              
+              Alert.alert('成功', '缓存已清除，应用已恢复到初始状态');
+            } catch (error) {
+              console.error('清除缓存失败:', error);
+              Alert.alert('错误', '清除缓存时发生错误，请重试');
+            }
           },
         },
       ]
@@ -293,9 +329,7 @@ const ProfileScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>其他</Text>
-          {renderMenuItem('清除缓存', () => {
-            Alert.alert('提示', '功能开发中...');
-          })}
+          {renderMenuItem('清除缓存', handleClearCache)}
           {renderMenuItem('清除历史记录', handleClearHistory)}
           {renderMenuItem('关于应用', () => {
             Alert.alert('关于', '漫画阅读器 v1.0.0');

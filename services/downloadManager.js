@@ -814,6 +814,51 @@ class DownloadManager {
       throw error;
     }
   }
+
+  // 清理所有下载的文件和记录
+  async clearAllDownloads() {
+    try {
+      // 停止所有下载任务
+      const allTasks = this.queue.getAllTasks();
+      
+      // 取消所有运行中的任务
+      for (const task of allTasks.running) {
+        task.cancel();
+        this.queue.runningTasks.delete(task.id);
+      }
+      
+      // 取消所有暂停的任务
+      for (const task of allTasks.paused) {
+        task.cancel();
+        this.queue.pausedTasks.delete(task.id);
+      }
+      
+      // 清空待处理任务列表
+      this.queue.pendingTasks = [];
+      
+      // 清空下载记录
+      this.downloadedChapters.clear();
+      await this.saveDownloadedChapters();
+      
+      // 删除下载目录
+      const dirInfo = await getInfoAsync(DOWNLOAD_DIR);
+      if (dirInfo.exists) {
+        await deleteAsync(DOWNLOAD_DIR, { idempotent: true });
+        console.log('已删除漫画下载目录');
+      }
+      
+      // 重新创建空目录
+      await this.ensureDownloadDir();
+      
+      // 通知监听器
+      this.notifyListeners();
+      
+      return true;
+    } catch (error) {
+      console.error('清理漫画下载失败:', error);
+      return false;
+    }
+  }
 }
 
 const downloadManager = new DownloadManager();
