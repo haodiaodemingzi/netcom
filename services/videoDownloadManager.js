@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadQueue } from './download/DownloadQueue';
 import { VideoDownloadTask } from './download/VideoDownloadTask';
 import { VideoDownloader } from './download/VideoDownloader';
-import { getEpisodeDetail } from './videoApi';
+import { getEpisodeDetail, setCurrentVideoSource } from './videoApi';
 
 const VIDEO_DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/videos/`;
 
@@ -127,7 +127,11 @@ class VideoDownloadManager {
 
     try {
       // 获取剧集详情以获取m3u8 URL
-      console.log(`获取剧集详情: ${episode.id}`);
+      console.log(`获取剧集详情: ${episode.id}, source: ${source}`);
+      // 设置当前数据源确保获取正确的视频URL
+      if (source) {
+        setCurrentVideoSource(source);
+      }
       const episodeDetail = await getEpisodeDetail(episode.id);
       
       if (!episodeDetail.success || !episodeDetail.data || !episodeDetail.data.videoUrl) {
@@ -263,6 +267,7 @@ class VideoDownloadManager {
       return {
         status: task.status,
         progress: task.progress,
+        error: task.error, // 确保返回错误信息
       };
     }
     return null;

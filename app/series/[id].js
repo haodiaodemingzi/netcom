@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { getSeriesDetail, getEpisodes, getEpisodeDetail } from '../../services/videoApi';
+import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
 import EpisodeCard from '../../components/EpisodeCard';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
@@ -181,10 +181,11 @@ const SeriesDetailScreen = () => {
           
           // 使用统一的视频播放服务获取播放URL
           try {
+            const currentSource = getCurrentVideoSource();
             const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
               episode.id,
               result.data,
-              'thanju'
+              currentSource || 'thanju'
             );
             
             console.log('=== 视频播放URL信息 ===');
@@ -211,7 +212,16 @@ const SeriesDetailScreen = () => {
           console.error('播放页面URL:', result.data.playUrl);
           Alert.alert(
             '无法播放', 
-            `该剧集暂时无法播放。\n\n播放页面: ${result.data.playUrl || '未知'}\n\n可能原因：\n- 剧集资源不存在\n- 播放页面异常\n- 后端解析失败\n\n请尝试其他剧集。`
+            `该剧集暂时无法播放。
+
+播放页面: ${result.data.playUrl || '未知'}
+
+可能原因：
+- 剧集资源不存在
+- 播放页面异常
+- 后端解析失败
+
+请尝试其他剧集。`
           );
         }
       } else {
@@ -263,7 +273,7 @@ const SeriesDetailScreen = () => {
     setPreparingDownloads(prev => new Set([...prev, episode.id]));
     
     try {
-      const source = 'thanju'; // 默认数据源
+      const source = getCurrentVideoSource() || 'thanju'; // 使用当前选择的数据源
       const result = await videoDownloadManager.downloadEpisode(
         series.id,
         series.title,
@@ -302,7 +312,7 @@ const SeriesDetailScreen = () => {
     if (!series || episodes.length === 0) return;
     
     try {
-      const source = 'thanju'; // 默认数据源
+      const source = getCurrentVideoSource() || 'thanju'; // 使用当前选择的数据源
       const count = await videoDownloadManager.batchDownloadEpisodes(
         series.id,
         series.title,
@@ -420,7 +430,11 @@ const SeriesDetailScreen = () => {
                   console.error('错误详情:', JSON.stringify(error, null, 2));
                   console.error('视频源:', videoSource);
                   console.error('播放器源:', player.source || 'N/A');
-                  Alert.alert('播放错误', `视频加载失败\n\n视频源: ${videoSource}\n\n请检查网络连接或视频链接`);
+                  Alert.alert('播放错误', `视频加载失败
+
+视频源: ${videoSource}
+
+请检查网络连接或视频链接`);
                 }}
               />
             </View>

@@ -206,12 +206,22 @@ const EpisodeCard = ({
               style={styles.failedBadge}
               onPress={(e) => {
                 e.stopPropagation();
-                if (onRetry) {
+                // 如果是 FFmpeg 相关错误，显示提示而不是重试
+                const errorMsg = downloadStatus?.error?.message || downloadStatus?.error || '';
+                if (errorMsg.includes('FFmpeg') || errorMsg.includes('m3u8') || errorMsg.includes('在线播放')) {
+                  Alert.alert(
+                    '无法下载',
+                    '该视频为 m3u8 格式，需要服务器安装 FFmpeg 才能下载。\n\n目前该视频仅支持在线播放。',
+                    [{ text: '我知道了', onPress: () => onCancel && onCancel() }]
+                  );
+                } else if (onRetry) {
                   onRetry();
                 }
               }}
             >
-              <Text style={styles.failedText}>重试</Text>
+              <Text style={styles.failedText}>
+                {(downloadStatus?.error?.message || downloadStatus?.error || '').includes('FFmpeg') ? '不支持' : '重试'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.cancelButton}

@@ -399,26 +399,171 @@ def convert_video():
                 # 添加通用请求头
                 headers.append('User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
                 
+                # 处理 m3u8 文件
+                import requests as req_lib
+                import re
+                from urllib.parse import urljoin, urlparse
+                import concurrent.futures
+                
+                input_url = m3u8_url  # 默认使用原始 URL
+                use_concat_method = False  # 是否使用concat方法（用于.jpeg等非标准扩展名）
+                concat_list_path = None
+                segments_dir = None
+                
+                try:
+                    # 下载 m3u8 文件内容
+                    response_headers = {}
+                    for h in headers:
+                        if ':' in h:
+                            key, value = h.split(':', 1)
+                            response_headers[key.strip()] = value.strip()
+                    
+                    m3u8_response = req_lib.get(m3u8_url, headers=response_headers, timeout=30)
+                    m3u8_response.raise_for_status()
+                    m3u8_content = m3u8_response.text
+                    
+                    # 检查是否包含非标准扩展名（如 .jpeg, .jpg, .png 等）
+                    # FFmpeg HLS demuxer 对这些扩展名有硬编码限制，需要使用 concat 方法
+                    if re.search(r'\.(jpeg|jpg|png|gif|webp)(\?|$|\s)', m3u8_content, re.IGNORECASE):
+                        logger.info(f'检测到非标准扩展名（.jpeg等），使用分片下载+concat方法: {episode_id}')
+                        use_concat_method = True
+                        
+                        # 解析 m3u8 URL 的 base URL
+                        parsed_url = urlparse(m3u8_url)
+                        base_url = f'{parsed_url.scheme}://{parsed_url.netloc}{os.path.dirname(parsed_url.path)}/'
+                        
+                        # 提取所有分片URL
+                        segment_urls = []
+                        lines = m3u8_content.split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('#'):
+                                if not line.startswith('http://') and not line.startswith('https://'):
+                                    segment_urls.append(urljoin(base_url, line))
+                                else:
+                                    segment_urls.append(line)
+                        
+                        logger.info(f'共发现 {len(segment_urls)} 个分片需要下载')
+                        
+                        # 创建临时目录存放分片
+                        temp_dir = tempfile.gettempdir()
+                        segments_dir = os.path.join(temp_dir, 'netcom_videos', series_id or 'default', 'segments', episode_id)
+                        os.makedirs(segments_dir, exist_ok=True)
+                        
+                        # 并发下载分片（限制并发数以避免被封）
+                        downloaded_segments = []
+                        failed_count = 0
+                        total_segments = len(segment_urls)
+                        
+                        def download_segment(args):
+                            idx, url = args
+                            segment_path = os.path.join(segments_dir, f'segment_{idx:06d}.ts')
+                            try:
+                                # 如果文件已存在且大小>0，跳过下载
+                                if os.path.exists(segment_path) and os.path.getsize(segment_path) > 0:
+                                    return (idx, segment_path, True)
+                                
+                                resp = req_lib.get(url, headers=response_headers, timeout=60)
+                                resp.raise_for_status()
+                                with open(segment_path, 'wb') as f:
+                                    f.write(resp.content)
+                                return (idx, segment_path, True)
+                            except Exception as e:
+                                logger.warning(f'下载分片 {idx} 失败: {e}')
+                                return (idx, segment_path, False)
+                        
+                        # 使用线程池并发下载，同时更新进度
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = {executor.submit(download_segment, (i, url)): i for i, url in enumerate(segment_urls)}
+                            completed = 0
+                            for future in concurrent.futures.as_completed(futures):
+                                idx, segment_path, success = future.result()
+                                completed += 1
+                                if success:
+                                    downloaded_segments.append((idx, segment_path))
+                                else:
+                                    failed_count += 1
+                                
+                                # 更新下载进度（占总进度的80%）
+                                download_progress = (completed / total_segments) * 0.8
+                                with video_conversion_lock:
+                                    if task_id in video_conversion_tasks:
+                                        video_conversion_tasks[task_id]['progress'] = download_progress
+                                        video_conversion_tasks[task_id]['status'] = f'downloading ({completed}/{total_segments})'
+                                
+                                # 每100个分片打印一次日志
+                                if completed % 100 == 0:
+                                    logger.info(f'分片下载进度: {completed}/{total_segments}')
+                        
+                        logger.info(f'分片下载完成: 成功 {len(downloaded_segments)}, 失败 {failed_count}')
+                        
+                        if len(downloaded_segments) == 0:
+                            raise Exception('所有分片下载失败')
+                        
+                        # 按序号排序
+                        downloaded_segments.sort(key=lambda x: x[0])
+                        
+                        # 创建 concat 列表文件
+                        concat_list_path = os.path.join(segments_dir, 'concat_list.txt')
+                        with open(concat_list_path, 'w', encoding='utf-8') as f:
+                            for idx, segment_path in downloaded_segments:
+                                # concat demuxer 需要使用正斜杠，并且路径需要转义单引号
+                                safe_path = segment_path.replace('\\', '/').replace("'", "'\\''")
+                                f.write(f"file '{safe_path}'\n")
+                        
+                        input_url = concat_list_path
+                        logger.info(f'使用 concat 列表文件: {input_url}')
+                        
+                        # 更新状态
+                        with video_conversion_lock:
+                            if task_id in video_conversion_tasks:
+                                video_conversion_tasks[task_id]['status'] = 'merging'
+                    else:
+                        logger.info(f'使用标准 HLS 方法: {input_url}')
+                        
+                except Exception as m3u8_error:
+                    logger.warning(f'处理 m3u8 文件失败: {m3u8_error}')
+                    import traceback
+                    traceback.print_exc()
+                    # 如果处理失败，仍尝试使用原始URL（可能会失败）
+                    input_url = m3u8_url
+                    use_concat_method = False
+                
                 # 构建 FFmpeg 命令
-                # 使用 -c copy 快速复制（如果编码兼容）
-                # 如果不行，使用 -c:v libx264 -c:a aac 重新编码
-                cmd = [
-                    'ffmpeg',
-                    '-i', m3u8_url,
-                    '-c', 'copy',
-                    '-bsf:a', 'aac_adtstoasc',
-                    '-y',  # 覆盖已存在的文件
-                    output_path
-                ]
+                cmd = ['ffmpeg']
                 
-                # 如果有请求头，添加到命令中
-                if headers:
-                    # FFmpeg 使用 -headers 参数，格式为 "Header1: Value1\r\nHeader2: Value2"
-                    headers_str = '\r\n'.join(headers) + '\r\n'
-                    cmd.insert(-1, '-headers')
-                    cmd.insert(-1, headers_str)
+                if use_concat_method:
+                    # 使用 concat demuxer 合并下载的分片
+                    cmd.extend([
+                        '-f', 'concat',
+                        '-safe', '0',  # 允许绝对路径
+                        '-i', input_url,
+                        '-c', 'copy',
+                        '-bsf:a', 'aac_adtstoasc',
+                        '-movflags', '+faststart',
+                        '-y',
+                        output_path
+                    ])
+                else:
+                    # 使用标准 HLS 方法
+                    cmd.extend(['-protocol_whitelist', 'file,http,https,tcp,tls,crypto'])
+                    
+                    if headers:
+                        headers_str = '\r\n'.join(headers) + '\r\n'
+                        cmd.extend(['-headers', headers_str])
+                    
+                    cmd.extend(['-allowed_extensions', 'ALL'])
+                    cmd.extend([
+                        '-i', input_url,
+                        '-c', 'copy',
+                        '-bsf:a', 'aac_adtstoasc',
+                        '-movflags', '+faststart',
+                        '-y',
+                        output_path
+                    ])
                 
-                logger.info(f'开始转换视频: {episode_id}, source: {source}, 命令: {" ".join(cmd[:10])}...')
+                logger.info(f'开始转换视频: {episode_id}, source: {source}')
+                logger.info(f'FFmpeg 命令: {cmd}')
                 
                 # 执行 FFmpeg 转换
                 process = subprocess.Popen(
@@ -431,8 +576,10 @@ def convert_video():
                 # 解析进度（从 stderr 读取）
                 duration = 0
                 current_time = 0
+                stderr_output = []
                 
                 for line in process.stderr:
+                    stderr_output.append(line)
                     # 提取总时长
                     if 'Duration:' in line:
                         duration_match = line.split('Duration:')[1].split(',')[0].strip()
@@ -466,12 +613,23 @@ def convert_video():
                             video_conversion_tasks[task_id]['progress'] = 1.0
                     logger.info(f'视频转换完成: {episode_id}')
                 else:
-                    error_msg = process.stderr.read() if process.stderr else '转换失败'
+                    # 获取完整的错误信息
+                    error_msg = '\n'.join(stderr_output[-20:]) if stderr_output else f'FFmpeg 返回码: {process.returncode}'
                     with video_conversion_lock:
                         if task_id in video_conversion_tasks:
                             video_conversion_tasks[task_id]['status'] = 'failed'
                             video_conversion_tasks[task_id]['error'] = error_msg
-                    logger.error(f'视频转换失败: {episode_id}, 错误: {error_msg}')
+                    logger.error(f'视频转换失败: {episode_id}, 返回码: {process.returncode}')
+                    logger.error(f'FFmpeg 错误输出: {error_msg}')
+                
+                # 清理临时分片文件（无论成功还是失败）
+                if use_concat_method and segments_dir and os.path.exists(segments_dir):
+                    try:
+                        import shutil
+                        shutil.rmtree(segments_dir)
+                        logger.info(f'已清理临时分片目录: {segments_dir}')
+                    except Exception as cleanup_error:
+                        logger.warning(f'清理临时分片目录失败: {cleanup_error}')
                     
             except Exception as e:
                 logger.error(f'视频转换异常: {episode_id}, 错误: {str(e)}')
@@ -479,6 +637,15 @@ def convert_video():
                     if task_id in video_conversion_tasks:
                         video_conversion_tasks[task_id]['status'] = 'failed'
                         video_conversion_tasks[task_id]['error'] = str(e)
+                
+                # 异常时也要清理
+                if segments_dir and os.path.exists(segments_dir):
+                    try:
+                        import shutil
+                        shutil.rmtree(segments_dir)
+                        logger.info(f'异常后已清理临时分片目录: {segments_dir}')
+                    except:
+                        pass
         
         # 启动后台转换线程
         thread = threading.Thread(target=convert_in_background, daemon=True)

@@ -63,15 +63,29 @@ export class VideoDownloader {
       console.log(`m3u8 URL: ${task.videoUrl}`);
 
       // 步骤1: 调用后端转换接口
-      const convertResponse = await axios.post(`${API_BASE_URL}/videos/convert`, {
-        m3u8_url: task.videoUrl,
-        episode_id: task.episodeId,
-        series_id: task.seriesId,
-        source: task.source,
-      });
+      let convertResponse;
+      try {
+        convertResponse = await axios.post(`${API_BASE_URL}/videos/convert`, {
+          m3u8_url: task.videoUrl,
+          episode_id: task.episodeId,
+          series_id: task.seriesId,
+          source: task.source,
+        });
+      } catch (apiError) {
+        // 检查是否是 ffmpeg 未安装的错误
+        const errorMsg = apiError.response?.data?.error || apiError.message || '';
+        if (errorMsg.includes('FFmpeg') || errorMsg.includes('ffmpeg')) {
+          throw new Error('服务器未安装 FFmpeg，无法下载 m3u8 格式视频。该视频仅支持在线播放。');
+        }
+        throw apiError;
+      }
 
       if (!convertResponse.data.success) {
-        throw new Error(convertResponse.data.error || '启动转换失败');
+        const errorMsg = convertResponse.data.error || '启动转换失败';
+        if (errorMsg.includes('FFmpeg') || errorMsg.includes('ffmpeg')) {
+          throw new Error('服务器未安装 FFmpeg，无法下载 m3u8 格式视频。该视频仅支持在线播放。');
+        }
+        throw new Error(errorMsg);
       }
 
       const taskId = convertResponse.data.task_id;
@@ -87,6 +101,8 @@ export class VideoDownloader {
       const maxPollAttempts = 600; // 最多轮询10分钟（每秒一次）
       let pollAttempts = 0;
       let conversionCompleted = false;
+      let lastError = null;
+      let consecutiveErrors = 0;
 
       while (pollAttempts < maxPollAttempts && task.status === VideoTaskStatus.DOWNLOADING) {
         await this.delay(1000); // 每秒检查一次
@@ -94,6 +110,7 @@ export class VideoDownloader {
         try {
           const statusResponse = await axios.get(`${API_BASE_URL}/videos/convert/status/${taskId}`);
           const statusData = statusResponse.data;
+          consecutiveErrors = 0; // 重置连续错误计数
 
           // 更新进度
           if (statusData.progress !== undefined) {
@@ -105,14 +122,30 @@ export class VideoDownloader {
             console.log(`视频转换完成: ${task.episodeTitle}`);
             break;
           } else if (statusData.status === 'failed') {
-            throw new Error(statusData.error || '转换失败');
+            lastError = statusData.error || '转换失败';
+            // 检查是否是 ffmpeg 相关错误
+            if (lastError.includes('FFmpeg') || lastError.includes('ffmpeg') || lastError.includes('aac_adtstoasc')) {
+              throw new Error('服务器未安装 FFmpeg 或转换失败，该 m3u8 视频仅支持在线播放。');
+            }
+            throw new Error(lastError);
           }
 
           pollAttempts++;
         } catch (pollError) {
-          // 如果轮询出错，继续尝试
-          console.warn('轮询转换状态失败:', pollError);
+          // 如果是自定义错误直接抛出
+          if (pollError.message && pollError.message.includes('FFmpeg')) {
+            throw pollError;
+          }
+          // 其他轮询错误，记录并继续尝试
+          console.warn('轮询转换状态失败:', pollError.message || pollError);
+          lastError = pollError.message || '轮询失败';
+          consecutiveErrors++;
           pollAttempts++;
+          
+          // 如果连续5次轮询失败，检查是否是转换失败
+          if (consecutiveErrors >= 5) {
+            throw new Error('视频转换失败，该 m3u8 视频可能仅支持在线播放。请确保服务器已安装 FFmpeg。');
+          }
         }
       }
 
@@ -131,7 +164,7 @@ export class VideoDownloader {
       await this.downloadConvertedVideo(task, outputPath);
 
     } catch (error) {
-      console.error(`转换 m3u8 视频失败: ${task.episodeTitle}`, error);
+      console.error(`转换 m3u8 视频失败: ${task.episodeTitle}`, error.message || error);
       throw error;
     }
   }
