@@ -64,6 +64,42 @@ class BadNewsAVScraper(BaseVideoScraper):
         
         return videos
 
+    def _normalize_cover(self, url):
+        """将封面地址补全为可访问的绝对地址"""
+        if not url:
+            return ''
+        # 过滤占位或内联图
+        if url.startswith('data:') or 'lightbox-blank' in url:
+            return ''
+        if url.startswith('//'):
+            return 'https:' + url
+        if url.startswith('/'):
+            return self.base_url + url
+        return url
+
+    def _extract_img_url(self, img):
+        """从img标签尽可能多地提取真实封面"""
+        if not img:
+            return ''
+        candidates = [
+            img.get('data-echo', ''),
+            img.get('data-src', ''),
+            img.get('data-original', ''),
+            img.get('data-lazy', ''),
+            img.get('data-cfsrc', ''),
+            img.get('src', ''),
+        ]
+        # 处理 srcset 的第一个地址
+        srcset = img.get('srcset', '')
+        if srcset:
+            first = srcset.split(',')[0].strip().split(' ')[0]
+            candidates.append(first)
+        for url in candidates:
+            normalized = self._normalize_cover(url)
+            if normalized:
+                return normalized
+        return ''
+
     def _parse_video_list(self, soup, limit=30):
         """解析视频列表"""
         videos = []
@@ -111,17 +147,7 @@ class BadNewsAVScraper(BaseVideoScraper):
                     continue
                 
                 # 获取封面 - 该网站使用懒加载，真实图URL在data-echo属性中
-                cover = ''
-                # 优先从data-echo获取（懒加载真实URL）
-                cover = img.get('data-echo', '') or img.get('data-src', '') or img.get('data-original', '') or img.get('src', '')
-                # 过滤掉占位图
-                if cover and 'lightbox-blank' in cover:
-                    cover = ''
-                if cover and not cover.startswith('http'):
-                    if cover.startswith('//'):
-                        cover = 'https:' + cover
-                    elif cover.startswith('/'):
-                        cover = self.base_url + cover
+                cover = self._extract_img_url(img)
                 
                 video = {
                     'id': video_id,
@@ -188,16 +214,29 @@ class BadNewsAVScraper(BaseVideoScraper):
                     if not description:
                         description = text
             
-            # 获取封面图 - 从推荐视频中查找当前视频
+            # 获取封面图 - 多渠道兜底
             cover = ''
-            # AV站点路径是 /av/番号 格式
+            # 1) 直接在当前页查找包含该视频链接的图片
             current_video_links = soup.find_all('a', href=re.compile(f'/av/{re.escape(video_id)}(?:/|$)'))
             for link in current_video_links:
                 img = link.find('img')
-                if img:
-                    cover = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '')
-                    if cover and 'lightbox-blank' not in cover:
-                        break
+                cover = self._extract_img_url(img)
+                if cover:
+                    break
+            # 2) og:image 元标签
+            if not cover:
+                og = soup.find('meta', property='og:image')
+                if og and og.get('content'):
+                    cover = self._normalize_cover(og.get('content'))
+            # 3) 其他可能的 link 标签
+            if not cover:
+                link_tag = soup.find('link', rel=re.compile('image', re.I))
+                if link_tag and link_tag.get('href'):
+                    cover = self._normalize_cover(link_tag.get('href'))
+            # 4) 兜底：寻找页面上首个 img
+            if not cover:
+                first_img = soup.find('img')
+                cover = self._extract_img_url(first_img)
             
             detail = {
                 'id': video_id,

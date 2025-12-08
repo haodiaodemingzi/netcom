@@ -106,11 +106,16 @@ const VideosTabScreen = () => {
     loadSources();
   }, []);
 
-  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  // 页面获得焦点时重新加载数据并同步最新数据源
   useFocusEffect(
     useCallback(() => {
       loadSources();
-    }, [])
+      
+      // 切换页面后强制刷新，避免看到旧数据
+      if (selectedCategory && selectedSource) {
+        handleRefresh();
+      }
+    }, [selectedCategory, selectedSource])
   );
 
   // 数据源加载完成后，加载分类
@@ -249,12 +254,17 @@ const VideosTabScreen = () => {
     }
   };
 
+  const resetSearchState = () => {
+    setIsSearching(false);
+    setSearchResults([]);
+    setSearchQuery('');
+    setSearchPage(1);
+    setSearchHasMore(false);
+  };
+
   const handleSearch = async (reset = true) => {
     if (!searchQuery.trim()) {
-      setIsSearching(false);
-      setSearchResults([]);
-      setSearchPage(1);
-      setSearchHasMore(false);
+      resetSearchState();
       return;
     }
 
@@ -292,6 +302,7 @@ const VideosTabScreen = () => {
   };
 
   const handleSourceChange = (sourceId) => {
+    resetSearchState(); // 切换数据源时清空搜索，避免展示旧数据
     setSelectedSource(sourceId);
     setCurrentVideoSource(sourceId);
     setShowSourcePicker(false);
@@ -301,6 +312,14 @@ const VideosTabScreen = () => {
     setSelectedCategory(null);
     // 传入新的 sourceId 确保使用正确的数据源加载分类
     loadCategories(sourceId);
+  };
+
+  const handleCategorySelect = (categoryId) => {
+    // 切换分类时也清理搜索结果，保证列表展示当前分类的新数据
+    if (isSearching) {
+      resetSearchState();
+    }
+    setSelectedCategory(categoryId);
   };
 
   const renderItem = ({ item }) => (
@@ -418,7 +437,7 @@ const VideosTabScreen = () => {
                     styles.categoryChip,
                     selectedCategory === category.id && styles.categoryChipActive,
                   ]}
-                  onPress={() => setSelectedCategory(category.id)}
+                  onPress={() => handleCategorySelect(category.id)}
                 >
                   <Text
                     style={[
