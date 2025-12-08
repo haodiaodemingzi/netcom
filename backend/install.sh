@@ -44,7 +44,7 @@ check_root() {
 
 # 安装Python3
 install_python() {
-    echo -e "${GREEN}[1/5] 检查Python3...${NC}"
+    echo -e "${GREEN}[1/6] 检查Python3...${NC}"
     
     if command -v python3 &> /dev/null; then
         PYTHON_VERSION=$(python3 --version | awk '{print $2}')
@@ -63,9 +63,33 @@ install_python() {
     fi
 }
 
+# 安装ffmpeg（用于视频转码）
+install_ffmpeg() {
+    echo -e "${GREEN}[2/6] 检查ffmpeg...${NC}"
+    
+    if command -v ffmpeg &> /dev/null; then
+        FFMPEG_VERSION=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}')
+        echo "ffmpeg 已安装: $FFMPEG_VERSION"
+    else
+        echo "正在安装ffmpeg..."
+        if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+            apt-get update
+            apt-get install -y ffmpeg
+        elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
+            # CentOS需要启用EPEL仓库
+            yum install -y epel-release
+            yum install -y ffmpeg ffmpeg-devel
+        else
+            echo -e "${RED}不支持的操作系统${NC}"
+            exit 1
+        fi
+        echo "ffmpeg 安装完成"
+    fi
+}
+
 # 创建虚拟环境
 create_venv() {
-    echo -e "${GREEN}[2/5] 创建Python虚拟环境...${NC}"
+    echo -e "${GREEN}[3/6] 创建Python虚拟环境...${NC}"
     
     if [ ! -d "venv" ]; then
         python3 -m venv venv
@@ -77,7 +101,7 @@ create_venv() {
 
 # 安装依赖
 install_dependencies() {
-    echo -e "${GREEN}[3/5] 安装Python依赖包...${NC}"
+    echo -e "${GREEN}[4/6] 安装Python依赖包...${NC}"
     
     source venv/bin/activate
     pip install --upgrade pip
@@ -87,7 +111,7 @@ install_dependencies() {
 
 # 配置环境变量
 setup_env() {
-    echo -e "${GREEN}[4/5] 配置环境变量...${NC}"
+    echo -e "${GREEN}[5/6] 配置环境变量...${NC}"
     
     if [ ! -f ".env" ]; then
         cp .env.example .env
@@ -100,7 +124,7 @@ setup_env() {
 
 # 创建系统服务
 create_service() {
-    echo -e "${GREEN}[5/5] 创建系统服务...${NC}"
+    echo -e "${GREEN}[6/6] 创建系统服务...${NC}"
     
     read -p "是否创建systemd服务以开机自启? (y/n) " -n 1 -r
     echo
@@ -170,6 +194,7 @@ main() {
     detect_os
     check_root
     install_python
+    install_ffmpeg
     create_venv
     install_dependencies
     setup_env
