@@ -129,12 +129,10 @@ const EbookTabScreen = () => {
       if (cached) {
         cachedData = JSON.parse(cached);
         setAllBooksMetadata(cachedData.books || []);
-        console.log(`从缓存加载${cachedData.books?.length || 0}本书籍元数据`);
         
         // 检查是否需要刷新
         const needRefresh = await shouldRefreshCache(cachedData);
         if (!needRefresh) {
-          console.log('缓存数据仍然新鲜,无需刷新');
           return;
         }
       }
@@ -142,13 +140,10 @@ const EbookTabScreen = () => {
       // 后台静默更新,不阻塞UI
       setTimeout(async () => {
         try {
-          console.log('触发后台元数据加载...');
           setMetadataLoading(true);
           
           // 触发后台加载(立即返回)
           const response = await getAllBooksMetadata(selectedSource, cachedData ? true : false);
-          
-          console.log(`后台响应: ${response.message}, 当前${response.total}本书`);
           
           // 如果有数据,立即更新
           if (response.books && response.books.length > 0) {
@@ -160,12 +155,10 @@ const EbookTabScreen = () => {
             
             setAllBooksMetadata(response.books);
             await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-            console.log(`元数据已更新: ${response.books.length}本书籍`);
           }
           
           // 如果正在加载,定期检查状态
           if (response.is_loading) {
-            console.log('后台正在加载元数据,启动定期检查...');
             setTimeout(() => checkMetadataStatus(), 10000);
           }
           
@@ -186,8 +179,6 @@ const EbookTabScreen = () => {
     try {
       const status = await getMetadataStatus();
       
-      console.log(`状态检查: ${status.total}本书, 加载中: ${status.is_loading}`);
-      
       if (!status.is_loading && status.total > 0) {
         // 加载完成,获取最新数据
         const response = await getAllBooksMetadata(selectedSource);
@@ -200,12 +191,10 @@ const EbookTabScreen = () => {
           
           setAllBooksMetadata(response.books);
           await AsyncStorage.setItem('allBooksMetadata', JSON.stringify(saveData));
-          console.log(`✅ 元数据加载完成: ${response.books.length}本书籍`);
           setMetadataLoading(false);
         }
       } else if (status.is_loading) {
         // 还在加载,15秒后再检查
-        console.log('⏳ 后台仍在加载,15秒后再次检查...');
         setTimeout(() => checkMetadataStatus(), 15000);
       } else {
         // 未加载且无数据,停止检查
@@ -228,7 +217,6 @@ const EbookTabScreen = () => {
           const needRefresh = await shouldRefreshCache(cachedData);
           
           if (needRefresh) {
-            console.log('定时刷新元数据...');
             await loadMetadataInBackground();
           }
         }
@@ -303,7 +291,7 @@ const EbookTabScreen = () => {
       const ids = filtered.map(book => book.id);
       const uniqueIds = [...new Set(ids)];
       if (ids.length !== uniqueIds.length) {
-        console.warn(`发现重复ID: 总数${ids.length}, 唯一数${uniqueIds.length}`);
+        // 发现重复ID时静默处理
       }
       
       return filtered;

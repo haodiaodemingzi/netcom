@@ -1,5 +1,14 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+import logging
+import os
+
+# 统一日志配置
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 from routes.comic import comic_bp
 from routes.search import search_bp
 from routes.ebook import ebook_bp
@@ -7,7 +16,6 @@ from routes.video import video_bp
 from routes.market import market_bp
 from services.scraper_factory import ScraperFactory
 from services.ebook_scraper_factory import EbookScraperFactory
-import os
 
 app = Flask(__name__)
 CORS(app)

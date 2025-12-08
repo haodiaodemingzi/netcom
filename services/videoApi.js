@@ -14,14 +14,12 @@ let currentSource = 'thanju'; // 当前选择的视频源
 
 export const setVideoDataSource = (source) => {
   currentDataSource = source;
-  console.log(`视频数据源已切换为: ${source}`);
 };
 
 export const getVideoDataSource = () => currentDataSource;
 
 export const setCurrentVideoSource = (source) => {
   currentSource = source;
-  console.log(`当前视频源已切换为: ${source}`);
 };
 
 export const getCurrentVideoSource = () => currentSource;
@@ -269,40 +267,14 @@ export const getEpisodeDetail = async (episodeId) => {
       }
       throw new Error('剧集不存在');
     } else {
-      console.log('=== 调用后端API获取剧集详情 ===');
-      console.log('剧集ID:', episodeId);
-      console.log('数据源:', currentSource);
-      console.log('API地址:', `${API_BASE_URL}/videos/episodes/${episodeId}`);
-      
       const params = {};
       if (currentSource) params.source = currentSource;
-      
-      console.log('请求参数:', params);
       const response = await axios.get(`${API_BASE_URL}/videos/episodes/${episodeId}`, { params });
-      console.log('后端API响应状态:', response.status);
-      console.log('后端API响应数据:', response.data);
       
       // 如果返回的视频URL是外部链接，转换为代理URL
       if (response.data) {
-        console.log('后端返回的完整数据:', response.data);
-        console.log('videoUrl值:', response.data.videoUrl);
-        console.log('videoUrl类型:', typeof response.data.videoUrl);
-        console.log('videoUrl是否为null:', response.data.videoUrl === null);
-        console.log('videoUrl是否为空字符串:', response.data.videoUrl === '');
-        console.log('videoUrl是否存在:', !!response.data.videoUrl);
-        
         // 注意：这里不再转换URL，保持原始URL
         // URL转换和本地视频检查将在 videoPlayerService 中统一处理
-        if (response.data.videoUrl) {
-          console.log('原始视频URL:', response.data.videoUrl);
-        } else {
-          console.warn('=== 后端返回的数据中没有videoUrl ===');
-          console.warn('返回的数据:', JSON.stringify(response.data, null, 2));
-          console.warn('playUrl:', response.data.playUrl);
-          console.warn('可能原因: 播放页面返回错误或解析失败');
-        }
-      } else {
-        console.error('后端返回的数据为空');
       }
       
       return {
@@ -360,7 +332,6 @@ export const savePlaybackProgress = async (episodeId, currentTime, duration) => 
         duration,
         lastWatchedAt: new Date().toISOString(),
       };
-      console.log(`播放进度已保存: ${episodeId} - ${currentTime}/${duration}`);
       return {
         success: true,
         source: 'mock',

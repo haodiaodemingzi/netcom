@@ -1,7 +1,6 @@
 from services.kanunu8_scraper import KanuNu8Scraper
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EbookScraperFactory:

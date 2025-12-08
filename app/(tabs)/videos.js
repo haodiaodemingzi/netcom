@@ -135,13 +135,11 @@ const VideosTabScreen = () => {
           }
         }
         
-        console.log('已安装的视频数据源:', installedSources);
         setSources(installedSources);
         
         // 如果没有当前源或当前源未安装，设置默认源
         if ((!installedSources[selectedSource] || !installedIds.includes(selectedSource)) && Object.keys(installedSources).length > 0) {
           const firstSource = Object.keys(installedSources)[0];
-          console.log('设置默认数据源:', firstSource);
           setSelectedSource(firstSource);
           setCurrentVideoSource(firstSource);
         } else if (installedSources[selectedSource] && installedIds.includes(selectedSource)) {
@@ -161,11 +159,9 @@ const VideosTabScreen = () => {
     try {
       // 使用传入的 source 参数，如果没有则使用 selectedSource
       const sourceToUse = source || selectedSource || 'thanju';
-      console.log('加载分类，使用数据源:', sourceToUse);
       const result = await getVideoCategories(sourceToUse);
       if (result.success) {
         const categoriesData = result.data || [];
-        console.log('加载分类成功，数量:', categoriesData.length, categoriesData);
         setCategories(categoriesData);
         // 如果当前选中的分类不在列表中，选择第一个分类
         if (categoriesData.length > 0) {
@@ -272,7 +268,6 @@ const VideosTabScreen = () => {
   };
 
   const handleSourceChange = (sourceId) => {
-    console.log('切换数据源:', sourceId);
     setSelectedSource(sourceId);
     setCurrentVideoSource(sourceId);
     setShowSourcePicker(false);

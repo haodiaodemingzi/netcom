@@ -78,10 +78,9 @@ const EbookReaderScreen = () => {
         setPageAnimation(settings.pageAnimation || 'fade');
         setFontFamily(settings.fontFamily || 'system');
         setFontBold(settings.fontBold || false);
-        console.log('设置已加载:', settings);
       }
     } catch (error) {
-      console.log('加载设置失败:', error);
+      // 加载设置失败时使用默认值
     }
   };
 
@@ -97,9 +96,8 @@ const EbookReaderScreen = () => {
     };
     try {
       await AsyncStorage.setItem('ebookReaderSettings', JSON.stringify(settings));
-      console.log('设置已保存:', settings);
     } catch (error) {
-      console.log('保存设置失败:', error);
+      // 保存设置失败时静默处理
     }
   };
 

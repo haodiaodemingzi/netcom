@@ -66,7 +66,6 @@ const SearchScreen = () => {
       
       // 如果数据源变化了，且有搜索关键词，重新搜索
       if (sourceChanged && lastKeywordRef.current) {
-        console.log(`数据源已切换: ${lastSourceRef.current} -> ${source}，重新搜索: ${lastKeywordRef.current}`);
         // 使用ref中存储的关键词重新搜索
         const searchTerm = lastKeywordRef.current;
         
@@ -116,7 +115,6 @@ const SearchScreen = () => {
         lastSourceRef.current = searchSource;
       }
       
-      console.log(`搜索: 关键词="${term}", 数据源=${searchSource}`);
       const data = await searchComics(term, 1, 20, searchSource);
       setResults(data.comics || []);
       setHasMore(data.hasMore || false);
@@ -135,7 +133,6 @@ const SearchScreen = () => {
     setLoadingMore(true);
     const nextPage = page + 1;
     try {
-      console.log(`加载更多: 页码=${nextPage}, 数据源=${currentSource}`);
       const data = await searchComics(keyword, nextPage, 20, currentSource);
       setResults(prev => [...prev, ...(data.comics || [])]);
       setHasMore(data.hasMore || false);

@@ -23,9 +23,11 @@ import {
 import { getAvailableSources } from '../../services/api';
 import downloadManager from '../../services/downloadManager';
 import videoDownloadManager from '../../services/videoDownloadManager';
+import { useToast } from '../../components/MessageToast';
 
 const ProfileScreen = () => {
   const router = useRouter();
+  const toast = useToast();
   const [settings, setSettings] = useState({
     darkMode: false,
     autoLoadHD: false,
@@ -90,7 +92,7 @@ const ProfileScreen = () => {
           style: 'destructive',
           onPress: async () => {
             await clearHistory();
-            Alert.alert('提示', '历史记录已清除');
+            toast.success('历史记录已清除');
           },
         },
       ]
@@ -120,10 +122,10 @@ const ProfileScreen = () => {
               // 重新加载数据源（因为已清除）
               await loadSourceData();
               
-              Alert.alert('成功', '缓存已清除，应用已恢复到初始状态');
+              toast.success('缓存已清除，应用已恢复到初始状态');
             } catch (error) {
               console.error('清除缓存失败:', error);
-              Alert.alert('错误', '清除缓存时发生错误，请重试');
+              toast.error('清除缓存时发生错误，请重试');
             }
           },
         },
@@ -135,7 +137,7 @@ const ProfileScreen = () => {
     setCurrentSourceState(sourceId);
     await setCurrentSource(sourceId);
     setShowSourceMenu(false);
-    Alert.alert('提示', `已切换到 ${sources[sourceId]?.name}`);
+    toast.success(`已切换到 ${sources[sourceId]?.name}`);
   };
 
   const renderSettingItem = (title, value, onValueChange) => (
@@ -241,7 +243,7 @@ const ProfileScreen = () => {
             router.push('/history');
           })}
           {renderMenuItem('下载管理', () => {
-            Alert.alert('提示', '功能开发中...');
+            toast.info('功能开发中...');
           })}
         </View>
 
@@ -332,7 +334,7 @@ const ProfileScreen = () => {
           {renderMenuItem('清除缓存', handleClearCache)}
           {renderMenuItem('清除历史记录', handleClearHistory)}
           {renderMenuItem('关于应用', () => {
-            Alert.alert('关于', '漫画阅读器 v1.0.0');
+            toast.info('漫画阅读器 v1.0.0');
           })}
         </View>
       </ScrollView>

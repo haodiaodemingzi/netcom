@@ -40,7 +40,6 @@ const NovelReaderScreen = () => {
       const result = await getChapterContent(chapterId);
       if (result.success) {
         setChapter(result.data);
-        console.log('章节加载成功:', result.data.title);
       } else {
         Alert.alert('错误', '加载章节失败');
       }

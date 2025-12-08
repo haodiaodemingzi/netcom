@@ -7,15 +7,16 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getSeriesList, setVideoDataSource, getVideoDataSource } from '../../services/videoApi';
+import { useToast } from '../../components/MessageToast';
 
 const SeriesScreen = () => {
   const router = useRouter();
+  const toast = useToast();
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState(getVideoDataSource());
@@ -30,13 +31,12 @@ const SeriesScreen = () => {
       const result = await getSeriesList();
       if (result.success) {
         setSeries(result.data);
-        console.log(`已加载 ${result.data.length} 部短剧 (数据源: ${result.source})`);
       } else {
-        Alert.alert('错误', '加载短剧列表失败');
+        toast.error('加载短剧列表失败');
       }
     } catch (error) {
       console.error('加载短剧失败:', error);
-      Alert.alert('错误', '加载短剧失败');
+      toast.error('加载短剧失败');
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ const SeriesScreen = () => {
     const newSource = dataSource === 'mock' ? 'api' : 'mock';
     setVideoDataSource(newSource);
     setDataSource(newSource);
-    Alert.alert('成功', `已切换到 ${newSource === 'mock' ? 'Mock 数据' : 'API 数据'} 源`);
+    toast.success(`已切换到 ${newSource === 'mock' ? 'Mock 数据' : 'API 数据'} 源`);
   };
 
   const renderSeriesCard = ({ item }) => (

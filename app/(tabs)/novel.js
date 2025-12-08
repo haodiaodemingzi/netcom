@@ -7,15 +7,16 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getNovelList, setNovelDataSource, getNovelDataSource } from '../../services/novelApi';
+import { useToast } from '../../components/MessageToast';
 
 const NovelScreen = () => {
   const router = useRouter();
+  const toast = useToast();
   const [novels, setNovels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState(getNovelDataSource());
@@ -30,13 +31,12 @@ const NovelScreen = () => {
       const result = await getNovelList();
       if (result.success) {
         setNovels(result.data);
-        console.log(`已加载 ${result.data.length} 部小说 (数据源: ${result.source})`);
       } else {
-        Alert.alert('错误', '加载小说列表失败');
+        toast.error('加载小说列表失败');
       }
     } catch (error) {
       console.error('加载小说失败:', error);
-      Alert.alert('错误', '加载小说失败');
+      toast.error('加载小说失败');
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ const NovelScreen = () => {
     const newSource = dataSource === 'mock' ? 'api' : 'mock';
     setNovelDataSource(newSource);
     setDataSource(newSource);
-    Alert.alert('成功', `已切换到 ${newSource === 'mock' ? 'Mock 数据' : 'API 数据'} 源`);
+    toast.success(`已切换到 ${newSource === 'mock' ? 'Mock 数据' : 'API 数据'} 源`);
   };
 
   const renderNovelCard = ({ item }) => (

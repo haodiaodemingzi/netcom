@@ -1,5 +1,9 @@
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from services.video_scraper_factory import VideoScraperFactory
+from utils.decorators import (
+    handle_errors, get_source_param, get_pagination_params,
+    success_response, not_found_response
+)
 import logging
 import requests
 from urllib.parse import urlparse, urlencode
@@ -15,40 +19,22 @@ logger = logging.getLogger(__name__)
 video_bp = Blueprint('video', __name__)
 
 @video_bp.route('/videos/sources', methods=['GET'])
+@handle_errors("获取数据源列表失败")
 def get_sources():
     """获取所有可用的视频数据源"""
-    try:
-        sources = VideoScraperFactory.get_sources_dict()
-        logger.info(f"获取数据源: {sources}")
-        logger.info(f"可用数据源: {VideoScraperFactory.get_available_sources()}")
-        return jsonify({'sources': sources}), 200
-    except Exception as e:
-        logger.error(f"获取数据源列表失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'sources': {
-                'thanju': {
-                    'name': '热播韩剧网',
-                    'description': '热播韩剧网(thanju.com) - 提供最新韩剧资源'
-                }
-            }
-        }), 200
+    sources = VideoScraperFactory.get_sources_dict()
+    return success_response({'sources': sources})
 
 @video_bp.route('/videos/categories', methods=['GET'])
+@handle_errors("获取分类列表失败")
 def get_categories():
     """获取视频分类列表"""
     source = request.args.get('source', 'thanju')
-    
-    try:
-        scraper = VideoScraperFactory.create_scraper(source)
-        categories = scraper.get_categories()
-        return jsonify(categories), 200
-    except Exception as e:
-        logger.error(f"获取分类列表失败: {str(e)}")
-        return jsonify([]), 200
+    scraper = VideoScraperFactory.create_scraper(source)
+    return success_response(scraper.get_categories())
 
 @video_bp.route('/videos/series', methods=['GET'])
+@handle_errors("获取视频列表失败")
 def get_series_list():
     """获取视频列表"""
     category = request.args.get('category', 'hot')
@@ -56,76 +42,43 @@ def get_series_list():
     limit = int(request.args.get('limit', 20))
     source = request.args.get('source', 'thanju')
     
-    try:
-        scraper = VideoScraperFactory.create_scraper(source)
-        videos = scraper.get_videos_by_category(category, page, limit)
-        
-        return jsonify({
-            'series': videos,
-            'hasMore': len(videos) >= limit,
-            'total': len(videos)
-        }), 200
-    except Exception as e:
-        logger.error(f"获取视频列表失败: {str(e)}")
-        return jsonify({
-            'series': [],
-            'hasMore': False,
-            'total': 0
-        }), 200
+    scraper = VideoScraperFactory.create_scraper(source)
+    videos = scraper.get_videos_by_category(category, page, limit)
+    return success_response({
+        'series': videos,
+        'hasMore': len(videos) >= limit,
+        'total': len(videos)
+    })
 
 @video_bp.route('/videos/series/<series_id>', methods=['GET'])
+@handle_errors("获取视频详情失败")
 def get_series_detail(series_id):
     """获取视频详情"""
     source = request.args.get('source', 'thanju')
-    
-    try:
-        scraper = VideoScraperFactory.create_scraper(source)
-        detail = scraper.get_video_detail(series_id)
-        
-        if detail:
-            return jsonify(detail), 200
-        else:
-            return jsonify({'error': '视频不存在'}), 404
-    except Exception as e:
-        logger.error(f"获取视频详情失败: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+    scraper = VideoScraperFactory.create_scraper(source)
+    detail = scraper.get_video_detail(series_id)
+    if detail:
+        return success_response(detail)
+    return not_found_response("视频不存在")
 
 @video_bp.route('/videos/series/<series_id>/episodes', methods=['GET'])
+@handle_errors("获取剧集列表失败")
 def get_episodes(series_id):
     """获取剧集列表"""
     source = request.args.get('source', 'thanju')
-    
-    try:
-        scraper = VideoScraperFactory.create_scraper(source)
-        episodes = scraper.get_episodes(series_id)
-        
-        return jsonify(episodes), 200
-    except Exception as e:
-        logger.error(f"获取剧集列表失败: {str(e)}")
-        return jsonify([]), 200
+    scraper = VideoScraperFactory.create_scraper(source)
+    return success_response(scraper.get_episodes(series_id))
 
 @video_bp.route('/videos/episodes/<episode_id>', methods=['GET'])
+@handle_errors("获取剧集详情失败")
 def get_episode_detail(episode_id):
     """获取单个剧集详情"""
     source = request.args.get('source', 'thanju')
-    
-    try:
-        logger.info(f"获取剧集详情: episode_id={episode_id}, source={source}")
-        scraper = VideoScraperFactory.create_scraper(source)
-        episode = scraper.get_episode_detail(episode_id)
-        
-        logger.info(f"剧集详情结果: episode={episode is not None}, videoUrl={episode.get('videoUrl') if episode else None}")
-        
-        if episode:
-            return jsonify(episode), 200
-        else:
-            logger.warning(f"剧集不存在: episode_id={episode_id}")
-            return jsonify({'error': '剧集不存在'}), 404
-    except Exception as e:
-        logger.error(f"获取剧集详情失败: {str(e)}", exc_info=True)
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+    scraper = VideoScraperFactory.create_scraper(source)
+    episode = scraper.get_episode_detail(episode_id)
+    if episode:
+        return success_response(episode)
+    return not_found_response("剧集不存在")
 
 @video_bp.route('/videos/search', methods=['GET'])
 def search_videos():
@@ -425,7 +378,7 @@ def convert_video():
                     # 检查是否包含非标准扩展名（如 .jpeg, .jpg, .png 等）
                     # FFmpeg HLS demuxer 对这些扩展名有硬编码限制，需要使用 concat 方法
                     if re.search(r'\.(jpeg|jpg|png|gif|webp)(\?|$|\s)', m3u8_content, re.IGNORECASE):
-                        logger.info(f'检测到非标准扩展名（.jpeg等），使用分片下载+concat方法: {episode_id}')
+                        logger.info(f'检测到非标准扩展名，使用分片下载+concat方法: {episode_id}')
                         use_concat_method = True
                         
                         # 解析 m3u8 URL 的 base URL
@@ -443,7 +396,7 @@ def convert_video():
                                 else:
                                     segment_urls.append(line)
                         
-                        logger.info(f'共发现 {len(segment_urls)} 个分片需要下载')
+                        logger.info(f'共发现 {len(segment_urls)} 个分片')
                         
                         # 创建临时目录存放分片
                         temp_dir = tempfile.gettempdir()
@@ -491,11 +444,11 @@ def convert_video():
                                         video_conversion_tasks[task_id]['progress'] = download_progress
                                         video_conversion_tasks[task_id]['status'] = f'downloading ({completed}/{total_segments})'
                                 
-                                # 每100个分片打印一次日志
-                                if completed % 100 == 0:
+                                # 每200个分片打印一次日志
+                                if completed % 200 == 0:
                                     logger.info(f'分片下载进度: {completed}/{total_segments}')
                         
-                        logger.info(f'分片下载完成: 成功 {len(downloaded_segments)}, 失败 {failed_count}')
+                        logger.info(f'分片下载完成: {len(downloaded_segments)} 成功, {failed_count} 失败')
                         
                         if len(downloaded_segments) == 0:
                             raise Exception('所有分片下载失败')
@@ -512,19 +465,16 @@ def convert_video():
                                 f.write(f"file '{safe_path}'\n")
                         
                         input_url = concat_list_path
-                        logger.info(f'使用 concat 列表文件: {input_url}')
                         
                         # 更新状态
                         with video_conversion_lock:
                             if task_id in video_conversion_tasks:
                                 video_conversion_tasks[task_id]['status'] = 'merging'
                     else:
-                        logger.info(f'使用标准 HLS 方法: {input_url}')
+                        pass  # 标准HLS方法
                         
                 except Exception as m3u8_error:
                     logger.warning(f'处理 m3u8 文件失败: {m3u8_error}')
-                    import traceback
-                    traceback.print_exc()
                     # 如果处理失败，仍尝试使用原始URL（可能会失败）
                     input_url = m3u8_url
                     use_concat_method = False
@@ -562,8 +512,7 @@ def convert_video():
                         output_path
                     ])
                 
-                logger.info(f'开始转换视频: {episode_id}, source: {source}')
-                logger.info(f'FFmpeg 命令: {cmd}')
+                logger.info(f'开始转换视频: {episode_id}')
                 
                 # 执行 FFmpeg 转换
                 process = subprocess.Popen(

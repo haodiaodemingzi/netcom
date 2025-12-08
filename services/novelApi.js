@@ -6,7 +6,6 @@ let currentDataSource = 'mock';
 
 export const setNovelDataSource = (source) => {
   currentDataSource = source;
-  console.log(`小说数据源已切换为: ${source}`);
 };
 
 export const getNovelDataSource = () => currentDataSource;
@@ -30,7 +29,7 @@ export const getNovelList = async () => {
       };
     }
   } catch (error) {
-    console.error('获取小说列表失败:', error);
+    console.error('获取小说列表失败:', error.message);
     return {
       success: false,
       data: [],
@@ -62,7 +61,7 @@ export const getNovelDetail = async (novelId) => {
       };
     }
   } catch (error) {
-    console.error('获取小说详情失败:', error);
+    console.error('获取小说详情失败:', error.message);
     return {
       success: false,
       data: null,
@@ -91,7 +90,7 @@ export const getNovelChapters = async (novelId) => {
       };
     }
   } catch (error) {
-    console.error('获取章节列表失败:', error);
+    console.error('获取章节列表失败:', error.message);
     return {
       success: false,
       data: [],
@@ -125,7 +124,7 @@ export const getChapterContent = async (chapterId) => {
       };
     }
   } catch (error) {
-    console.error('获取章节内容失败:', error);
+    console.error('获取章节内容失败:', error.message);
     return {
       success: false,
       data: null,
@@ -153,7 +152,7 @@ export const getReadingProgress = async (novelId) => {
       };
     }
   } catch (error) {
-    console.error('获取阅读进度失败:', error);
+    console.error('获取阅读进度失败:', error.message);
     return {
       success: false,
       data: null,
@@ -173,7 +172,6 @@ export const saveReadingProgress = async (novelId, chapterId, position) => {
         position,
         lastReadAt: new Date().toISOString(),
       };
-      console.log(`阅读进度已保存: ${novelId} - ${chapterId} - ${position}`);
       return {
         success: true,
         source: 'mock',
@@ -190,7 +188,7 @@ export const saveReadingProgress = async (novelId, chapterId, position) => {
       };
     }
   } catch (error) {
-    console.error('保存阅读进度失败:', error);
+    console.error('保存阅读进度失败:', error.message);
     return {
       success: false,
       error: error.message,
