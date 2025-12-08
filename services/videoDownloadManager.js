@@ -367,6 +367,38 @@ class VideoDownloadManager {
   getLocalVideoPath(seriesId, episodeId) {
     return `${VIDEO_DOWNLOAD_DIR}${seriesId}/${episodeId}.mp4`;
   }
+
+  async checkLocalVideoExists(seriesId, episodeId) {
+    try {
+      const localPath = this.getLocalVideoPath(seriesId, episodeId);
+      const fileInfo = await getInfoAsync(localPath);
+      return fileInfo.exists && fileInfo.size > 0;
+    } catch (error) {
+      console.error('检查本地视频文件失败:', error);
+      return false;
+    }
+  }
+
+  async getLocalVideoUri(seriesId, episodeId) {
+    // 如果提供了 seriesId，直接检查
+    if (seriesId) {
+      const exists = await this.checkLocalVideoExists(seriesId, episodeId);
+      if (exists) {
+        return this.getLocalVideoPath(seriesId, episodeId);
+      }
+    }
+    
+    // 如果没有 seriesId 或找不到，尝试从已下载的记录中查找
+    const episodeData = this.downloadedEpisodes.get(episodeId);
+    if (episodeData && episodeData.seriesId) {
+      const exists = await this.checkLocalVideoExists(episodeData.seriesId, episodeId);
+      if (exists) {
+        return this.getLocalVideoPath(episodeData.seriesId, episodeId);
+      }
+    }
+    
+    return null;
+  }
 }
 
 const videoDownloadManager = new VideoDownloadManager();

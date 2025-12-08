@@ -79,7 +79,7 @@ const SeriesDetailScreen = () => {
       const timer = setTimeout(() => {
         try {
           if (player.duration > 0 && !player.playing) {
-            player.playing = true;
+            player.play();
             console.log('自动开始播放视频');
           }
         } catch (e) {
@@ -179,13 +179,22 @@ const SeriesDetailScreen = () => {
           // 先设置播放的剧集信息
           setPlayingEpisode(result.data);
           
-          // 然后设置视频源（这会触发播放器更新）
-          setVideoSource(result.data.videoUrl);
+          // 检查是否有本地下载的视频（优先使用本地文件）
+          const localVideoUri = await videoDownloadManager.getLocalVideoUri(id, episode.id);
+          if (localVideoUri) {
+            console.log('=== 找到本地视频，优先使用本地文件 ===');
+            console.log('本地视频路径:', localVideoUri);
+            setVideoSource(localVideoUri);
+          } else {
+            console.log('未找到本地视频，使用在线URL');
+            // 然后设置视频源（这会触发播放器更新）
+            setVideoSource(result.data.videoUrl);
+          }
           
           // 最后显示播放器
           setShowPlayer(true);
           console.log('播放器已显示，等待视频加载...');
-          console.log('当前videoSource状态:', result.data.videoUrl);
+          console.log('当前videoSource状态:', localVideoUri || result.data.videoUrl);
         } else {
           console.error('=== 视频URL为空 ===');
           console.error('可能的原因:');
@@ -220,7 +229,7 @@ const SeriesDetailScreen = () => {
     setVideoSource('');
     if (player) {
       try {
-        player.playing = false;
+        player.pause();
       } catch (e) {
         console.error('停止播放失败:', e);
       }
@@ -392,7 +401,7 @@ const SeriesDetailScreen = () => {
                   // 视频加载完成后自动播放
                   if (player && !player.playing) {
                     try {
-                      player.playing = true;
+                      player.play();
                       console.log('已自动开始播放');
                     } catch (e) {
                       console.error('自动播放失败:', e);

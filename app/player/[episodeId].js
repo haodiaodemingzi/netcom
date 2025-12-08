@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
+import videoDownloadManager from '../../services/videoDownloadManager';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -72,17 +73,17 @@ const PlayerScreen = () => {
     loadEpisode();
   }, [episodeId]);
 
-  // 当episode加载完成后，更新video source
+  // 当episode加载完成后，更新video source（如果还没有设置本地视频）
   useEffect(() => {
-    if (episode?.videoUrl) {
+    if (episode?.videoUrl && !videoSource) {
       console.log('=== 更新视频源 ===');
       console.log('原始视频URL:', episode.videoUrl);
       setVideoSource(episode.videoUrl);
       console.log('视频源已设置');
-    } else {
+    } else if (!episode?.videoUrl) {
       console.log('剧集数据中没有视频URL');
     }
-  }, [episode?.videoUrl]);
+  }, [episode?.videoUrl, videoSource]);
 
   // 监听播放状态和进度
   useEffect(() => {
@@ -126,6 +127,18 @@ const PlayerScreen = () => {
         console.log('视频URL是否为空:', !result.data.videoUrl);
         console.log('视频URL是否为代理URL:', result.data.videoUrl?.includes('/videos/proxy'));
         
+        // 检查是否有本地下载的视频（优先使用本地文件）
+        const seriesId = result.data.seriesId || result.data.series_id;
+        const localVideoUri = await videoDownloadManager.getLocalVideoUri(seriesId, episodeId);
+        if (localVideoUri) {
+          console.log('=== 找到本地视频，优先使用本地文件 ===');
+          console.log('本地视频路径:', localVideoUri);
+          setVideoSource(localVideoUri);
+          return;
+        } else {
+          console.log('未找到本地视频，使用在线URL');
+        }
+        
         if (!result.data.videoUrl) {
           console.error('视频URL为空');
           Alert.alert('提示', '未找到视频播放链接，可能需要使用播放页面URL');
@@ -147,8 +160,12 @@ const PlayerScreen = () => {
   const handlePlayPause = () => {
     if (player) {
       try {
-        // expo-video: playing是属性，通过设置它来控制播放/暂停
-        player.playing = !player.playing;
+        // expo-video: 使用 play() 和 pause() 方法控制播放
+        if (player.playing) {
+          player.pause();
+        } else {
+          player.play();
+        }
       } catch (error) {
         console.error('播放控制失败:', error);
       }
