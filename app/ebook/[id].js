@@ -45,7 +45,10 @@ const EbookDetailScreen = () => {
   const handleRead = (chapter) => {
     // 处理传递的可能是对象或字符串的情况
     const chapterId = typeof chapter === 'object' ? chapter.id : chapter;
-    router.push(`/ebook-reader/${chapterId}?bookId=${id}&source=${source}`);
+    // 将书籍元数据一并传递，用于阅读记录
+    const bookTitle = encodeURIComponent(book.title || '');
+    const bookCover = encodeURIComponent(book.cover || '');
+    router.push(`/ebook-reader/${chapterId}?bookId=${id}&source=${source}&bookTitle=${bookTitle}&bookCover=${bookCover}`);
   };
 
   if (loading) {

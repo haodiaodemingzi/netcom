@@ -14,10 +14,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getChapterContent, getEbookChapters } from '../../services/api';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { addHistory } from '../../services/storage';
 
 const EbookReaderScreen = () => {
   const router = useRouter();
-  const { chapterId, source = 'kanunu8' } = useLocalSearchParams();
+  const { chapterId, source = 'kanunu8', bookTitle = '', bookCover = '' } = useLocalSearchParams();
   const { bookId } = useLocalSearchParams();
   
   // 默认设置
@@ -50,6 +51,7 @@ const EbookReaderScreen = () => {
   
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const gestureRef = useRef(null);
+  const lastSavedRef = useRef({ chapterId: null, page: -1 });
   
   // 翻页动画相关 - 只使用淡入淡出
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -59,6 +61,13 @@ const EbookReaderScreen = () => {
     loadSavedSettings();
     loadInitialData();
   }, [chapterId]);
+
+  // 离开页面时保存阅读进度
+  useEffect(() => {
+    return () => {
+      saveReadingProgress();
+    };
+  }, [chapterId, currentPage, chapterTitle]);
 
   useEffect(() => {
     if (content) {
@@ -144,6 +153,34 @@ const EbookReaderScreen = () => {
     }
   };
 
+  const saveReadingProgress = async (overridePage = null, overrideChapterId = null) => {
+    if (!bookId || !chapterId) return;
+    const pageToSave = overridePage !== null ? overridePage : currentPage;
+    const chapterToSave = overrideChapterId || chapterId;
+
+    // 避免重复写入相同位置
+    if (
+      lastSavedRef.current.chapterId === chapterToSave &&
+      lastSavedRef.current.page === pageToSave
+    ) {
+      return;
+    }
+
+    const meta = {
+      id: bookId,
+      title: decodeURIComponent(bookTitle) || chapterTitle || '未知书籍',
+      cover: decodeURIComponent(bookCover || ''),
+      source,
+    };
+
+    try {
+      await addHistory(meta, chapterToSave, pageToSave);
+      lastSavedRef.current = { chapterId: chapterToSave, page: pageToSave };
+    } catch (error) {
+      // 静默失败即可
+    }
+  };
+
   // 分页函数
   const paginateContent = () => {
     if (!content) return;
@@ -181,6 +218,7 @@ const EbookReaderScreen = () => {
       });
     } else if (currentChapterIndex < chapters.length - 1) {
       // 当前章节读完,加载下一章
+      saveReadingProgress(totalPages - 1, chapterId);
       loadNextChapter();
     }
   };
@@ -194,6 +232,7 @@ const EbookReaderScreen = () => {
       });
     } else if (currentChapterIndex > 0) {
       // 加载上一章
+      saveReadingProgress(0, chapterId);
       loadPrevChapter();
     }
   };
@@ -221,6 +260,11 @@ const EbookReaderScreen = () => {
       });
     });
   };
+
+  // 当前页变更时保存进度
+  useEffect(() => {
+    saveReadingProgress();
+  }, [currentPage]);
 
   const loadNextChapter = () => {
     if (currentChapterIndex < chapters.length - 1) {
