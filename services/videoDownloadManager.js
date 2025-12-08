@@ -134,12 +134,15 @@ class VideoDownloadManager {
         throw new Error('无法获取视频URL');
       }
 
-      const m3u8Url = episodeDetail.data.videoUrl;
-      console.log(`视频URL: ${m3u8Url}`);
+      const videoUrl = episodeDetail.data.videoUrl;
+      console.log(`视频URL: ${videoUrl}`);
 
-      // 检查是否是m3u8格式
-      if (!m3u8Url.includes('.m3u8') && !m3u8Url.includes('m3u8')) {
-        throw new Error('视频URL不是m3u8格式');
+      // 检查视频类型
+      const isM3u8 = videoUrl.includes('.m3u8') || videoUrl.includes('m3u8');
+      const isMp4 = videoUrl.includes('.mp4') || videoUrl.includes('mp4');
+      
+      if (!isM3u8 && !isMp4) {
+        throw new Error('不支持的视频格式，仅支持 m3u8 和 mp4');
       }
 
       // 创建下载任务
@@ -148,7 +151,7 @@ class VideoDownloadManager {
         seriesId,
         seriesTitle,
         episode.title || `第${episode.episodeNumber || ''}集`,
-        m3u8Url,
+        videoUrl,
         source
       );
 
@@ -287,7 +290,7 @@ class VideoDownloadManager {
         task.seriesId,
         task.seriesTitle,
         task.episodeTitle,
-        task.m3u8Url,
+        task.videoUrl,
         task.source
       );
       newTask.setOutputPath(task.outputPath);
@@ -316,7 +319,7 @@ class VideoDownloadManager {
         task.seriesId,
         task.seriesTitle,
         task.episodeTitle,
-        task.m3u8Url,
+        task.videoUrl,
         task.source
       );
       this.queue.addTask(newTask);

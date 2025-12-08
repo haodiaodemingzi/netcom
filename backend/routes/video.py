@@ -380,6 +380,21 @@ def convert_video():
         # 在后台线程中执行转换
         def convert_in_background():
             try:
+                # 根据数据源设置请求头
+                headers = []
+                if source == 'thanju':
+                    if series_id:
+                        referer = f'https://www.thanju.com/detail/{series_id}.html'
+                    else:
+                        referer = 'https://www.thanju.com/'
+                    headers.append(f'Referer: {referer}')
+                elif source == 'badnews':
+                    headers.append('Referer: https://bad.news/')
+                    headers.append('Origin: https://bad.news')
+                
+                # 添加通用请求头
+                headers.append('User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+                
                 # 构建 FFmpeg 命令
                 # 使用 -c copy 快速复制（如果编码兼容）
                 # 如果不行，使用 -c:v libx264 -c:a aac 重新编码
@@ -392,7 +407,14 @@ def convert_video():
                     output_path
                 ]
                 
-                logger.info(f'开始转换视频: {episode_id}, 命令: {" ".join(cmd)}')
+                # 如果有请求头，添加到命令中
+                if headers:
+                    # FFmpeg 使用 -headers 参数，格式为 "Header1: Value1\r\nHeader2: Value2"
+                    headers_str = '\r\n'.join(headers) + '\r\n'
+                    cmd.insert(-1, '-headers')
+                    cmd.insert(-1, headers_str)
+                
+                logger.info(f'开始转换视频: {episode_id}, source: {source}, 命令: {" ".join(cmd[:10])}...')
                 
                 # 执行 FFmpeg 转换
                 process = subprocess.Popen(

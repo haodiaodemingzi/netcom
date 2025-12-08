@@ -6,6 +6,7 @@ import axios from 'axios';
 const getInfoAsync = FileSystem.getInfoAsync.bind(FileSystem);
 const makeDirectoryAsync = FileSystem.makeDirectoryAsync.bind(FileSystem);
 const downloadAsync = FileSystem.downloadAsync.bind(FileSystem);
+const writeAsStringAsync = FileSystem.writeAsStringAsync.bind(FileSystem);
 
 export class VideoDownloader {
   constructor(maxRetries = 3, retryDelay = 1000) {
@@ -18,7 +19,6 @@ export class VideoDownloader {
       return;
     }
 
-    // 使用后端转换方案
     const expoSeriesDir = `${baseDir}${task.seriesId}/`;
     const expoOutputPath = `${expoSeriesDir}${task.episodeId}.mp4`;
     
@@ -40,12 +40,31 @@ export class VideoDownloader {
 
       task.setOutputPath(expoOutputPath);
 
+      // 根据视频类型选择下载方式
+      if (task.videoType === 'm3u8') {
+        // m3u8: 使用后端转换
+        await this.downloadM3u8ViaBackend(task, expoOutputPath);
+      } else if (task.videoType === 'mp4') {
+        // mp4: 直接下载
+        await this.downloadMp4Directly(task, expoOutputPath);
+      } else {
+        task.fail(new Error(`不支持的视频类型: ${task.videoType}`));
+      }
+
+    } catch (error) {
+      console.error(`下载视频失败: ${task.episodeTitle}`, error);
+      task.fail(error);
+    }
+  }
+
+  async downloadM3u8ViaBackend(task, outputPath) {
+    try {
       console.log(`开始转换视频: ${task.episodeTitle}`);
-      console.log(`m3u8 URL: ${task.m3u8Url}`);
+      console.log(`m3u8 URL: ${task.videoUrl}`);
 
       // 步骤1: 调用后端转换接口
       const convertResponse = await axios.post(`${API_BASE_URL}/videos/convert`, {
-        m3u8_url: task.m3u8Url,
+        m3u8_url: task.videoUrl,
         episode_id: task.episodeId,
         series_id: task.seriesId,
         source: task.source,
@@ -60,7 +79,7 @@ export class VideoDownloader {
 
       // 如果已经完成（可能之前转换过）
       if (convertResponse.data.status === 'completed') {
-        await this.downloadConvertedVideo(task, expoOutputPath);
+        await this.downloadConvertedVideo(task, outputPath);
         return;
       }
 
@@ -109,11 +128,87 @@ export class VideoDownloader {
       }
 
       // 步骤3: 下载转换后的 mp4 文件
-      await this.downloadConvertedVideo(task, expoOutputPath);
+      await this.downloadConvertedVideo(task, outputPath);
 
     } catch (error) {
-      console.error(`下载视频失败: ${task.episodeTitle}`, error);
-      task.fail(error);
+      console.error(`转换 m3u8 视频失败: ${task.episodeTitle}`, error);
+      throw error;
+    }
+  }
+
+  async downloadMp4Directly(task, outputPath) {
+    try {
+      console.log(`开始直接下载 MP4 视频: ${task.episodeTitle}`);
+      console.log(`视频URL: ${task.videoUrl}`);
+
+      // 首先获取文件大小（如果服务器支持）
+      let totalBytes = 0;
+      try {
+        const headResponse = await axios.head(task.videoUrl, {
+          headers: {
+            'Accept': 'video/mp4',
+          },
+        });
+        if (headResponse.headers['content-length']) {
+          totalBytes = parseInt(headResponse.headers['content-length'], 10);
+          task.totalBytes = totalBytes;
+        }
+      } catch (headError) {
+        console.warn('无法获取文件大小:', headError);
+      }
+
+      // 使用 expo-file-system 下载文件
+      // 注意：downloadAsync 不支持进度回调，所以我们通过定期检查文件大小来估算进度
+      const progressCheckInterval = setInterval(async () => {
+        if (task.status !== VideoTaskStatus.DOWNLOADING) {
+          clearInterval(progressCheckInterval);
+          return;
+        }
+
+        try {
+          const fileInfo = await getInfoAsync(outputPath);
+          if (fileInfo.exists && fileInfo.size && totalBytes > 0) {
+            const progress = fileInfo.size / totalBytes;
+            task.updateProgress(progress, 0, 0);
+          } else if (fileInfo.exists && !totalBytes) {
+            // 如果无法获取总大小，显示不确定进度
+            task.updateProgress(0.5, 0, 0);
+          }
+        } catch (error) {
+          // 忽略检查错误
+        }
+      }, 500); // 每500ms检查一次
+
+      try {
+        const downloadResult = await downloadAsync(task.videoUrl, outputPath, {
+          headers: {
+            'Accept': 'video/mp4',
+          },
+        });
+
+        clearInterval(progressCheckInterval);
+
+        if (downloadResult.status === 200) {
+          // 最终确认文件大小
+          const fileInfo = await getInfoAsync(outputPath);
+          if (fileInfo.exists) {
+            task.updateProgress(1, 0, 0);
+            console.log(`MP4 视频下载成功: ${outputPath}`);
+            task.complete();
+          } else {
+            throw new Error('下载完成但文件不存在');
+          }
+        } else {
+          throw new Error(`下载失败，状态码: ${downloadResult.status}`);
+        }
+      } catch (downloadError) {
+        clearInterval(progressCheckInterval);
+        throw downloadError;
+      }
+
+    } catch (error) {
+      console.error(`下载 MP4 视频失败:`, error);
+      throw error;
     }
   }
 

@@ -8,13 +8,14 @@ export const VideoTaskStatus = {
 };
 
 export class VideoDownloadTask {
-  constructor(episodeId, seriesId, seriesTitle, episodeTitle, m3u8Url, source) {
+  constructor(episodeId, seriesId, seriesTitle, episodeTitle, videoUrl, source) {
     this.id = episodeId;
     this.episodeId = episodeId;
     this.seriesId = seriesId;
     this.seriesTitle = seriesTitle;
     this.episodeTitle = episodeTitle;
-    this.m3u8Url = m3u8Url;
+    this.videoUrl = videoUrl;
+    this.videoType = this.detectVideoType(videoUrl);
     this.source = source;
     
     this.status = VideoTaskStatus.PENDING;
@@ -37,6 +38,25 @@ export class VideoDownloadTask {
     this.onProgress = null;
     this.onComplete = null;
     this.onError = null;
+  }
+
+  detectVideoType(url) {
+    if (!url) return 'unknown';
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes('.m3u8') || lowerUrl.includes('m3u8')) {
+      return 'm3u8';
+    } else if (lowerUrl.includes('.mp4') || lowerUrl.includes('mp4')) {
+      return 'mp4';
+    }
+    return 'unknown';
+  }
+
+  isM3u8() {
+    return this.videoType === 'm3u8';
+  }
+
+  isMp4() {
+    return this.videoType === 'mp4';
   }
 
   start() {
@@ -129,6 +149,8 @@ export class VideoDownloadTask {
       seriesId: this.seriesId,
       seriesTitle: this.seriesTitle,
       episodeTitle: this.episodeTitle,
+      videoUrl: this.videoUrl,
+      videoType: this.videoType,
       source: this.source,
       status: this.status,
       progress: this.progress,
