@@ -7,6 +7,7 @@ import {
   mockVideoCategories,
   mockVideoSources,
 } from './mockVideoData';
+import eventBus, { EVENTS } from './eventBus';
 
 // 数据源配置
 let currentDataSource = 'api'; // 'mock' 或 'api'
@@ -20,6 +21,7 @@ export const getVideoDataSource = () => currentDataSource;
 
 export const setCurrentVideoSource = (source) => {
   currentSource = source;
+  eventBus.emit(EVENTS.SOURCE_CHANGED, source);
 };
 
 export const getCurrentVideoSource = () => currentSource;

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import eventBus, { EVENTS } from './eventBus';
 
 const KEYS = {
   FAVORITES: '@favorites',
@@ -212,6 +213,7 @@ export const getCurrentSource = async () => {
 export const setCurrentSource = async (source) => {
   try {
     await AsyncStorage.setItem(KEYS.CURRENT_SOURCE, source);
+    eventBus.emit(EVENTS.SOURCE_CHANGED, source);
     return true;
   } catch (error) {
     return false;

@@ -19,6 +19,7 @@ import {
   clearAllCache
 } from '../../services/storage';
 import videoDownloadManager from '../../services/videoDownloadManager';
+import downloadManager from '../../services/downloadManager';
 import { useToast } from '../../components/MessageToast';
 import eventBus, { EVENTS } from '../../services/eventBus';
 
@@ -78,6 +79,7 @@ const ProfileScreen = () => {
               // 清理下载文件
               await Promise.all([
                 videoDownloadManager.clearAllDownloads(),
+                downloadManager.clearAllDownloads(),
               ]);
               
               // 清理存储数据

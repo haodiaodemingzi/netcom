@@ -334,6 +334,22 @@ class VideoDownloadManager {
     return false;
   }
 
+  // 暂停所有下载任务（运行中与排队的）
+  pauseAll() {
+    const allTasks = this.queue.getAllTasks();
+    [...allTasks.running, ...allTasks.pending].forEach(task => {
+      this.pauseDownload(task.episodeId);
+    });
+  }
+
+  // 继续所有已暂停的任务
+  resumeAll() {
+    const allTasks = this.queue.getAllTasks();
+    allTasks.paused.forEach(task => {
+      this.resumeDownload(task.episodeId);
+    });
+  }
+
   async deleteEpisode(seriesId, episodeId) {
     try {
       const episodeData = this.downloadedEpisodes.get(episodeId);

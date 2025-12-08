@@ -25,6 +25,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSettings } from '../../services/storage';
 import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
+import eventBus, { EVENTS } from '../../services/eventBus';
 
 const EbookTabScreen = () => {
   const [selectedSource, setSelectedSource] = useState('kanunu8');
@@ -76,11 +77,23 @@ const EbookTabScreen = () => {
     // 启动定时刷新
     const intervalId = scheduleMetadataRefresh();
     
-    // 清理定时器
+    // 监听缓存清除事件
+    const unsubscribeCacheClear = eventBus.on(EVENTS.CACHE_CLEARED, () => {
+      setBooks([]);
+      setCategories([]);
+      setSelectedCategory(null);
+      setSelectedSource('kanunu8');
+      setPage(1);
+      setHasMore(true);
+      loadSources();
+    });
+    
+    // 清理定时器和事件
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
+      unsubscribeCacheClear && unsubscribeCacheClear();
     };
   }, []);
 
