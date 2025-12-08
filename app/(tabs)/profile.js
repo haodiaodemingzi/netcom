@@ -16,12 +16,8 @@ import {
   getSettings, 
   saveSettings, 
   clearHistory,
-  getCurrentSource,
-  setCurrentSource,
   clearAllCache
 } from '../../services/storage';
-import { getAvailableSources } from '../../services/api';
-import downloadManager from '../../services/downloadManager';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import { useToast } from '../../components/MessageToast';
 import eventBus, { EVENTS } from '../../services/eventBus';
@@ -34,13 +30,9 @@ const ProfileScreen = () => {
     autoLoadHD: false,
     keepScreenOn: true,
   });
-  const [currentSource, setCurrentSourceState] = useState(null);
-  const [sources, setSources] = useState({});
-  const [showSourceMenu, setShowSourceMenu] = useState(false);
 
   useEffect(() => {
     loadSettings();
-    loadSourceData();
   }, []);
 
   const loadSettings = async () => {
@@ -48,38 +40,10 @@ const ProfileScreen = () => {
     setSettings(data);
   };
 
-  const loadSourceData = async () => {
-    try {
-      const [sourcesData, savedSource] = await Promise.all([
-        getAvailableSources(),
-        getCurrentSource(),
-      ]);
-      setSources(sourcesData);
-      
-      // 如果有保存的数据源且有效，使用它；否则使用第一个可用的数据源
-      const firstAvailableSource = Object.keys(sourcesData)[0];
-      const validSource = savedSource && sourcesData[savedSource] ? savedSource : firstAvailableSource;
-      
-      setCurrentSourceState(validSource);
-      
-      // 如果没有保存的数据源，保存当前选择的为默认
-      if (!savedSource && validSource) {
-        await setCurrentSource(validSource);
-      }
-    } catch (error) {
-      // 静默失败
-    }
-  };
-
   const handleSettingChange = async (key, value) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     await saveSettings(newSettings);
-    
-    // 如果是下载并发数，更新downloadManager
-    if (key === 'maxConcurrentDownloads') {
-      downloadManager.updateMaxConcurrent(value);
-    }
   };
 
   const handleClearHistory = () => {
@@ -113,15 +77,11 @@ const ProfileScreen = () => {
             try {
               // 清理下载文件
               await Promise.all([
-                downloadManager.clearAllDownloads(),
                 videoDownloadManager.clearAllDownloads(),
               ]);
               
               // 清理存储数据
               await clearAllCache();
-              
-              // 重新加载数据源（因为已清除）
-              await loadSourceData();
               
               // 发布缓存清除事件，通知所有页面刷新
               eventBus.emit(EVENTS.CACHE_CLEARED);
@@ -135,17 +95,6 @@ const ProfileScreen = () => {
         },
       ]
     );
-  };
-
-  const handleSourceChange = async (sourceId) => {
-    setCurrentSourceState(sourceId);
-    await setCurrentSource(sourceId);
-    setShowSourceMenu(false);
-    
-    // 发布数据源变化事件
-    eventBus.emit(EVENTS.SOURCE_CHANGED, { sourceId });
-    
-    toast.success(`已切换到 ${sources[sourceId]?.name}`);
   };
 
   const renderSettingItem = (title, value, onValueChange) => (
@@ -257,44 +206,6 @@ const ProfileScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>设置</Text>
-          <TouchableOpacity 
-            style={styles.menuItem} 
-            onPress={() => setShowSourceMenu(!showSourceMenu)}
-          >
-            <Text style={styles.menuTitle}>数据源</Text>
-            <View style={styles.menuRight}>
-              <Text style={styles.menuValue}>
-                {sources[currentSource]?.name || '加载中...'}
-              </Text>
-              <Text style={styles.arrow}>{showSourceMenu ? '▲' : '▼'}</Text>
-            </View>
-          </TouchableOpacity>
-          {showSourceMenu && (
-            <View style={styles.sourceMenuContainer}>
-              {Object.entries(sources).map(([key, source]) => (
-                <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.sourceMenuItem,
-                    currentSource === key && styles.sourceMenuItemActive,
-                  ]}
-                  onPress={() => handleSourceChange(key)}
-                >
-                  <Text style={[
-                    styles.sourceMenuText,
-                    currentSource === key && styles.sourceMenuTextActive,
-                  ]}>
-                    {source.name}
-                  </Text>
-                  {source.description && (
-                    <Text style={styles.sourceMenuDesc}>
-                      {source.description}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
           {renderRadioSetting(
             '显示模式',
             settings.viewMode || 'card',

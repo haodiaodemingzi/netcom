@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
+import { isFavorite, addFavorite, removeFavorite } from '../../services/storage';
 import EpisodeCard from '../../components/EpisodeCard';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
@@ -42,6 +43,12 @@ const SeriesDetailScreen = () => {
   // 分区显示状态（每50集一个分区）
   const EPISODES_PER_GROUP = 50;
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
+  
+  // 排序状态
+  const [sortOrder, setSortOrder] = useState('asc'); // asc: 正序, desc: 倒序
+  
+  // 收藏状态
+  const [favorited, setFavorited] = useState(false);
   
   // 视频播放器 - useVideoPlayer会自动响应videoSource的变化
   const player = useVideoPlayer(videoSource || null, (player) => {
@@ -123,7 +130,36 @@ const SeriesDetailScreen = () => {
 
   useEffect(() => {
     loadData();
+    checkFavorite();
   }, [id]);
+
+  // 检查收藏状态
+  const checkFavorite = async () => {
+    const result = await isFavorite(id);
+    setFavorited(result);
+  };
+
+  // 切换收藏状态
+  const handleFavorite = async () => {
+    if (!series) return;
+    if (favorited) {
+      await removeFavorite(id);
+      setFavorited(false);
+    } else {
+      await addFavorite({
+        id: series.id,
+        title: series.title,
+        cover: series.cover,
+        type: 'video',
+      });
+      setFavorited(true);
+    }
+  };
+
+  // 切换排序
+  const toggleSort = () => {
+    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  };
 
   // 下载状态管理
   useEffect(() => {
@@ -317,22 +353,44 @@ const SeriesDetailScreen = () => {
     }
   }, [series]);
 
-  // 计算分组信息
+  // 提取剧集编号进行数字排序
+  const extractEpisodeNumber = (title) => {
+    const match = title.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // 排序后的剧集列表
+  const sortedEpisodes = useMemo(() => {
+    return [...episodes].sort((a, b) => {
+      const numA = extractEpisodeNumber(a.title || '');
+      const numB = extractEpisodeNumber(b.title || '');
+      return sortOrder === 'asc' ? numA - numB : numB - numA;
+    });
+  }, [episodes, sortOrder]);
+
+  // 计算分组信息（基于排序后的列表）
   const episodeGroups = useMemo(() => {
-    if (episodes.length <= EPISODES_PER_GROUP) return [episodes];
+    if (sortedEpisodes.length <= EPISODES_PER_GROUP) return [sortedEpisodes];
     
     const groups = [];
-    for (let i = 0; i < episodes.length; i += EPISODES_PER_GROUP) {
-      groups.push(episodes.slice(i, i + EPISODES_PER_GROUP));
+    for (let i = 0; i < sortedEpisodes.length; i += EPISODES_PER_GROUP) {
+      groups.push(sortedEpisodes.slice(i, i + EPISODES_PER_GROUP));
     }
     return groups;
-  }, [episodes]);
+  }, [sortedEpisodes]);
 
   // 当前显示的剧集（根据分区）
   const displayedEpisodes = useMemo(() => {
-    if (episodeGroups.length <= 1) return episodes;
+    if (episodeGroups.length <= 1) return sortedEpisodes;
     return episodeGroups[currentGroupIndex] || [];
-  }, [episodeGroups, currentGroupIndex, episodes]);
+  }, [episodeGroups, currentGroupIndex, sortedEpisodes]);
+
+  // 开始播放第一集
+  const handleStartPlaying = useCallback(() => {
+    if (sortedEpisodes.length > 0) {
+      handleEpisodePress(sortedEpisodes[0]);
+    }
+  }, [sortedEpisodes, handleEpisodePress]);
 
   // 多选模式：切换选中状态
   const toggleEpisodeSelection = useCallback((episodeId) => {
@@ -610,14 +668,44 @@ const SeriesDetailScreen = () => {
           <Text style={styles.description}>{series.description}</Text>
           )}
 
+          {/* 操作按钮：开始播放 + 收藏（与漫画页面一致） */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleStartPlaying}
+            >
+              <Text style={styles.primaryButtonText}>开始播放</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                favorited && styles.secondaryButtonActive,
+              ]}
+              onPress={handleFavorite}
+            >
+              <Text style={[
+                styles.secondaryButtonText,
+                favorited && styles.secondaryButtonTextActive,
+              ]}>
+                {favorited ? '已收藏' : '收藏'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.divider} />
 
           <View style={styles.episodesHeader}>
-            <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+            {!isMultiSelectMode ? (
+              <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+            ) : (
+              <View style={styles.headerLeftSelection}>
+                <Text style={styles.episodesTitle}>剧集列表 ({episodes.length})</Text>
+                <Text style={styles.selectedCount}>已选 {selectedEpisodes.size}</Text>
+              </View>
+            )}
             <View style={styles.headerActions}>
               {isMultiSelectMode ? (
                 <>
-                  <Text style={styles.selectedCount}>已选 {selectedEpisodes.size}</Text>
                   <TouchableOpacity
                     style={styles.selectAllButton}
                     onPress={toggleSelectAll}
@@ -626,20 +714,20 @@ const SeriesDetailScreen = () => {
                       {displayedEpisodes.every(e => selectedEpisodes.has(e.id)) ? '取消全选' : '全选'}
                     </Text>
                   </TouchableOpacity>
+                  {selectedEpisodes.size > 0 && (
+                    <TouchableOpacity
+                      style={styles.batchDownloadButton}
+                      onPress={handleBatchDownload}
+                    >
+                      <Text style={styles.batchDownloadText}>下载</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.cancelSelectButton}
                     onPress={exitMultiSelectMode}
                   >
                     <Text style={styles.cancelSelectText}>取消</Text>
                   </TouchableOpacity>
-                  {selectedEpisodes.size > 0 && (
-                    <TouchableOpacity
-                      style={styles.batchDownloadButton}
-                      onPress={handleBatchDownload}
-                    >
-                      <Text style={styles.batchDownloadText}>下载({selectedEpisodes.size})</Text>
-                    </TouchableOpacity>
-                  )}
                 </>
               ) : (
                 <>
@@ -648,17 +736,17 @@ const SeriesDetailScreen = () => {
                       style={styles.multiSelectButton}
                       onPress={enterMultiSelectMode}
                     >
-                      <Text style={styles.multiSelectText}>多选</Text>
+                      <Text style={styles.multiSelectText}>批量下载</Text>
                     </TouchableOpacity>
                   )}
-                  {episodes.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.batchDownloadButton}
-                      onPress={handleBatchDownload}
-                    >
-                      <Text style={styles.batchDownloadText}>全部下载</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.sortButton}
+                    onPress={toggleSort}
+                  >
+                    <Text style={styles.sortButtonText}>
+                      {sortOrder === 'asc' ? '正序' : '倒序'}
+                    </Text>
+                  </TouchableOpacity>
                 </>
               )}
             </View>
@@ -687,25 +775,30 @@ const SeriesDetailScreen = () => {
           
           {/* 分区标签（超过50集显示） */}
           {episodeGroups.length > 1 && (
-            <View style={styles.groupTabs}>
+            <View style={styles.rangeContainer}>
+              <Text style={styles.rangeTitle}>区间选择:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {episodeGroups.map((group, index) => {
-                  const start = index * EPISODES_PER_GROUP + 1;
-                  const end = Math.min((index + 1) * EPISODES_PER_GROUP, episodes.length);
+                  // 使用第一个和最后一个剧集的编号来显示区间
+                  const firstNum = extractEpisodeNumber(group[0]?.title || '');
+                  const lastNum = extractEpisodeNumber(group[group.length - 1]?.title || '');
                   return (
                     <TouchableOpacity
                       key={index}
                       style={[
-                        styles.groupTab,
-                        currentGroupIndex === index && styles.groupTabActive
+                        styles.rangeChip,
+                        currentGroupIndex === index && styles.rangeChipActive
                       ]}
                       onPress={() => setCurrentGroupIndex(index)}
                     >
                       <Text style={[
-                        styles.groupTabText,
-                        currentGroupIndex === index && styles.groupTabTextActive
+                        styles.rangeChipText,
+                        currentGroupIndex === index && styles.rangeChipTextActive
                       ]}>
-                        {start}-{end}集
+                        {sortOrder === 'asc' 
+                          ? `${firstNum}-${lastNum}` 
+                          : `${lastNum}-${firstNum}`
+                        }
                       </Text>
                     </TouchableOpacity>
                   );
@@ -801,11 +894,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff3e0',
     color: '#ff9800',
   },
+  metaText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 6,
+  },
   description: {
     fontSize: 14,
     color: '#666',
     lineHeight: 22,
     marginBottom: 16,
+  },
+  actions: {
+    flexDirection: 'row',
+    paddingTop: 16,
+  },
+  primaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#6200EE',
+    borderRadius: 8,
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6200EE',
+    alignItems: 'center',
+  },
+  secondaryButtonActive: {
+    backgroundColor: '#6200EE',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    color: '#6200EE',
+    fontWeight: '600',
+  },
+  secondaryButtonTextActive: {
+    color: '#fff',
   },
   divider: {
     height: 1,
@@ -818,6 +953,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     flexWrap: 'wrap',
+  },
+  headerLeftSelection: {
+    flexDirection: 'column',
   },
   episodesTitle: {
     fontSize: 18,
@@ -922,6 +1060,45 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '500',
+  },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+  },
+  sortButtonText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  rangeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  rangeTitle: {
+    fontSize: 13,
+    color: '#666',
+    marginRight: 8,
+  },
+  rangeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  rangeChipActive: {
+    backgroundColor: '#6200EE',
+  },
+  rangeChipText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  rangeChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   groupTabs: {
     marginBottom: 12,
