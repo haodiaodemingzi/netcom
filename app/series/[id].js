@@ -18,6 +18,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail } from '../../services/videoApi';
 import EpisodeCard from '../../components/EpisodeCard';
 import videoDownloadManager from '../../services/videoDownloadManager';
+import videoPlayerService from '../../services/videoPlayerService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -173,28 +174,33 @@ const SeriesDetailScreen = () => {
         
         if (result.data.videoUrl) {
           console.log('=== 设置视频源 ===');
-          console.log('视频URL (转换后):', result.data.videoUrl);
-          console.log('是否为代理URL:', result.data.videoUrl.includes('/videos/proxy'));
+          console.log('原始视频URL:', result.data.videoUrl);
           
           // 先设置播放的剧集信息
           setPlayingEpisode(result.data);
           
-          // 检查是否有本地下载的视频（优先使用本地文件）
-          const localVideoUri = await videoDownloadManager.getLocalVideoUri(id, episode.id);
-          if (localVideoUri) {
-            console.log('=== 找到本地视频，优先使用本地文件 ===');
-            console.log('本地视频路径:', localVideoUri);
-            setVideoSource(localVideoUri);
-          } else {
-            console.log('未找到本地视频，使用在线URL');
-            // 然后设置视频源（这会触发播放器更新）
-            setVideoSource(result.data.videoUrl);
+          // 使用统一的视频播放服务获取播放URL
+          try {
+            const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
+              episode.id,
+              result.data,
+              'thanju'
+            );
+            
+            console.log('=== 视频播放URL信息 ===');
+            console.log('最终URL:', playUrlInfo.url);
+            console.log('是否本地:', playUrlInfo.isLocal);
+            console.log('视频类型:', playUrlInfo.videoType);
+            
+            setVideoSource(playUrlInfo.url);
+            
+            // 最后显示播放器
+            setShowPlayer(true);
+            console.log('播放器已显示，等待视频加载...');
+          } catch (error) {
+            console.error('获取视频播放URL失败:', error);
+            Alert.alert('错误', '无法获取视频播放地址: ' + error.message);
           }
-          
-          // 最后显示播放器
-          setShowPlayer(true);
-          console.log('播放器已显示，等待视频加载...');
-          console.log('当前videoSource状态:', localVideoUri || result.data.videoUrl);
         } else {
           console.error('=== 视频URL为空 ===');
           console.error('可能的原因:');

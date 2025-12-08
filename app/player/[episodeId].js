@@ -16,6 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
 import videoDownloadManager from '../../services/videoDownloadManager';
+import videoPlayerService from '../../services/videoPlayerService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -123,25 +124,30 @@ const PlayerScreen = () => {
         console.log('=== 剧集加载成功 ===');
         console.log('剧集数据:', result.data);
         console.log('视频URL:', result.data.videoUrl);
-        console.log('视频URL类型:', typeof result.data.videoUrl);
-        console.log('视频URL是否为空:', !result.data.videoUrl);
-        console.log('视频URL是否为代理URL:', result.data.videoUrl?.includes('/videos/proxy'));
-        
-        // 检查是否有本地下载的视频（优先使用本地文件）
-        const seriesId = result.data.seriesId || result.data.series_id;
-        const localVideoUri = await videoDownloadManager.getLocalVideoUri(seriesId, episodeId);
-        if (localVideoUri) {
-          console.log('=== 找到本地视频，优先使用本地文件 ===');
-          console.log('本地视频路径:', localVideoUri);
-          setVideoSource(localVideoUri);
-          return;
-        } else {
-          console.log('未找到本地视频，使用在线URL');
-        }
         
         if (!result.data.videoUrl) {
           console.error('视频URL为空');
           Alert.alert('提示', '未找到视频播放链接，可能需要使用播放页面URL');
+          return;
+        }
+        
+        // 使用统一的视频播放服务获取播放URL
+        try {
+          const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
+            episodeId,
+            result.data,
+            'thanju'
+          );
+          
+          console.log('=== 视频播放URL信息 ===');
+          console.log('最终URL:', playUrlInfo.url);
+          console.log('是否本地:', playUrlInfo.isLocal);
+          console.log('视频类型:', playUrlInfo.videoType);
+          
+          setVideoSource(playUrlInfo.url);
+        } catch (error) {
+          console.error('获取视频播放URL失败:', error);
+          Alert.alert('错误', '无法获取视频播放地址: ' + error.message);
         }
       } else {
         console.error('获取剧集详情失败:', result.error);
@@ -163,7 +169,7 @@ const PlayerScreen = () => {
         // expo-video: 使用 play() 和 pause() 方法控制播放
         if (player.playing) {
           player.pause();
-        } else {
+      } else {
           player.play();
         }
       } catch (error) {

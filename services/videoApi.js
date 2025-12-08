@@ -291,33 +291,10 @@ export const getEpisodeDetail = async (episodeId) => {
         console.log('videoUrl是否为空字符串:', response.data.videoUrl === '');
         console.log('videoUrl是否存在:', !!response.data.videoUrl);
         
+        // 注意：这里不再转换URL，保持原始URL
+        // URL转换和本地视频检查将在 videoPlayerService 中统一处理
         if (response.data.videoUrl) {
-          const originalUrl = response.data.videoUrl;
-          console.log('原始视频URL:', originalUrl);
-          
-          // m3u8文件可以直接播放，不需要代理
-          const isM3u8 = originalUrl.includes('.m3u8') || originalUrl.includes('m3u8');
-          
-          if (isM3u8) {
-            console.log('检测到m3u8文件，直接使用原始URL，不经过代理');
-            // m3u8文件直接使用，不转换
-            response.data.videoUrl = originalUrl;
-          } else if (originalUrl.startsWith('http://') || originalUrl.startsWith('https://')) {
-            // 非m3u8的外部URL需要代理
-            const proxyParams = new URLSearchParams({
-              url: originalUrl,
-              source: currentSource || 'thanju',
-            });
-            // 如果有seriesId，也传递过去
-            if (response.data.seriesId) {
-              proxyParams.append('series_id', response.data.seriesId);
-            }
-            const proxyUrl = `${API_BASE_URL}/videos/proxy?${proxyParams.toString()}`;
-            console.log('转换为代理URL:', proxyUrl);
-            response.data.videoUrl = proxyUrl;
-          } else {
-            console.log('视频URL不是外部链接，保持原样:', originalUrl);
-          }
+          console.log('原始视频URL:', response.data.videoUrl);
         } else {
           console.warn('=== 后端返回的数据中没有videoUrl ===');
           console.warn('返回的数据:', JSON.stringify(response.data, null, 2));
