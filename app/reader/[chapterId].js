@@ -91,19 +91,33 @@ const ReaderScreen = () => {
       const index = restorePageNumber - 1;
       if (index >= 0 && index < images.length) {
         console.log(`滚动到第${restorePageNumber}页 (index=${index})`);
-        flatListRef.current?.scrollToIndex({
-          index,
-          animated: false,
-          viewPosition: 0.5,
-        });
-        setCurrentPage(restorePageNumber);
+        // 延迟一下确保FlatList渲染完成
+        setTimeout(() => {
+          try {
+            flatListRef.current?.scrollToIndex({
+              index,
+              animated: false,
+              viewPosition: 0.5,
+            });
+          } catch (error) {
+            console.warn('scrollToIndex失败，使用scrollToOffset:', error);
+            // 降级处理：使用scrollToOffset
+            if (settings.scrollMode === 'horizontal') {
+              flatListRef.current?.scrollToOffset({
+                offset: SCREEN_WIDTH * index,
+                animated: false,
+              });
+            }
+          }
+          setCurrentPage(restorePageNumber);
+        }, 100);
       }
       
       isRestoringProgress.current = false;
       setShouldRestoreProgress(false);
       setRestorePageNumber(null);
     }
-  }, [shouldRestoreProgress, images.length, restorePageNumber]);
+  }, [shouldRestoreProgress, images.length, restorePageNumber, settings.scrollMode]);
 
   const loadChapterList = async () => {
     if (!comicId) {
@@ -227,16 +241,35 @@ const ReaderScreen = () => {
     }
   };
 
+  const handleScrollToIndexFailed = useCallback((info) => {
+    console.warn('scrollToIndexFailed:', info);
+    // 降级处理：先滚动到数据范围内，然后重试
+    const wait = new Promise(resolve => setTimeout(resolve, 100));
+    wait.then(() => {
+      if (info.index < images.length) {
+        flatListRef.current?.scrollToIndex({
+          index: info.index,
+          animated: false,
+          viewPosition: 0.5,
+        });
+      }
+    });
+  }, [images.length]);
+
   const handlePageChange = useCallback((page) => {
     console.log(`handlePageChange: page=${page}, images.length=${images.length}`);
     const index = page - 1;
     if (index >= 0 && index < images.length) {
       console.log(`滚动到第${page}页 (index=${index})`);
-      flatListRef.current?.scrollToIndex({
-        index,
-        animated: false,
-        viewPosition: 0.5,
-      });
+      try {
+        flatListRef.current?.scrollToIndex({
+          index,
+          animated: false,
+          viewPosition: 0.5,
+        });
+      } catch (error) {
+        console.warn('scrollToIndex失败:', error);
+      }
       setCurrentPage(page);
       
       // 立即加载当前页和周围的页面
@@ -473,6 +506,7 @@ const ReaderScreen = () => {
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        onScrollToIndexFailed={handleScrollToIndexFailed}
         getItemLayout={isHorizontal ? (data, index) => ({
           length: SCREEN_WIDTH,
           offset: SCREEN_WIDTH * index,

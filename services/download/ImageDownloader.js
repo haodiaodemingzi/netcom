@@ -127,6 +127,7 @@ export class ImageDownloader {
       const referers = {
         'xmanhua': 'https://xmanhua.com/',
         'hmzxa': 'https://hmzxa.com/',
+        'animezilla': 'https://18h.animezilla.com/',
       };
       const referer = referers[task.source];
       if (!referer) {

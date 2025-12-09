@@ -61,6 +61,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "animezilla",
+      "name": "18H成人漫画",
+      "description": "18H宅宅愛動漫 - 中文成人H漫画单行本",
+      "url": "https://18h.animezilla.com",
+      "icon": "https://via.placeholder.com/128/E91E63/FFFFFF?text=18H",
+      "category": "comic",
+      "tags": ["漫画", "H漫", "成人漫画", "单行本"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "kanunu8",
       "name": "努努书坊",
       "description": "努努书坊(kanunu8.com) - 提供大量免费电子书",

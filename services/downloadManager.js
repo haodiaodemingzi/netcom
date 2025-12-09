@@ -8,6 +8,7 @@ import { DownloadTask } from './download/DownloadTask';
 import { ImageDownloader } from './download/ImageDownloader';
 import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
 import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
+import { AnimezillaAdapter } from './download/adapters/AnimezillaAdapter';
 import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
@@ -40,6 +41,7 @@ class DownloadManager {
     this.adapters = {
       xmanhua: new XmanhuaAdapter(this.apiClient),
       hmzxa: new HmzxaAdapter(this.apiClient, this),
+      animezilla: new AnimezillaAdapter(this.apiClient, this),
     };
     
     this.setupQueueListeners();
@@ -100,6 +102,7 @@ class DownloadManager {
       const sourceUrls = {
         'xmanhua': 'https://xmanhua.com/',
         'hmzxa': 'https://hmzxa.com/',
+        'animezilla': 'https://18h.animezilla.com/manga',  // 访问漫画列表页面
       };
       
       const url = sourceUrls[source];
@@ -107,6 +110,8 @@ class DownloadManager {
         console.warn(`getCookies: 未知数据源 ${source}`);
         return '';
       }
+      
+      console.log(`访问${source}的页面获取cookie: ${url}`);
       
       // 访问主站获取cookie
       const response = await fetch(url, {
@@ -119,7 +124,7 @@ class DownloadManager {
       });
       
       const setCookie = response.headers.get('set-cookie');
-      console.log(`获取到${source}的Cookie:`, setCookie);
+      console.log(`获取到${source}的Cookie:`, setCookie ? '有Cookie' : '无Cookie');
       
       // 缓存cookie，5分钟后过期
       const cookieValue = setCookie || '';

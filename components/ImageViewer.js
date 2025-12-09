@@ -52,14 +52,18 @@ const ImageViewer = ({
     });
 
   const panGesture = Gesture.Pan()
-    .enabled(savedScale.value > 1) // 只在放大时启用
     .onUpdate((e) => {
-      translateX.value = e.translationX;
-      translateY.value = e.translationY;
+      // 在手势更新中检查缩放状态，而不是在渲染时
+      if (savedScale.value > 1) {
+        translateX.value = e.translationX;
+        translateY.value = e.translationY;
+      }
     })
     .onEnd(() => {
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
+      if (savedScale.value > 1) {
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+      }
     });
 
   // 使用Exclusive，让手势互斥，不阻止外层滑动

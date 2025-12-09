@@ -26,6 +26,18 @@ COMIC_SOURCES = {
             'type': 'http'
         }
     },
+    'animezilla': {
+        'name': '18H成人漫画',
+        'base_url': 'https://18h.animezilla.com',
+        'enabled': True,
+        'description': '18H宅宅愛動漫 - 中文成人H漫画单行本',
+        'proxy': {
+            'enabled': False,
+            'host': '127.0.0.1',
+            'port': 7897,
+            'type': 'http'
+        }
+    },
 }
 
 # 默认数据源 - 动态获取第一个启用的数据源
