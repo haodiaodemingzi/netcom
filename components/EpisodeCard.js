@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Animated,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 
 const EpisodeCard = ({ 
@@ -20,6 +21,7 @@ const EpisodeCard = ({
   isActive = false,
   isMultiSelectMode = false,
   isSelected = false,
+  isLoading = false,
 }) => {
   const isDownloading = downloadStatus && typeof downloadStatus === 'object' && 
                        downloadStatus.status === 'downloading';
@@ -27,6 +29,11 @@ const EpisodeCard = ({
                    downloadStatus.status === 'pending';
   const isCompleted = downloadStatus === 'completed';
   const downloadProgress = isDownloading ? (downloadStatus.progress || 0) : 0;
+  
+  // 播放按钮动画
+  const playButtonScale = useRef(new Animated.Value(1)).current;
+  const playButtonOpacity = useRef(new Animated.Value(1)).current;
+  const [isPlaying, setIsPlaying] = useState(false);
   
   const progressAnimRef = useRef(null);
   if (!progressAnimRef.current) {
@@ -41,6 +48,49 @@ const EpisodeCard = ({
   const prevProgressRef = useRef(downloadProgress);
   const prevCompletedRef = useRef(isCompleted);
   const [showingCompletion, setShowingCompletion] = useState(false);
+  
+  // 播放按钮点击动画
+  const handlePlayPress = () => {
+    if (isMultiSelectMode) {
+      onPress(item);
+      return;
+    }
+    
+    setIsPlaying(true);
+    
+    // 脉冲动画效果
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(playButtonScale, {
+          toValue: 1.3,
+          tension: 200,
+          friction: 5,
+          useNativeDriver: true,
+        }),
+        Animated.timing(playButtonOpacity, {
+          toValue: 0.7,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(playButtonScale, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(playButtonOpacity, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      setIsPlaying(false);
+      onPress(item);
+    });
+  };
   
   useEffect(() => {
     if (isDownloading) {
@@ -89,17 +139,45 @@ const EpisodeCard = ({
         isActive && styles.episodeCardActive,
         isMultiSelectMode && isSelected && styles.episodeCardSelected,
       ]}
-      onPress={() => onPress(item)}
+      onPress={handlePlayPress}
       activeOpacity={0.7}
     >
       {/* 多选模式复选框 */}
-      {isMultiSelectMode && (
+      {isMultiSelectMode ? (
         <View style={[
           styles.checkbox,
           isSelected && styles.checkboxSelected
         ]}>
           {isSelected && <Text style={styles.checkmark}>✓</Text>}
         </View>
+      ) : (
+        /* 播放图标按钮 */
+        <TouchableOpacity 
+          style={styles.playButtonContainer}
+          onPress={handlePlayPress}
+          activeOpacity={0.8}
+          disabled={isLoading}
+        >
+          <Animated.View 
+            style={[
+              styles.playButton,
+              isActive && styles.playButtonActive,
+              isLoading && styles.playButtonLoading,
+              {
+                transform: [{ scale: playButtonScale }],
+                opacity: playButtonOpacity,
+              }
+            ]}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#6200EE" />
+            ) : (
+              <Text style={[styles.playIcon, isActive && styles.playIconActive]}>
+                {isPlaying ? '⏳' : '▶'}
+              </Text>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
       )}
       
       <View style={styles.episodeInfo}>
@@ -306,6 +384,35 @@ const styles = StyleSheet.create({
   episodeCardSelected: {
     backgroundColor: '#f3e5f5',
     borderColor: '#6200EE',
+  },
+  playButtonContainer: {
+    marginRight: 12,
+  },
+  playButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#6200EE',
+  },
+  playButtonActive: {
+    backgroundColor: '#6200EE',
+    borderColor: '#6200EE',
+  },
+  playButtonLoading: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#6200EE',
+  },
+  playIcon: {
+    fontSize: 16,
+    color: '#6200EE',
+    marginLeft: 2,
+  },
+  playIconActive: {
+    color: '#fff',
   },
   checkbox: {
     width: 22,

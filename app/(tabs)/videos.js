@@ -47,6 +47,7 @@ const VideosTabScreen = () => {
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [viewMode, setViewMode] = useState('card');
+  const [dataLoaded, setDataLoaded] = useState(false); // 标记数据是否已加载
 
   // 加载设置
   useEffect(() => {
@@ -106,33 +107,28 @@ const VideosTabScreen = () => {
     loadSources();
   }, []);
 
-  // 页面获得焦点时重新加载数据并同步最新数据源
+  // 页面获得焦点时只同步数据源，不刷新数据（已有数据时使用缓存）
   useFocusEffect(
     useCallback(() => {
-      loadSources();
-      
-      // 切换页面后强制刷新，避免看到旧数据
-      if (selectedCategory && selectedSource) {
-        handleRefresh();
-      }
-    }, [selectedCategory, selectedSource])
+      // 已加载过数据则不再重新加载，用户下拉时才刷新
+    }, [])
   );
 
-  // 数据源加载完成后，加载分类
+  // 数据源加载完成后，加载分类（只在未加载过时执行）
   useEffect(() => {
-    if (selectedSource && Object.keys(sources).length > 0) {
+    if (selectedSource && Object.keys(sources).length > 0 && !dataLoaded) {
       loadCategories();
     }
-  }, [selectedSource, sources]);
+  }, [selectedSource, sources, dataLoaded]);
 
-  // 分类加载完成后，且已选择分类时，加载视频列表
+  // 分类加载完成后，且已选择分类时，加载视频列表（只在未加载过时执行）
   useEffect(() => {
-    if (selectedCategory && selectedSource && !categoriesLoading) {
+    if (selectedCategory && selectedSource && !categoriesLoading && !dataLoaded) {
       setPage(1);
       setVideos([]);
-      loadVideos(true);
+      loadVideos(true).then(() => setDataLoaded(true));
     }
-  }, [selectedCategory, selectedSource, categoriesLoading]);
+  }, [selectedCategory, selectedSource, categoriesLoading, dataLoaded]);
 
   // 页码变化时，加载更多数据
   useEffect(() => {
@@ -245,7 +241,8 @@ const VideosTabScreen = () => {
     setRefreshing(true);
     setPage(1);
     setVideos([]);
-    loadVideos(true);
+    setDataLoaded(false); // 允许重新加载
+    loadVideos(true).then(() => setDataLoaded(true));
   };
 
   const handleLoadMore = () => {
@@ -308,6 +305,7 @@ const VideosTabScreen = () => {
     setShowSourcePicker(false);
     setPage(1);
     setVideos([]);
+    setDataLoaded(false); // 重置加载状态，允许加载新数据源的数据
     // 重置分类选择
     setSelectedCategory(null);
     // 传入新的 sourceId 确保使用正确的数据源加载分类
@@ -319,7 +317,30 @@ const VideosTabScreen = () => {
     if (isSearching) {
       resetSearchState();
     }
-    setSelectedCategory(categoryId);
+    if (categoryId !== selectedCategory) {
+      setSelectedCategory(categoryId);
+      setPage(1);
+      setVideos([]);
+      // 直接加载新分类的数据
+      loadVideosForCategory(categoryId);
+    }
+  };
+
+  // 为指定分类加载视频
+  const loadVideosForCategory = async (categoryId) => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const result = await getSeriesList(categoryId, 1, 20, selectedSource);
+      if (result.success) {
+        setVideos(result.data || []);
+        setHasMore(result.hasMore || false);
+      }
+    } catch (error) {
+      console.error('加载视频失败:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderItem = ({ item }) => (

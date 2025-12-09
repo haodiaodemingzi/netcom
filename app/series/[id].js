@@ -11,6 +11,7 @@ import {
   Image,
   ScrollView,
   Dimensions,
+  Animated,
 } from 'react-native';
 import eventBus, { EVENTS } from '../../services/eventBus';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,6 +34,8 @@ const SeriesDetailScreen = () => {
   const [playingEpisode, setPlayingEpisode] = useState(null);
   const [videoSource, setVideoSource] = useState('');
   const [showPlayer, setShowPlayer] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false); // 视频加载状态
+  const [loadingEpisodeId, setLoadingEpisodeId] = useState(null); // 正在加载的剧集ID
   const [downloadState, setDownloadState] = useState(null);
   const [preparingDownloads, setPreparingDownloads] = useState(new Set());
   
@@ -46,6 +49,10 @@ const SeriesDetailScreen = () => {
   
   // 排序状态
   const [sortOrder, setSortOrder] = useState('asc'); // asc: 正序, desc: 倒序
+  
+  // 封面播放按钮动画
+  const coverPlayScale = useRef(new Animated.Value(1)).current;
+  const coverPlayOpacity = useRef(new Animated.Value(1)).current;
   
   // 收藏状态
   const [favorited, setFavorited] = useState(false);
@@ -200,6 +207,10 @@ const SeriesDetailScreen = () => {
       console.log('剧集ID:', episode.id);
       console.log('剧集信息:', episode);
       
+      // 设置加载状态
+      setIsLoadingVideo(true);
+      setLoadingEpisodeId(episode.id);
+      
       // 加载剧集详情获取视频URL
       console.log('正在调用后端API获取剧集详情...');
       console.log('API路径:', `/videos/episodes/${episode.id}?source=thanju`);
@@ -240,21 +251,19 @@ const SeriesDetailScreen = () => {
             
             setVideoSource(playUrlInfo.url);
             
-            // 最后显示播放器
+            // 显示播放器
             setShowPlayer(true);
             console.log('播放器已显示，等待视频加载...');
           } catch (error) {
             console.error('获取视频播放URL失败:', error);
+            setIsLoadingVideo(false);
+            setLoadingEpisodeId(null);
             Alert.alert('错误', '无法获取视频播放地址: ' + error.message);
           }
         } else {
           console.error('=== 视频URL为空 ===');
-          console.error('可能的原因:');
-          console.error('1. 播放页面返回错误（剧集可能不存在）');
-          console.error('2. 播放页面结构发生变化');
-          console.error('3. 需要特殊的请求头或Cookie');
-          console.error('4. 后端解析失败');
-          console.error('播放页面URL:', result.data.playUrl);
+          setIsLoadingVideo(false);
+          setLoadingEpisodeId(null);
           Alert.alert(
             '无法播放', 
             `该剧集暂时无法播放。
@@ -271,15 +280,14 @@ const SeriesDetailScreen = () => {
         }
       } else {
         console.error('=== 获取剧集详情失败 ===');
-        console.error('错误信息:', result.error || '未知错误');
-        console.error('完整响应:', result);
+        setIsLoadingVideo(false);
+        setLoadingEpisodeId(null);
         Alert.alert('提示', result.error || '无法获取视频播放链接');
       }
     } catch (error) {
       console.error('=== 加载剧集详情异常 ===');
-      console.error('错误信息:', error);
-      console.error('错误消息:', error.message);
-      console.error('错误堆栈:', error.stack);
+      setIsLoadingVideo(false);
+      setLoadingEpisodeId(null);
       Alert.alert('错误', '加载视频失败: ' + error.message);
     }
   };
@@ -288,6 +296,8 @@ const SeriesDetailScreen = () => {
     setShowPlayer(false);
     setPlayingEpisode(null);
     setVideoSource('');
+    setIsLoadingVideo(false);
+    setLoadingEpisodeId(null);
     if (player) {
       try {
         player.pause();
@@ -385,12 +395,42 @@ const SeriesDetailScreen = () => {
     return episodeGroups[currentGroupIndex] || [];
   }, [episodeGroups, currentGroupIndex, sortedEpisodes]);
 
-  // 开始播放第一集
+  // 开始播放第一集（带动画）
   const handleStartPlaying = useCallback(() => {
     if (sortedEpisodes.length > 0) {
-      handleEpisodePress(sortedEpisodes[0]);
+      // 封面播放按钮动画
+      Animated.sequence([
+        Animated.parallel([
+          Animated.spring(coverPlayScale, {
+            toValue: 1.2,
+            tension: 200,
+            friction: 5,
+            useNativeDriver: true,
+          }),
+          Animated.timing(coverPlayOpacity, {
+            toValue: 0.7,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.spring(coverPlayScale, {
+            toValue: 1,
+            tension: 100,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+          Animated.timing(coverPlayOpacity, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => {
+        handleEpisodePress(sortedEpisodes[0]);
+      });
     }
-  }, [sortedEpisodes, handleEpisodePress]);
+  }, [sortedEpisodes, handleEpisodePress, coverPlayScale, coverPlayOpacity]);
 
   // 多选模式：切换选中状态
   const toggleEpisodeSelection = useCallback((episodeId) => {
@@ -518,6 +558,7 @@ const SeriesDetailScreen = () => {
     const downloadStatus = getEpisodeDownloadStatus(item.id);
     const isActive = playingEpisode?.id === item.id;
     const isSelected = selectedEpisodes.has(item.id);
+    const isLoading = loadingEpisodeId === item.id;
     
     // 多选模式下点击切换选中状态
     const handlePress = isMultiSelectMode 
@@ -537,9 +578,10 @@ const SeriesDetailScreen = () => {
         isActive={isActive}
         isMultiSelectMode={isMultiSelectMode}
         isSelected={isSelected}
+        isLoading={isLoading}
       />
     );
-  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload, isMultiSelectMode, selectedEpisodes, toggleEpisodeSelection]);
+  }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload, isMultiSelectMode, selectedEpisodes, toggleEpisodeSelection, loadingEpisodeId]);
 
   if (loading) {
     return (
@@ -568,9 +610,10 @@ const SeriesDetailScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 封面/播放器区域 - 合并显示 */}
+        {/* 播放器区域 - 默认显示 */}
         <View style={styles.coverContainer}>
           {showPlayer && playingEpisode && videoSource && player ? (
+            // 正在播放
             <View style={styles.playerWrapper}>
               <View style={styles.playerHeader}>
                 <Text style={styles.playerTitle}>{playingEpisode.title}</Text>
@@ -585,16 +628,12 @@ const SeriesDetailScreen = () => {
                 contentFit="contain"
                 onLoadStart={() => {
                   console.log('=== 视频开始加载 ===');
-                  console.log('视频源:', videoSource);
-                  console.log('播放器源:', player.source || 'N/A');
                 }}
                 onLoad={(event) => {
                   console.log('=== 视频加载完成 ===');
-                  console.log('加载事件:', event);
-                  console.log('视频源:', videoSource);
-                  console.log('播放器状态 - duration:', player.duration);
-                  console.log('播放器状态 - playing:', player.playing);
-                  // 视频加载完成后自动播放
+                  // 视频加载完成后自动播放并关闭加载状态
+                  setIsLoadingVideo(false);
+                  setLoadingEpisodeId(null);
                   if (player && !player.playing) {
                     try {
                       player.play();
@@ -606,31 +645,56 @@ const SeriesDetailScreen = () => {
                 }}
                 onError={(error) => {
                   console.error('=== 视频加载错误 ===');
-                  console.error('错误信息:', error);
-                  console.error('错误详情:', JSON.stringify(error, null, 2));
-                  console.error('视频源:', videoSource);
-                  console.error('播放器源:', player.source || 'N/A');
-                  Alert.alert('播放错误', `视频加载失败
-
-视频源: ${videoSource}
-
-请检查网络连接或视频链接`);
+                  setIsLoadingVideo(false);
+                  setLoadingEpisodeId(null);
+                  Alert.alert('播放错误', '视频加载失败，请检查网络连接');
                 }}
               />
             </View>
-          ) : showPlayer && playingEpisode && videoSource ? (
-            <View style={styles.videoPlayer}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={{ color: '#fff', textAlign: 'center', padding: 20, marginTop: 10 }}>
-                正在初始化播放器...
-              </Text>
-            </View>
           ) : (
-        <Image
-          source={{ uri: series.cover }}
-          style={styles.cover}
-              resizeMode="cover"
-        />
+            // 播放器预览界面（显示封面和播放按钮）
+            <View style={styles.playerPreview}>
+              <Image
+                source={{ uri: series.cover }}
+                style={[styles.cover, isLoadingVideo && styles.coverDimmed]}
+                resizeMode="cover"
+              />
+              {/* 播放器样式遮罩 */}
+              <View style={styles.playerOverlay}>
+                {isLoadingVideo ? (
+                  // 加载中
+                  <View style={styles.loadingContent}>
+                    <ActivityIndicator size="large" color="#fff" />
+                    <Text style={styles.loadingText}>正在加载视频...</Text>
+                  </View>
+                ) : (
+                  // 播放按钮
+                  <TouchableOpacity 
+                    style={styles.playButtonLarge}
+                    onPress={handleStartPlaying}
+                    activeOpacity={0.8}
+                  >
+                    <Animated.View 
+                      style={[
+                        styles.playButtonInner,
+                        {
+                          transform: [{ scale: coverPlayScale }],
+                          opacity: coverPlayOpacity,
+                        }
+                      ]}
+                    >
+                      <Text style={styles.playButtonLargeIcon}>▶</Text>
+                    </Animated.View>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {/* 播放器底部控制栏样式 */}
+              <View style={styles.playerControlBar}>
+                <Text style={styles.playerControlText}>
+                  {isLoadingVideo ? '加载中...' : '点击播放'}
+                </Text>
+              </View>
+            </View>
           )}
         </View>
 
@@ -852,8 +916,70 @@ const styles = StyleSheet.create({
   },
   cover: {
     width: '100%',
-    height: 300,
-    backgroundColor: '#e0e0e0',
+    height: 220,
+    backgroundColor: '#000',
+  },
+  coverDimmed: {
+    opacity: 0.5,
+  },
+  playerPreview: {
+    position: 'relative',
+    width: '100%',
+    height: 220,
+    backgroundColor: '#000',
+  },
+  playerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContent: {
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 12,
+  },
+  playButtonLarge: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButtonInner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(98, 0, 238, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  playButtonLargeIcon: {
+    fontSize: 28,
+    color: '#fff',
+    marginLeft: 4,
+  },
+  playerControlBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playerControlText: {
+    color: '#fff',
+    fontSize: 13,
   },
   info: {
     padding: 16,

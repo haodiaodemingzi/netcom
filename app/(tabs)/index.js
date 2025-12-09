@@ -87,41 +87,12 @@ const HomeScreen = () => {
     };
   }, []);
 
-  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  // 页面获得焦点时只检查数据源状态，不刷新数据（已有数据时使用缓存）
   useFocusEffect(
     useCallback(() => {
-      // 只重新加载数据源列表，不重新加载所有数据
-      const reloadSources = async () => {
-        try {
-          const allSourcesData = await getAvailableSources();
-          const savedSource = await getCurrentSource();
-          
-          // 只显示已安装的数据源
-          const installedIds = await getInstalledSourcesByCategory('comic');
-          const installedSources = {};
-          
-          for (const [id, source] of Object.entries(allSourcesData)) {
-            if (installedIds.includes(id)) {
-              installedSources[id] = source;
-            }
-          }
-          
-          setSources(installedSources);
-          
-          // 如果当前数据源未安装，切换到第一个已安装的数据源
-          if (currentSource && (!installedSources[currentSource] || !installedIds.includes(currentSource))) {
-            const firstAvailableSource = Object.keys(installedSources)[0];
-            if (firstAvailableSource) {
-              setCurrentSourceState(firstAvailableSource);
-              await setCurrentSource(firstAvailableSource);
-            }
-          }
-        } catch (error) {
-          console.error('重新加载数据源失败:', error);
-        }
-      };
-      reloadSources();
-    }, [currentSource])
+      // 不再每次切换Tab都重新加载数据源
+      // 用户下拉时才刷新数据
+    }, [])
   );
 
   // 监听设置变化

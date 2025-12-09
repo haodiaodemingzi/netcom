@@ -68,10 +68,11 @@ const EbookTabScreen = () => {
     loadSources();
   }, []);
 
-  // 页面获得焦点时重新加载数据源（安装/卸载后更新）
+  // 页面获得焦点时只同步数据源（安装/卸载后更新），不刷新数据
   useFocusEffect(
     useCallback(() => {
-      loadSources();
+      // 只检查数据源安装状态，不重新加载数据
+      // 用户下拉时才刷新
     }, [])
   );
 
