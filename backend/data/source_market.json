@@ -37,6 +37,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "mjwu",
+      "name": "美剧屋",
+      "description": "美剧屋(mjwu.cc) - 提供最新美剧、电影资源",
+      "url": "https://www.mjwu.cc",
+      "icon": "https://via.placeholder.com/128/FF9800/FFFFFF?text=美剧",
+      "category": "video",
+      "tags": ["美剧", "电影", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "xmanhua",
       "name": "X漫画",
       "description": "X漫画网 - 提供海量漫画资源",

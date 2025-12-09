@@ -11,9 +11,18 @@ import { useRouter } from 'expo-router';
 const VideoCard = ({ video, darkMode = false, viewMode = 'card' }) => {
   const router = useRouter();
   const isList = viewMode === 'list';
+  const [imageError, setImageError] = React.useState(false);
 
   const handlePress = () => {
     router.push(`/series/${video.id}`);
+  };
+
+  // 获取封面URL，如果为空或加载失败则使用占位图
+  const getCoverUri = () => {
+    if (imageError || !video.cover) {
+      return 'https://via.placeholder.com/200x300/e0e0e0/666666?text=No+Image';
+    }
+    return video.cover;
   };
 
   return (
@@ -23,11 +32,14 @@ const VideoCard = ({ video, darkMode = false, viewMode = 'card' }) => {
       activeOpacity={0.7}
     >
       <Image 
-        source={{ uri: video.cover || 'https://via.placeholder.com/200x300?text=No+Image' }} 
+        source={{ uri: getCoverUri() }} 
         style={[styles.cover, isList && styles.coverList]}
         resizeMode="cover"
         onError={(e) => {
-          console.log('封面图片加载失败:', video.cover);
+          if (!imageError) {
+            console.log('封面图片加载失败:', video.cover || '(URL为空)');
+            setImageError(true);
+          }
         }}
       />
       <View style={[styles.info, isList && styles.infoList]}>

@@ -1,6 +1,7 @@
 from .thanju_scraper import ThanjuScraper
 from .badnews_scraper import BadNewsScraper
 from .badnews_av_scraper import BadNewsAVScraper
+from .mjwu_scraper import MjwuScraper
 
 class VideoScraperFactory:
     """视频爬虫工厂类"""
@@ -9,6 +10,7 @@ class VideoScraperFactory:
         'thanju': ThanjuScraper,
         'badnews': BadNewsScraper,
         'badnews_av': BadNewsAVScraper,
+        'mjwu': MjwuScraper,
     }
     
     @classmethod
@@ -37,6 +39,11 @@ class VideoScraperFactory:
                 'id': 'badnews_av',
                 'name': 'Bad.news AV',
                 'description': 'Bad.news - 日本AV在线观看'
+            },
+            {
+                'id': 'mjwu',
+                'name': '美剧屋',
+                'description': '美剧屋(mjwu.cc) - 提供最新美剧、电影资源'
             }
         ]
     
