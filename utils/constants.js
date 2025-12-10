@@ -4,7 +4,7 @@
 // 开发环境（本地）: http://192.168.123.178:5000/api
 // 生产环境: https://comic.bigmang.top/api
 export const API_BASE_URL = __DEV__ 
-  ? 'http://192.168.123.178:5000/api'  // 开发环境
+  ? 'http://192.168.31.48:5000/api'  // 开发环境
   : 'https://comic.bigmang.top/api';    // 生产环境
 
 // 颜色主题

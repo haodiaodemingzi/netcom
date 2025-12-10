@@ -918,7 +918,7 @@ const ChapterList = ({
       <FlatList
         data={displayChapters}
         renderItem={renderChapterCard}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => `${item.id}_${index}`}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderListHeader}

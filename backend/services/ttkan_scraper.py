@@ -250,6 +250,7 @@ class TtkanScraper(BaseEbookScraper):
         """从详情页解析章节列表"""
         try:
             chapters = []
+            seen_ids = set()  # 用于去重
             
             # 查找所有章节链接
             # 格式: /novel/pagea/wanxiangzhiwang-tiancantudou_1.html
@@ -257,7 +258,8 @@ class TtkanScraper(BaseEbookScraper):
             
             logger.info(f"找到 {len(chapter_links)} 个章节链接")
             
-            for idx, link in enumerate(chapter_links):
+            order = 0
+            for link in chapter_links:
                 chapter_title = link.get_text(strip=True)
                 chapter_url = link.get('href', '')
                 
@@ -272,15 +274,21 @@ class TtkanScraper(BaseEbookScraper):
                 # /novel/pagea/wanxiangzhiwang-tiancantudou_1.html -> wanxiangzhiwang-tiancantudou_1
                 chapter_id = self._extract_chapter_id(chapter_url, book_id)
                 
+                # 去重: 跳过已存在的章节ID
+                if chapter_id in seen_ids:
+                    continue
+                seen_ids.add(chapter_id)
+                
+                order += 1
                 chapters.append({
                     'id': chapter_id,
                     'bookId': book_id,
                     'title': chapter_title,
                     'url': chapter_url,
-                    'order': idx + 1
+                    'order': order
                 })
             
-            logger.info(f"成功解析 {len(chapters)} 个章节")
+            logger.info(f"成功解析 {len(chapters)} 个章节(去重后)")
             return chapters
             
         except Exception as e:
