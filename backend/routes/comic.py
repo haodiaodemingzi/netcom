@@ -5,11 +5,31 @@ from utils.decorators import (
     handle_errors, get_source_param, get_pagination_params,
     success_response, error_response
 )
+from config import COMIC_SOURCES
 import logging
 
 logger = logging.getLogger(__name__)
 
 comic_bp = Blueprint('comic', __name__)
+
+@comic_bp.route('/source-config', methods=['GET'])
+def get_source_config():
+    """获取数据源配置（用于前端动态获取下载配置）"""
+    source = request.args.get('source', None)
+    
+    if not source:
+        return jsonify({'error': '缺少source参数'}), 400
+    
+    source_config = COMIC_SOURCES.get(source, {})
+    if not source_config:
+        return jsonify({'error': f'未知数据源: {source}'}), 404
+    
+    return jsonify({
+        'source': source,
+        'name': source_config.get('name', ''),
+        'base_url': source_config.get('base_url', ''),
+        'download_config': source_config.get('download_config', {})
+    }), 200
 
 @comic_bp.route('/comics/hot', methods=['GET'])
 @cache_response(timeout=300, key_prefix='hot')
@@ -139,18 +159,21 @@ def get_chapter_download_info(chapter_id):
                 }
             }), 404
         
-        # 构建下载配置信息
+        # 从配置中获取该数据源的下载配置
+        source_config = COMIC_SOURCES.get(source, {})
+        dl_config = source_config.get('download_config', {})
+        base_url = source_config.get('base_url', '')
+        
+        # 构建下载配置信息（从后端配置动态获取）
         download_config = {
-            'base_url': 'https://xmanhua.com',
-            'headers': {
+            'base_url': base_url,
+            'referer': dl_config.get('referer', base_url + '/'),
+            'cookie_url': dl_config.get('cookie_url', base_url + '/'),
+            'headers': dl_config.get('headers', {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-                'Referer': 'https://xmanhua.com/',
                 'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
                 'Accept-Language': 'zh-CN,zh;q=0.9'
-            },
-            'cookie_urls': [
-                'https://xmanhua.com/',
-            ]
+            })
         }
         
         # 返回图片列表和下载配置
@@ -161,7 +184,8 @@ def get_chapter_download_info(chapter_id):
                 'total': result['total'],
                 'expected_total': result.get('expected_total', result['total']),
                 'download_config': download_config,
-                'chapter_id': chapter_id
+                'chapter_id': chapter_id,
+                'source': source
             }
         }
         

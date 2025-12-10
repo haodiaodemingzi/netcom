@@ -123,22 +123,14 @@ export class ImageDownloader {
       console.log(`📥 下载: ${url}`);
       console.log(`💾 保存: ${localPath}`);
 
-      // 根据数据源设置不同的Referer
-      const referers = {
-        'xmanhua': 'https://xmanhua.com/',
-        'hmzxa': 'https://hmzxa.com/',
-        'animezilla': 'https://18h.animezilla.com/',
-      };
-      const referer = referers[task.source];
-      if (!referer) {
-        console.warn(`未知数据源: ${task.source}`);
-      }
-
+      // 从后端配置获取下载参数（统一架构）
+      const downloadConfig = task.downloadConfig || {};
+      const referer = downloadConfig.referer || downloadConfig.base_url + '/' || '';
+      
+      // 使用后端配置的headers，并添加Referer
       const downloadHeaders = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+        ...downloadConfig.headers,
         'Referer': referer,
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9'
       };
       
       // 如果task有cookies，添加到headers
