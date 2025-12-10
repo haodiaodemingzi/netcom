@@ -218,7 +218,7 @@ const EbookTabScreen = () => {
             onPress={() => setShowSourcePicker(true)}
           >
             <Text style={styles.sourceText}>
-              {sources[selectedSource]?.name || '努努书坊'}
+              {sources[selectedSource]?.name || (selectedSource === 'ttkan' ? '天天看小说' : '努努书坊')}
             </Text>
             <Text style={styles.sourceArrow}>▼</Text>
           </TouchableOpacity>
@@ -317,7 +317,7 @@ const EbookTabScreen = () => {
             styles.cardWrapper,
             viewMode === 'list' && styles.cardWrapperList
           ]}>
-            <BookCard book={item} viewMode={viewMode} />
+            <BookCard book={item} viewMode={viewMode} source={selectedSource} />
           </View>
         )}
         numColumns={viewMode === 'list' ? 1 : 3}
