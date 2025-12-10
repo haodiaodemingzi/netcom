@@ -9,6 +9,7 @@ import { ImageDownloader } from './download/ImageDownloader';
 import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
 import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
 import { AnimezillaAdapter } from './download/adapters/AnimezillaAdapter';
+import { BaozimhAdapter } from './download/adapters/BaozimhAdapter';
 import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
@@ -42,6 +43,7 @@ class DownloadManager {
       xmanhua: new XmanhuaAdapter(this.apiClient),
       hmzxa: new HmzxaAdapter(this.apiClient, this),
       animezilla: new AnimezillaAdapter(this.apiClient, this),
+      baozimh: new BaozimhAdapter(this.apiClient, this),
     };
     
     this.setupQueueListeners();
@@ -103,6 +105,7 @@ class DownloadManager {
         'xmanhua': 'https://xmanhua.com/',
         'hmzxa': 'https://hmzxa.com/',
         'animezilla': 'https://18h.animezilla.com/manga',  // 访问漫画列表页面
+        'baozimh': 'https://www.baozimh.com/',
       };
       
       const url = sourceUrls[source];

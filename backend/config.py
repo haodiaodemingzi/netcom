@@ -38,6 +38,18 @@ COMIC_SOURCES = {
             'type': 'http'
         }
     },
+    'baozimh': {
+        'name': '包子漫画',
+        'base_url': 'https://www.baozimh.com',
+        'enabled': True,
+        'description': '包子漫画 - 海量漫画免费在线阅读',
+        'proxy': {
+            'enabled': False,
+            'host': '127.0.0.1',
+            'port': 7897,
+            'type': 'http'
+        }
+    },
 }
 
 # 默认数据源 - 动态获取第一个启用的数据源
