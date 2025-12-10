@@ -22,6 +22,7 @@ import {
 } from '../../services/api';
 import { getSettings } from '../../services/storage';
 import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
+import eventBus, { EVENTS } from '../../services/eventBus';
 
 const EbookTabScreen = () => {
   const [selectedSource, setSelectedSource] = useState('kanunu8');
@@ -66,6 +67,22 @@ const EbookTabScreen = () => {
   // 加载数据源列表
   useEffect(() => {
     loadSources();
+    
+    // 监听数据源安装/卸载事件，重新加载数据源列表
+    const unsubscribeSourceInstall = eventBus.on(EVENTS.SOURCE_INSTALLED, ({ category }) => {
+      if (category === 'ebook') {
+        loadSources();
+      }
+    });
+    
+    const unsubscribeSourceUninstall = eventBus.on(EVENTS.SOURCE_UNINSTALLED, () => {
+      loadSources();
+    });
+    
+    return () => {
+      unsubscribeSourceInstall();
+      unsubscribeSourceUninstall();
+    };
   }, []);
 
   // 页面获得焦点时只同步数据源（安装/卸载后更新），不刷新数据

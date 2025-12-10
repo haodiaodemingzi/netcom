@@ -80,10 +80,23 @@ const HomeScreen = () => {
       loadComics(true);
     });
     
+    // 监听数据源安装/卸载事件，重新加载数据源列表
+    const unsubscribeSourceInstall = eventBus.on(EVENTS.SOURCE_INSTALLED, ({ category }) => {
+      if (category === 'comic') {
+        loadInitialData();
+      }
+    });
+    
+    const unsubscribeSourceUninstall = eventBus.on(EVENTS.SOURCE_UNINSTALLED, () => {
+      loadInitialData();
+    });
+    
     return () => {
       unsubscribe();
       unsubscribeCacheClear();
       unsubscribeSourceChange();
+      unsubscribeSourceInstall();
+      unsubscribeSourceUninstall();
     };
   }, []);
 

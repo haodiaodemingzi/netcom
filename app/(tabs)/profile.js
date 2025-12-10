@@ -205,6 +205,13 @@ const ProfileScreen = () => {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>网络</Text>
+          {renderMenuItem('代理设置', () => {
+            router.push('/proxy');
+          })}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>设置</Text>
           {renderRadioSetting(
             '显示模式',
