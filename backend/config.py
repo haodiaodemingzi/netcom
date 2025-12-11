@@ -12,6 +12,15 @@ COMIC_SOURCES = {
             'host': '127.0.0.1',
             'port': 7897,
             'type': 'http'
+        },
+        'download_config': {
+            'referer': 'https://xmanhua.com/',
+            'cookie_url': 'https://xmanhua.com/',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9'
+            }
         }
     },
     'hmzxa': {
@@ -24,6 +33,15 @@ COMIC_SOURCES = {
             'host': '127.0.0.1',
             'port': 7897,
             'type': 'http'
+        },
+        'download_config': {
+            'referer': 'https://hmzxa.com/',
+            'cookie_url': 'https://hmzxa.com/',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9'
+            }
         }
     },
     'animezilla': {
@@ -36,6 +54,36 @@ COMIC_SOURCES = {
             'host': '127.0.0.1',
             'port': 7897,
             'type': 'http'
+        },
+        'download_config': {
+            'referer': 'https://18h.animezilla.com/',
+            'cookie_url': 'https://18h.animezilla.com/manga',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9'
+            }
+        }
+    },
+    'baozimh': {
+        'name': '包子漫画',
+        'base_url': 'https://www.baozimh.com',
+        'enabled': True,
+        'description': '包子漫画 - 海量漫画免费在线阅读',
+        'proxy': {
+            'enabled': False,
+            'host': '127.0.0.1',
+            'port': 7897,
+            'type': 'http'
+        },
+        'download_config': {
+            'referer': 'https://www.baozimh.com/',
+            'cookie_url': 'https://www.baozimh.com/',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9'
+            }
         }
     },
 }

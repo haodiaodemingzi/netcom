@@ -1,4 +1,5 @@
 from services.kanunu8_scraper import KanuNu8Scraper
+from services.ttkan_scraper import TtkanScraper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,12 @@ class EbookScraperFactory:
             'class': KanuNu8Scraper,
             'name': '努努书坊',
             'description': '努努书坊(kanunu8.com) - 提供大量免费电子书',
+            'enabled': True
+        },
+        'ttkan': {
+            'class': TtkanScraper,
+            'name': '天天看小说',
+            'description': '天天看小说(ttkan.co) - 海量小说免费阅读',
             'enabled': True
         }
     }

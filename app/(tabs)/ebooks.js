@@ -113,19 +113,46 @@ const EbookTabScreen = () => {
   const loadSources = async () => {
     try {
       const allSourcesData = await getEbookSources();
-      const allSources = allSourcesData.sources || {};
+      const allSources = allSourcesData.sources || [];
       
-      // 只显示已安装的数据源
-      const installedIds = await getInstalledSourcesByCategory('ebook');
-      const installedSources = {};
-      
-      for (const [id, source] of Object.entries(allSources)) {
-        if (installedIds.includes(id)) {
-          installedSources[id] = source;
-        }
+      // 将数组转换为对象
+      const sourcesDict = {};
+      if (Array.isArray(allSources)) {
+        allSources.forEach(s => {
+          sourcesDict[s.id] = s;
+        });
+      } else {
+        Object.assign(sourcesDict, allSources);
       }
       
-      setSources(installedSources);
+      // 获取已安装的数据源
+      const installedIds = await getInstalledSourcesByCategory('ebook');
+      
+      // 如果没有安装任何数据源，显示所有可用的数据源
+      if (installedIds.length === 0) {
+        setSources(sourcesDict);
+        // 默认选择第一个可用的数据源
+        const firstSourceId = Object.keys(sourcesDict)[0];
+        if (firstSourceId && !selectedSource) {
+          setSelectedSource(firstSourceId);
+        }
+      } else {
+        // 只显示已安装的数据源
+        const installedSources = {};
+        for (const [id, source] of Object.entries(sourcesDict)) {
+          if (installedIds.includes(id)) {
+            installedSources[id] = source;
+          }
+        }
+        setSources(installedSources);
+        // 如果当前选中的数据源未安装，切换到第一个已安装的
+        if (!installedIds.includes(selectedSource)) {
+          const firstInstalled = installedIds[0];
+          if (firstInstalled) {
+            setSelectedSource(firstInstalled);
+          }
+        }
+      }
     } catch (error) {
       console.error('加载数据源失败:', error);
     }
@@ -218,7 +245,7 @@ const EbookTabScreen = () => {
             onPress={() => setShowSourcePicker(true)}
           >
             <Text style={styles.sourceText}>
-              {sources[selectedSource]?.name || '努努书坊'}
+              {sources[selectedSource]?.name || (selectedSource === 'ttkan' ? '天天看小说' : '努努书坊')}
             </Text>
             <Text style={styles.sourceArrow}>▼</Text>
           </TouchableOpacity>
@@ -317,7 +344,7 @@ const EbookTabScreen = () => {
             styles.cardWrapper,
             viewMode === 'list' && styles.cardWrapperList
           ]}>
-            <BookCard book={item} viewMode={viewMode} />
+            <BookCard book={item} viewMode={viewMode} source={selectedSource} />
           </View>
         )}
         numColumns={viewMode === 'list' ? 1 : 3}

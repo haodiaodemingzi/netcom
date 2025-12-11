@@ -6,9 +6,7 @@ import { API_BASE_URL } from '../utils/constants';
 import { DownloadQueue } from './download/DownloadQueue';
 import { DownloadTask } from './download/DownloadTask';
 import { ImageDownloader } from './download/ImageDownloader';
-import { XmanhuaAdapter } from './download/adapters/XmanhuaAdapter';
-import { HmzxaAdapter } from './download/adapters/HmzxaAdapter';
-import { AnimezillaAdapter } from './download/adapters/AnimezillaAdapter';
+import { GenericAdapter } from './download/adapters/GenericAdapter';
 import { getSettings } from './storage';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}netcom/downloads/`;
@@ -38,14 +36,21 @@ class DownloadManager {
       timeout: 30000,
     });
     
-    this.adapters = {
-      xmanhua: new XmanhuaAdapter(this.apiClient),
-      hmzxa: new HmzxaAdapter(this.apiClient, this),
-      animezilla: new AnimezillaAdapter(this.apiClient, this),
-    };
+    // 使用通用适配器，新数据源无需修改前端代码
+    this.adapters = {};
     
     this.setupQueueListeners();
     this.init();
+  }
+  
+  /**
+   * 获取数据源的适配器（动态创建，通用适配器）
+   */
+  getAdapter(source) {
+    if (!this.adapters[source]) {
+      this.adapters[source] = new GenericAdapter(this.apiClient, this, source);
+    }
+    return this.adapters[source];
   }
 
   async init() {
@@ -82,6 +87,49 @@ class DownloadManager {
     this.downloader.setMaxConcurrent(max);
   }
   
+  /**
+   * 从指定 URL 获取 Cookie（用于下载配置）
+   */
+  async getCookiesFromUrl(url) {
+    if (!url) return '';
+    
+    // 先检查缓存
+    const cacheKey = url;
+    const now = Date.now();
+    const cachedCookie = this.cachedCookies.get(cacheKey);
+    const expireTime = this.cookiesExpireTime.get(cacheKey);
+    
+    if (cachedCookie && expireTime && now < expireTime) {
+      return cachedCookie;
+    }
+    
+    try {
+      console.log(`访问页面获取cookie: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        credentials: 'include'
+      });
+      
+      const setCookie = response.headers.get('set-cookie');
+      console.log(`获取到Cookie:`, setCookie ? '有Cookie' : '无Cookie');
+      
+      // 缓存cookie，5分钟后过期
+      const cookieValue = setCookie || '';
+      this.cachedCookies.set(cacheKey, cookieValue);
+      this.cookiesExpireTime.set(cacheKey, now + 5 * 60 * 1000);
+      
+      return cookieValue;
+    } catch (error) {
+      console.error(`获取Cookie失败:`, error);
+      return '';
+    }
+  }
+
   async getCookies(source) {
     if (!source) {
       console.warn('getCookies: 未指定数据源');
@@ -98,40 +146,18 @@ class DownloadManager {
     }
     
     try {
-      // 根据数据源选择访问的URL
-      const sourceUrls = {
-        'xmanhua': 'https://xmanhua.com/',
-        'hmzxa': 'https://hmzxa.com/',
-        'animezilla': 'https://18h.animezilla.com/manga',  // 访问漫画列表页面
-      };
-      
-      const url = sourceUrls[source];
-      if (!url) {
-        console.warn(`getCookies: 未知数据源 ${source}`);
-        return '';
-      }
-      
-      console.log(`访问${source}的页面获取cookie: ${url}`);
-      
-      // 访问主站获取cookie
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        },
-        credentials: 'include'
+      // 从ddownload-info获取配置，然后使用cookie_url
+      // 这里使用一个临时端点获取数据源配置
+      const response = await this.apiClient.get('/source-config', {
+        params: { source }
       });
       
-      const setCookie = response.headers.get('set-cookie');
-      console.log(`获取到${source}的Cookie:`, setCookie ? '有Cookie' : '无Cookie');
+      const config = response.data?.download_config;
+      if (config?.cookie_url) {
+        return await this.getCookiesFromUrl(config.cookie_url);
+      }
       
-      // 缓存cookie，5分钟后过期
-      const cookieValue = setCookie || '';
-      this.cachedCookies.set(source, cookieValue);
-      this.cookiesExpireTime.set(source, now + 5 * 60 * 1000);
-      
-      return cookieValue;
+      return '';
     } catch (error) {
       console.error(`获取${source}的Cookie失败:`, error);
       return '';
@@ -219,11 +245,8 @@ class DownloadManager {
   }
 
   async downloadChapters(comicId, comicTitle, chapters, source) {
-    const adapter = this.adapters[source];
-    if (!adapter) {
-      console.error(`不支持的数据源: ${source}`);
-      return;
-    }
+    // 动态获取适配器（不再检查硬编码列表）
+    const adapter = this.getAdapter(source);
 
     let addedCount = 0;
 
@@ -253,6 +276,9 @@ class DownloadManager {
           images,
           source
         );
+        
+        // 保存下载配置到task，用于ImageDownloader获取referer等
+        task.downloadConfig = chapterInfo.download_config;
 
         this.queue.addTask(task);
         addedCount++;

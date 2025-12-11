@@ -85,6 +85,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "baozimh",
+      "name": "包子漫画",
+      "description": "包子漫画 - 海量漫画免费在线阅读，支持国漫/日漫/韩漫",
+      "url": "https://www.baozimh.com",
+      "icon": "https://via.placeholder.com/128/FF9800/FFFFFF?text=包子",
+      "category": "comic",
+      "tags": ["漫画", "国漫", "日漫", "韩漫", "免费"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "kanunu8",
       "name": "努努书坊",
       "description": "努努书坊(kanunu8.com) - 提供大量免费电子书",
@@ -92,6 +104,18 @@
       "icon": "https://via.placeholder.com/128/A8E6CF/000000?text=努努",
       "category": "ebook",
       "tags": ["电子书", "小说", "阅读"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "ttkan",
+      "name": "天天看小说",
+      "description": "天天看小说(ttkan.co) - 海量小说免费在线阅读",
+      "url": "https://cn.ttkan.co",
+      "icon": "https://via.placeholder.com/128/6200EE/FFFFFF?text=天天看",
+      "category": "ebook",
+      "tags": ["电子书", "小说", "在线阅读", "玄幻", "言情"],
       "enabled": true,
       "version": "1.0.0",
       "author": "NetCom Team"

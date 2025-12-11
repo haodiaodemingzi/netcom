@@ -2,12 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const BookCard = ({ book, viewMode = 'card' }) => {
+const BookCard = ({ book, viewMode = 'card', source = 'kanunu8' }) => {
   const router = useRouter();
   const isList = viewMode === 'list';
 
+  // 使用传入的source或书籍自带的source
+  const bookSource = book.source || source;
+
   const handlePress = () => {
-    router.push(`/ebook/${book.id}?source=kanunu8`);
+    router.push(`/ebook/${book.id}?source=${bookSource}`);
   };
 
   // 简单的随机纯色背景
