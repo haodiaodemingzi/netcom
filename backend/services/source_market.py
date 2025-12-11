@@ -38,39 +38,8 @@ class SourceMarket:
         return 'via.placeholder.com' in icon_url or 'placeholder' in icon_url.lower()
     
     def _get_source_icon(self, source: Dict) -> str:
-        """获取数据源的图标，如果不存在或为占位符，则从网站获取"""
-        source_id = source.get('id')
+        """获取数据源的图标：直接使用配置中的 icon，占位符也原样返回"""
         current_icon = source.get('icon', '')
-        source_url = source.get('url', '')
-        
-        # 如果已有有效图标且不是占位符，直接返回
-        if current_icon and not self._is_placeholder_icon(current_icon):
-            return current_icon
-        
-        # 检查缓存（包括失败的缓存，用None表示）
-        if source_id in self._icon_cache:
-            cached_icon = self._icon_cache[source_id]
-            # 如果缓存的是None，说明之前获取失败，返回原图标
-            if cached_icon is None:
-                return current_icon or ''
-            return cached_icon
-        
-        # 如果有URL，尝试从网站获取
-        if source_url:
-            try:
-                meta_image = get_meta_image(source_url)
-                if meta_image:
-                    self._icon_cache[source_id] = meta_image
-                    return meta_image
-                else:
-                    # 获取失败，缓存None避免重复请求
-                    self._icon_cache[source_id] = None
-            except Exception as e:
-                print(f'获取数据源 {source_id} 的图标失败: {e}')
-                # 异常时也缓存None
-                self._icon_cache[source_id] = None
-        
-        # 如果获取失败，返回原图标或空字符串
         return current_icon or ''
     
     def _enrich_source(self, source: Dict) -> Dict:

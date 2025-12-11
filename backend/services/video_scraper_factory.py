@@ -2,6 +2,7 @@ from .thanju_scraper import ThanjuScraper
 from .badnews_scraper import BadNewsScraper
 from .badnews_av_scraper import BadNewsAVScraper
 from .mjwu_scraper import MjwuScraper
+from .yinghua_scraper import YinghuaScraper
 
 class VideoScraperFactory:
     """视频爬虫工厂类"""
@@ -11,6 +12,7 @@ class VideoScraperFactory:
         'badnews': BadNewsScraper,
         'badnews_av': BadNewsAVScraper,
         'mjwu': MjwuScraper,
+        'yinghua': YinghuaScraper,
     }
     
     @classmethod
@@ -44,6 +46,11 @@ class VideoScraperFactory:
                 'id': 'mjwu',
                 'name': '美剧屋',
                 'description': '美剧屋(mjwu.cc) - 提供最新美剧、电影资源'
+            },
+            {
+                'id': 'yinghua',
+                'name': '樱花动漫',
+                'description': '樱花动漫(yinghuajinju.com) - 日本/国漫/美漫资源'
             }
         ]
     

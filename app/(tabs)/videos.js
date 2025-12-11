@@ -163,9 +163,13 @@ const VideosTabScreen = () => {
       if (result.success) {
         const allSourcesData = result.data || {};
         
-        // 只显示已安装的数据源
-        const installedIds = await getInstalledSourcesByCategory('video');
+        // 只显示已安装的数据源；若未安装任何视频源，则回退为全部源
+        let installedIds = await getInstalledSourcesByCategory('video');
         const installedSources = {};
+
+        if (!installedIds || installedIds.length === 0) {
+          installedIds = Object.keys(allSourcesData);
+        }
         
         for (const [id, source] of Object.entries(allSourcesData)) {
           if (installedIds.includes(id)) {

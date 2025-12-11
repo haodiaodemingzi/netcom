@@ -49,6 +49,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "yinghua",
+      "name": "樱花动漫",
+      "description": "樱花动漫(yinghuajinju.com) - 日本/国漫/美漫资源",
+      "url": "http://www.yinghuajinju.com",
+      "icon": "https://via.placeholder.com/128/7C4DFF/FFFFFF?text=樱花",
+      "category": "video",
+      "tags": ["动漫", "日本动漫", "国漫", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "xmanhua",
       "name": "X漫画",
       "description": "X漫画网 - 提供海量漫画资源",
