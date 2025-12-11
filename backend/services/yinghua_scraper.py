@@ -293,69 +293,24 @@ class YinghuaScraper(BaseVideoScraper):
         return videos
 
     def _extract_media_url(self, html):
-        """从页面中提取视频URL
-        
-        支持多种提取方式：
-        1. 从 iframe src 的 vid 参数中提取
-        2. 直接匹配 m3u8/mp4 链接
-        3. 从 JSON 配置中提取
-        """
         if not html:
             return None
-        
-        # 方式1: 从 iframe src 中提取 (yinghuajinju 主要方式)
-        # iframe src 格式: https://tup.yinghuajinju.com/?vid=https://xxx.m3u8$mp4
-        iframe_match = re.search(r'<iframe[^>]*src=["\']([^"\']+)["\']', html, re.I)
-        if iframe_match:
-            iframe_src = iframe_match.group(1)
-            # URL 解码 iframe src
-            iframe_src = unquote(iframe_src)
-            # 从 vid 参数中提取视频URL（获取 vid= 后面的所有内容）
-            vid_match = re.search(r'[?&]vid=(.+)', iframe_src)
-            if vid_match:
-                video_url = vid_match.group(1)
-                # 再次 URL 解码（可能是双重编码）
-                video_url = unquote(video_url)
-                # 清理末尾可能的 $xxx 标记（如 $mp4, $ff 等）
-                video_url = re.sub(r'\$[a-zA-Z0-9_]+$', '', video_url)
-                # 清理可能的其他参数
-                video_url = video_url.split('&')[0]
-                if video_url and ('m3u8' in video_url or 'mp4' in video_url):
-                    return self._clean_video_url(video_url)
-        
-        # 方式2: 直接匹配 m3u8/mp4 直链
+        # 常见 m3u8/mp4 直链
         match = re.search(r"(https?://[^\"'\s]+\.(?:m3u8|mp4)[^\"'\s]*)", html)
         if match:
-            return self._clean_video_url(match.group(1))
+            return match.group(1)
 
-        # 方式3: 有些页面把链接放在 JSON 里
+        # 有些页面把链接放在 JSON 里
         json_like = re.search(r"\{[^\}]*?(m3u8|mp4)[^\}]*\}", html)
         if json_like:
             try:
                 data = json.loads(json_like.group(0))
                 for v in data.values():
                     if isinstance(v, str) and ("m3u8" in v or "mp4" in v):
-                        return self._clean_video_url(v)
+                        return v
             except Exception:
                 pass
         return None
-    
-    def _clean_video_url(self, url):
-        """清理视频URL，移除末尾的标记和多余参数"""
-        if not url:
-            return url
-        # URL 解码
-        url = unquote(url)
-        # 移除末尾的 $xxx 标记（如 $mp4, $ff, $m3u8 等）
-        url = re.sub(r'\$[a-zA-Z0-9_]+$', '', url)
-        # 确保 URL 以 .m3u8 或 .mp4 结尾（移除之后的任何内容）
-        m3u8_match = re.search(r'(https?://[^\s]+\.m3u8)', url)
-        if m3u8_match:
-            return m3u8_match.group(1)
-        mp4_match = re.search(r'(https?://[^\s]+\.mp4)', url)
-        if mp4_match:
-            return mp4_match.group(1)
-        return url
 
     def _find_cover(self, soup):
         og = soup.find("meta", property="og:image")

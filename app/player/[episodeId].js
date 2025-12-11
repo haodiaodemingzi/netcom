@@ -8,8 +8,8 @@ import {
   Alert,
   Dimensions,
   StatusBar,
-  PanResponder,
-  Animated,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -18,11 +18,12 @@ import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi'
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 const PlayerScreen = () => {
   const router = useRouter();
   const { episodeId } = useLocalSearchParams();
+  
+  // 使用 useWindowDimensions 动态获取屏幕尺寸（支持横竖屏切换）
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,10 +31,8 @@ const PlayerScreen = () => {
   const [isFullscreen, setIsFullscreen] = useState(false); // 默认非全屏，在上半屏播放
   const [quality, setQuality] = useState('high'); // high, medium, low
   const [showQualityMenu, setShowQualityMenu] = useState(false);
-  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
-  const [draggedTime, setDraggedTime] = useState(0);
+  const [videoFitMode, setVideoFitMode] = useState('contain'); // contain, cover, fill
   const controlsTimeoutRef = useRef(null);
-  const progressBarRef = useRef(null);
 
   // 使用 expo-video 的 useVideoPlayer hook
   // 注意：useVideoPlayer需要传入source URL，如果URL变化需要重新创建player
@@ -179,43 +178,16 @@ const PlayerScreen = () => {
   };
 
   const handleControlsPress = () => {
-    setShowControls(!showControls);
+    setShowControls(prev => !prev);
     
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
 
-    if (!showControls) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    }
-  };
-
-  const handleProgressPress = (event) => {
-    if (!progressBarRef.current || !player) return;
-    
-    progressBarRef.current.measure((x, y, width) => {
-      const touchX = event.nativeEvent.locationX;
-      const percentage = touchX / width;
-      const newTime = percentage * player.duration;
-      
-      setIsDraggingProgress(true);
-      setDraggedTime(newTime);
-    });
-  };
-
-  const handleProgressRelease = () => {
-    if (player && isDraggingProgress) {
-      try {
-        // expo-video: currentTime是属性，直接设置
-        player.currentTime = draggedTime;
-        setIsDraggingProgress(false);
-      } catch (error) {
-        console.error('设置播放进度失败:', error);
-      setIsDraggingProgress(false);
-      }
-    }
+    // 显示后 4 秒自动隐藏
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 4000);
   };
 
   const handleQualitySelect = (selectedQuality) => {
@@ -226,6 +198,21 @@ const PlayerScreen = () => {
 
   const handleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
+  };
+
+  // 切换视频缩放模式
+  const handleVideoFitMode = () => {
+    const modes = ['contain', 'cover', 'fill'];
+    const modeNames = { contain: '适应', cover: '填充', fill: '拉伸' };
+    const currentIndex = modes.indexOf(videoFitMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    const nextMode = modes[nextIndex];
+    setVideoFitMode(nextMode);
+  };
+
+  const getVideoFitModeName = () => {
+    const modeNames = { contain: '适应', cover: '填充', fill: '拉伸' };
+    return modeNames[videoFitMode] || '适应';
   };
 
   const formatTime = (seconds) => {
@@ -251,171 +238,88 @@ const PlayerScreen = () => {
     );
   }
 
-  // 非全屏时，视频容器占屏幕上半部分（16:9比例）
-  const videoContainerWidth = SCREEN_WIDTH;
-  const videoContainerHeight = isFullscreen ? SCREEN_HEIGHT : SCREEN_WIDTH * 0.5625; // 16:9比例
+  // 非全屏时，视频容器占16:9比例
+  const videoContainerWidth = screenWidth;
+  const videoContainerHeight = isFullscreen ? screenHeight : screenWidth * 0.5625; // 16:9比例
 
   return (
     <SafeAreaView style={[styles.container, isFullscreen && styles.fullscreenContainer]} edges={isFullscreen ? [] : ['top']}>
       <StatusBar hidden={isFullscreen} barStyle="light-content" />
       
-      <TouchableOpacity
+      {/* 视频播放区域 */}
+      <Pressable
         style={[
           styles.videoContainer,
           {
-            width: videoContainerWidth,
-            height: videoContainerHeight,
+            width: screenWidth,
+            height: isFullscreen ? screenHeight : screenWidth * 0.5625,
           }
         ]}
         onPress={handleControlsPress}
-        activeOpacity={1}
       >
+        {/* 视频播放器 */}
         {player ? (
           <VideoView
             player={player}
-          style={styles.video}
+            style={StyleSheet.absoluteFill}
             nativeControls={false}
-            contentFit="contain"
-            onLoadStart={() => {
-              console.log('=== 视频开始加载 ===');
-              console.log('视频源:', videoSource);
-            }}
-            onLoad={(event) => {
-              console.log('=== 视频加载完成 ===');
-              console.log('加载事件:', event);
-              console.log('视频源:', videoSource);
-            }}
-            onError={(error) => {
-              console.error('=== 视频加载错误 ===');
-              console.error('错误信息:', error);
-              console.error('视频源:', videoSource);
-              Alert.alert('播放错误', '视频加载失败，请检查网络连接或视频链接');
-            }}
+            contentFit={videoFitMode}
           />
         ) : (
-          <View style={styles.video}>
-            <Text style={{ color: '#fff', textAlign: 'center', padding: 20 }}>
-              正在初始化播放器...
-            </Text>
+          <View style={styles.loadingVideo}>
+            <Text style={{ color: '#fff' }}>正在初始化播放器...</Text>
           </View>
         )}
 
+        {/* 控制栏覆盖层 */}
         {showControls && (
-          <View style={styles.controls}>
-            <View style={styles.topControls}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.backButtonText}>← 返回</Text>
+          <View style={styles.controlsOverlay}>
+            {/* 顶部控制栏 */}
+            <View style={styles.topBar}>
+              <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                <Text style={styles.btnText}>← 返回</Text>
               </TouchableOpacity>
-              
-              <View style={styles.qualityContainer}>
-                <TouchableOpacity
-                  style={styles.qualityButton}
-                  onPress={() => setShowQualityMenu(!showQualityMenu)}
-                >
-                  <Text style={styles.qualityButtonText}>
-                    {quality === 'high' ? '高清' : quality === 'medium' ? '标清' : '流畅'}
-                  </Text>
-                </TouchableOpacity>
-                
-                {showQualityMenu && (
-                  <View style={styles.qualityMenu}>
-                    <TouchableOpacity
-                      style={[styles.qualityOption, quality === 'high' && styles.qualityOptionActive]}
-                      onPress={() => handleQualitySelect('high')}
-                    >
-                      <Text style={styles.qualityOptionText}>高清</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.qualityOption, quality === 'medium' && styles.qualityOptionActive]}
-                      onPress={() => handleQualitySelect('medium')}
-                    >
-                      <Text style={styles.qualityOptionText}>标清</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.qualityOption, quality === 'low' && styles.qualityOptionActive]}
-                      onPress={() => handleQualitySelect('low')}
-                    >
-                      <Text style={styles.qualityOptionText}>流畅</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.centerControls}>
-              <TouchableOpacity
-                style={styles.playButton}
-                onPress={handlePlayPause}
-              >
-                <Text style={styles.playButtonText}>
-                  {player?.playing ? '⏸' : '▶'}
-                </Text>
+              <TouchableOpacity style={styles.qualityBtn} onPress={() => setShowQualityMenu(!showQualityMenu)}>
+                <Text style={styles.btnText}>{quality === 'high' ? '高清' : quality === 'medium' ? '标清' : '流畅'}</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.bottomControls}>
-              <View style={styles.progressContainer}>
-                <Text style={styles.timeText}>
-                  {formatTime(isDraggingProgress ? draggedTime : (player?.currentTime || 0))}
-                </Text>
-                <TouchableOpacity
-                  ref={progressBarRef}
-                  style={styles.progressBar}
-                  onPress={handleProgressPress}
-                  onPressOut={handleProgressRelease}
-                >
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { 
-                        width: `${player?.duration ? (((isDraggingProgress ? draggedTime : (player.currentTime || 0)) / player.duration) * 100) : 0}%` 
-                      }
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.progressDot,
-                      { 
-                        left: `${player?.duration ? (((isDraggingProgress ? draggedTime : (player.currentTime || 0)) / player.duration) * 100) : 0}%` 
-                      }
-                    ]}
-                  />
-                </TouchableOpacity>
+            {/* 中间播放按钮 */}
+            <View style={styles.centerArea}>
+              <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
+                <Text style={styles.playBtnText}>{player?.playing ? '⏸' : '▶'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 底部控制栏 */}
+            <View style={styles.bottomBar}>
+              <View style={styles.progressRow}>
+                <Text style={styles.timeText}>{formatTime(player?.currentTime || 0)}</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${player?.duration ? ((player.currentTime || 0) / player.duration * 100) : 0}%` }]} />
+                </View>
                 <Text style={styles.timeText}>{formatTime(player?.duration || 0)}</Text>
               </View>
-
-              <View style={styles.bottomButtonsContainer}>
-                <TouchableOpacity
-                  style={styles.fullscreenButton}
-                  onPress={handleFullscreen}
-                >
-                  <Text style={styles.fullscreenButtonText}>
-                    {isFullscreen ? '退出全屏' : '全屏'}
-                  </Text>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
+                  <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
+                  <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         )}
-      </TouchableOpacity>
+      </Pressable>
 
-      <View style={[styles.infoContainer, isFullscreen && styles.infoContainerFullscreen]}>
-        <Text style={styles.episodeTitle}>{episode.title}</Text>
-        {!isFullscreen && (
-          <>
-            <Text style={styles.episodeDescription}>{episode.description}</Text>
-            <Text style={styles.episodeDuration}>
-              时长: {formatTime(episode.duration)}
-            </Text>
-          </>
-        )}
-        {isFullscreen && (
-          <Text style={styles.episodeDescriptionCompact}>{episode.description}</Text>
-        )}
-      </View>
+      {/* 全屏时隐藏信息区域 */}
+      {!isFullscreen && (
+        <View style={styles.infoContainer}>
+          <Text style={styles.episodeTitle}>{episode.title}</Text>
+          <Text style={styles.episodeDescription}>{episode.description}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -426,7 +330,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   fullscreenContainer: {
-    backgroundColor: '#000',
     position: 'absolute',
     top: 0,
     left: 0,
@@ -452,176 +355,106 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  video: {
-    width: '100%',
-    height: '100%',
-  },
-  controls: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  topControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  centerControls: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bottomControls: {
-    gap: 8,
-  },
-  backButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 4,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  qualityContainer: {
-    position: 'relative',
-  },
-  qualityButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#6200EE',
-    borderRadius: 4,
-  },
-  qualityButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  qualityMenu: {
-    position: 'absolute',
-    top: 40,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 4,
-    overflow: 'hidden',
-    minWidth: 80,
-  },
-  qualityOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  qualityOptionActive: {
-    backgroundColor: '#6200EE',
-  },
-  qualityOptionText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  playButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#6200EE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playButtonText: {
-    fontSize: 28,
-    color: '#fff',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  timeText: {
-    color: '#fff',
-    fontSize: 12,
-    minWidth: 40,
-    fontWeight: '500',
-  },
-  progressBar: {
+  loadingVideo: {
     flex: 1,
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 3,
-    overflow: 'visible',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  centerArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBar: {
+    gap: 10,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#6200EE',
-    borderRadius: 3,
+    borderRadius: 2,
   },
-  progressDot: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-    top: -3,
-    marginLeft: -6,
-  },
-  bottomButtonsContainer: {
+  buttonRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 10,
   },
-  fullscreenButton: {
+  backBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 4,
   },
-  fullscreenButtonText: {
+  qualityBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#6200EE',
+    borderRadius: 4,
+  },
+  playBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#6200EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playBtnText: {
+    fontSize: 28,
+    color: '#fff',
+  },
+  actionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  timeText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
+    minWidth: 45,
   },
   infoContainer: {
     padding: 16,
     backgroundColor: '#fff',
-    maxHeight: SCREEN_HEIGHT * 0.4, // 限制最大高度，确保视频在上半屏
-  },
-  infoContainerFullscreen: {
-    flex: 0,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#1a1a1a',
-    height: 80,
+    flex: 1,
   },
   episodeTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#333',
     marginBottom: 8,
   },
   episodeDescription: {
     fontSize: 14,
     color: '#666',
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  episodeDescriptionCompact: {
-    fontSize: 12,
-    color: '#999',
-    lineHeight: 18,
-  },
-  episodeDuration: {
-    fontSize: 12,
-    color: '#999',
+    lineHeight: 20,
   },
 });
 

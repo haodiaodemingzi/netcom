@@ -212,9 +212,6 @@ def proxy_video():
         elif source == 'badnews' or source == 'badnews_av':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
-        elif source == 'yinghua':
-            headers['Referer'] = 'http://www.yinghuajinju.com/'
-            headers['Origin'] = 'http://www.yinghuajinju.com'
         
         # 转发Range请求头（用于视频断点续传）
         if 'Range' in request.headers:
@@ -351,9 +348,6 @@ def convert_video():
                 elif source == 'badnews' or source == 'badnews_av':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')
-                elif source == 'yinghua':
-                    headers.append('Referer: http://www.yinghuajinju.com/')
-                    headers.append('Origin: http://www.yinghuajinju.com')
                 
                 # 添加通用请求头
                 headers.append('User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
