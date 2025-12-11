@@ -50,7 +50,7 @@ def get_series_list():
         'total': len(videos)
     })
 
-@video_bp.route('/videos/series/<series_id>', methods=['GET'])
+@video_bp.route('/videos/series/<path:series_id>', methods=['GET'])
 @handle_errors("获取视频详情失败")
 def get_series_detail(series_id):
     """获取视频详情"""
@@ -61,7 +61,7 @@ def get_series_detail(series_id):
         return success_response(detail)
     return not_found_response("视频不存在")
 
-@video_bp.route('/videos/series/<series_id>/episodes', methods=['GET'])
+@video_bp.route('/videos/series/<path:series_id>/episodes', methods=['GET'])
 @handle_errors("获取剧集列表失败")
 def get_episodes(series_id):
     """获取剧集列表"""
@@ -69,7 +69,7 @@ def get_episodes(series_id):
     scraper = VideoScraperFactory.create_scraper(source)
     return success_response(scraper.get_episodes(series_id))
 
-@video_bp.route('/videos/episodes/<episode_id>', methods=['GET'])
+@video_bp.route('/videos/episodes/<path:episode_id>', methods=['GET'])
 @handle_errors("获取剧集详情失败")
 def get_episode_detail(episode_id):
     """获取单个剧集详情"""
@@ -212,6 +212,9 @@ def proxy_video():
         elif source == 'badnews' or source == 'badnews_av':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
+        elif source == 'yinghua':
+            headers['Referer'] = 'http://www.yinghuajinju.com/'
+            headers['Origin'] = 'http://www.yinghuajinju.com'
         
         # 转发Range请求头（用于视频断点续传）
         if 'Range' in request.headers:
@@ -348,6 +351,9 @@ def convert_video():
                 elif source == 'badnews' or source == 'badnews_av':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')
+                elif source == 'yinghua':
+                    headers.append('Referer: http://www.yinghuajinju.com/')
+                    headers.append('Origin: http://www.yinghuajinju.com')
                 
                 # 添加通用请求头
                 headers.append('User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
