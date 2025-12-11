@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cthulhu",
     "slug": "comic-reader",
-    "version": "9.2.0",
+    "version": "10.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.comicreader.app",
-      "versionCode": 11,
+      "versionCode": 12,
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
