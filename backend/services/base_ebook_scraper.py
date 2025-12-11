@@ -37,12 +37,12 @@ class BaseEbookScraper(ABC):
         """随机延迟,避免请求过快"""
         time.sleep(random.uniform(0.5, 1.5))
 
-    def _make_request(self, url, verify_ssl=True):
+    def _make_request(self, url, params=None, verify_ssl=True):
         """发送HTTP请求"""
         try:
             self._delay()
             
-            response = self.session.get(url, timeout=10, verify=verify_ssl)
+            response = self.session.get(url, params=params, timeout=10, verify=verify_ssl)
             response.raise_for_status()
             
             # 如果响应编码不正确,尝试自动检测

@@ -191,9 +191,17 @@ const EbookDetailScreen = () => {
   const renderHeader = () => (
     <View>
       <View style={styles.topSection}>
-        <View style={styles.coverPlaceholder}>
-          <Text style={styles.coverText}>📖</Text>
-        </View>
+        {book.cover ? (
+          <Image
+            source={{ uri: book.cover }}
+            style={styles.coverImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.coverPlaceholder}>
+            <Text style={styles.coverText}>📖</Text>
+          </View>
+        )}
         <View style={styles.info}>
           <Text style={styles.title}>{book.title}</Text>
           {book.author && (
@@ -401,6 +409,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8EAF6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  coverImage: {
+    width: 120,
+    height: 160,
+    borderRadius: 8,
+    marginRight: 16,
   },
   coverText: {
     fontSize: 48,

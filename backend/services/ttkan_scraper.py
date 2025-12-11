@@ -55,17 +55,6 @@ class TtkanScraper(BaseEbookScraper):
                     'type': 'normal'
                 })
                 
-                # 添加字母子分类(除了状态分类)
-                if cat['group'] == '类型':
-                    for sub in ['abcd', 'efgh', 'ijkl', 'mnop', 'qrst', 'uvw', 'xyz']:
-                        categories.append({
-                            'id': f"{cat['id']}_{sub}",
-                            'name': f"{cat['name']} ({sub.upper()})",
-                            'url': f"{self.base_url}/novel/class/{cat['id']}_{sub}",
-                            'group': cat['group'],
-                            'type': 'sub'
-                        })
-            
             logger.info(f"成功获取 {len(categories)} 个分类")
             return {'categories': categories}
             
@@ -76,7 +65,55 @@ class TtkanScraper(BaseEbookScraper):
     def get_books_by_category(self, category_id, page=1, limit=20):
         """根据分类获取书籍列表"""
         try:
-            # 构建分类URL
+            books = []
+            
+            # 第2页及以后使用API接口
+            if page > 1:
+                api_url = f"{self.base_url}/api/nq/amp_novel_list"
+                params = {
+                    'type': category_id,
+                    'filter': '*',
+                    'page': page,
+                    'limit': limit,
+                    'language': 'cn',
+                    '__amp_source_origin': self.base_url
+                }
+                logger.info(f"使用API获取第{page}页: {api_url}")
+                
+                response = self._make_request(api_url, params=params)
+                if not response:
+                    return {'books': [], 'total': 0, 'page': page, 'hasMore': False}
+                
+                try:
+                    data = response.json()
+                    if isinstance(data, dict) and 'items' in data:
+                        items = data.get('items', [])
+                        for item in items:
+                            books.append(self._parse_api_novel_item(item, category_id))
+                    elif isinstance(data, list):
+                        for item in data:
+                            books.append(self._parse_api_novel_item(item, category_id))
+                    
+                    # 去重
+                    unique_books = {}
+                    for book in books:
+                        if book and book.get('id') and book['id'] not in unique_books:
+                            unique_books[book['id']] = book
+                    books = list(unique_books.values())
+                    
+                    logger.info(f"API返回 {len(books)} 本书籍")
+                    return {
+                        'books': books,
+                        'total': len(books),
+                        'page': page,
+                        'totalPages': page + 1,
+                        'hasMore': len(books) >= limit
+                    }
+                except Exception as e:
+                    logger.error(f"解析API响应失败: {str(e)}")
+                    return {'books': [], 'total': 0, 'page': page, 'hasMore': False}
+            
+            # 第1页使用HTML解析
             category_url = f"{self.base_url}/novel/class/{category_id}"
             logger.info(f"获取分类书籍: {category_url}")
             
@@ -85,16 +122,25 @@ class TtkanScraper(BaseEbookScraper):
                 return {'books': [], 'total': 0, 'page': page, 'hasMore': False}
             
             soup = BeautifulSoup(response.text, 'html.parser')
-            books = []
             
-            # 查找所有小说条目 - 根据网页结构解析
-            # 每个小说块包含标题、作者、简介
-            novel_items = soup.find_all('li')
+            # 查找所有小说条目 - 先找到 div.pure-g 容器,然后找其中包含 novel_cell 的子div
+            pure_g_container = soup.find('div', class_='pure-g')
+            if not pure_g_container:
+                logger.warning("未找到 div.pure-g 容器")
+                return {'books': [], 'total': 0, 'page': page, 'hasMore': False}
+            
+            # 在容器中查找所有包含 novel_cell 的 div
+            novel_items = pure_g_container.find_all('div', class_=lambda x: x and 'novel_cell' in x)
+            logger.info(f"找到 {len(novel_items)} 个小说条目")
             
             for item in novel_items:
                 try:
-                    # 查找链接
-                    link = item.find('a', href=re.compile(r'/novel/chapters/'))
+                    # 查找 h3 标签内的链接
+                    h3 = item.find('h3')
+                    if not h3:
+                        continue
+                    
+                    link = h3.find('a', href=re.compile(r'/novel/chapters/'))
                     if not link:
                         continue
                     
@@ -112,27 +158,31 @@ class TtkanScraper(BaseEbookScraper):
                     if not title:
                         continue
                     
-                    # 提取作者和简介
+                    # 构建封面图片URL - 使用book_id直接构建
+                    # 格式: https://static.ttkan.co/cover/{book_id}.jpg?w=75&h=100&q=100
+                    cover = f"https://static.ttkan.co/cover/{book_id}.jpg?w=75&h=100&q=100"
+                    
+                    # 提取作者和简介 - 从 ul > li 中提取
                     author = ''
                     description = ''
                     
-                    # 查找作者信息
-                    text_content = item.get_text(separator='|', strip=True)
-                    if '作者：' in text_content:
-                        match = re.search(r'作者：([^|]+)', text_content)
-                        if match:
-                            author = match.group(1).strip()
-                    
-                    if '简介：' in text_content:
-                        match = re.search(r'简介：(.+?)(?:\||$)', text_content)
-                        if match:
-                            description = match.group(1).strip()
+                    # 查找 ul 标签
+                    ul = item.find('ul')
+                    if ul:
+                        lis = ul.find_all('li')
+                        for li in lis:
+                            text = li.get_text(strip=True)
+                            if text.startswith('作者：'):
+                                author = text.replace('作者：', '').strip()
+                            elif text.startswith('简介：'):
+                                description = text.replace('简介：', '').strip()
                     
                     books.append({
                         'id': book_id,
                         'title': title,
                         'author': author,
                         'description': description,
+                        'cover': cover,
                         'url': book_url,
                         'categoryId': category_id
                     })
@@ -148,19 +198,18 @@ class TtkanScraper(BaseEbookScraper):
                     unique_books[book['id']] = book
             books = list(unique_books.values())
             
-            # 分页处理
             total = len(books)
-            start = (page - 1) * limit
-            end = start + limit
-            paginated_books = books[start:end]
+            logger.info(f"成功获取 {total} 本书籍")
             
-            logger.info(f"成功获取 {len(paginated_books)} 本书籍 (总计 {total})")
+            # 检查是否有amp-list (表示有更多页面)
+            has_more = bool(soup.find('amp-list'))
+            
             return {
-                'books': paginated_books,
+                'books': books[:limit],  # 第一页只返回limit数量
                 'total': total,
                 'page': page,
-                'totalPages': (total + limit - 1) // limit,
-                'hasMore': end < total
+                'totalPages': page + 1 if has_more else page,
+                'hasMore': has_more
             }
             
         except Exception as e:
@@ -174,6 +223,51 @@ class TtkanScraper(BaseEbookScraper):
         if match:
             return match.group(1)
         return None
+    
+    def _parse_api_novel_item(self, item, category_id):
+        """解析API返回的小说条目
+        API返回JSON格式:
+        {
+            "id": 173407,
+            "name": "书名",
+            "description": "简介",
+            "type": "gudaiyanqing",
+            "author": "作者",
+            "novel_id": "nongxideyouxiantianyuan-fengzefangfei",
+            "topic_img": "nongxideyouxiantianyuan-fengzefangfei.jpg"
+        }
+        """
+        try:
+            if not isinstance(item, dict):
+                return None
+            
+            # 提取novel_id作为书籍ID
+            novel_id = item.get('novel_id', '')
+            if not novel_id:
+                return None
+            
+            # 构建URL
+            book_url = f"{self.base_url}/novel/chapters/{novel_id}"
+            
+            # 构建封面URL
+            topic_img = item.get('topic_img', '')
+            cover = ''
+            if topic_img:
+                cover = f"https://static.ttkan.co/cover/{topic_img}?w=75&h=100&q=100"
+            
+            return {
+                'id': novel_id,
+                'title': item.get('name', ''),
+                'author': item.get('author', ''),
+                'description': item.get('description', ''),
+                'cover': cover,
+                'url': book_url,
+                'categoryId': category_id
+            }
+            
+        except Exception as e:
+            logger.debug(f"解析API小说条目失败: {str(e)}")
+            return None
     
     def get_book_detail(self, book_id):
         """获取书籍详情"""
@@ -230,10 +324,14 @@ class TtkanScraper(BaseEbookScraper):
             # 获取章节列表
             chapters = self._parse_chapters_from_page(soup, book_id)
             
+            # 构建封面URL
+            cover = f"https://static.ttkan.co/cover/{book_id}.jpg?w=75&h=100&q=100"
+            
             return {
                 'id': book_id,
                 'title': title,
                 'author': author,
+                'cover': cover,
                 'description': description,
                 'status': status,
                 'category': category,
@@ -429,66 +527,60 @@ class TtkanScraper(BaseEbookScraper):
             return None
     
     def search_books(self, keyword, page=1, limit=20):
-        """搜索书籍"""
+        """搜索书籍 - 使用API接口"""
         try:
-            # ttkan可能有搜索API,尝试使用
-            search_url = f"{self.base_url}/novel/search?q={keyword}"
-            logger.info(f"搜索书籍: {search_url}")
+            api_url = f"{self.base_url}/api/nq/amp_novel_list"
+            params = {
+                'type': '*',  # 搜索所有类型
+                'filter': keyword,  # 搜索关键词
+                'page': page,
+                'limit': limit,
+                'language': 'cn',
+                '__amp_source_origin': self.base_url
+            }
+            logger.info(f"搜索书籍: {keyword}, 页码: {page}")
             
-            response = self._make_request(search_url)
+            response = self._make_request(api_url, params=params)
             if not response:
                 logger.warning("搜索请求失败")
-                return {'books': [], 'total': 0, 'page': page, 'keyword': keyword}
+                return {'books': [], 'total': 0, 'page': page, 'keyword': keyword, 'hasMore': False}
             
-            soup = BeautifulSoup(response.text, 'html.parser')
-            books = []
-            
-            # 查找搜索结果中的小说链接
-            novel_links = soup.find_all('a', href=re.compile(r'/novel/chapters/'))
-            
-            for link in novel_links:
-                try:
-                    book_url = link.get('href', '')
-                    if not book_url.startswith('http'):
-                        book_url = self.base_url + book_url
-                    
-                    book_id = self._extract_book_id(book_url)
-                    if not book_id:
-                        continue
-                    
-                    title = link.get_text(strip=True)
-                    if not title:
-                        continue
-                    
-                    # 避免重复
-                    if any(b['id'] == book_id for b in books):
-                        continue
-                    
-                    books.append({
-                        'id': book_id,
-                        'title': title,
-                        'author': '',
-                        'url': book_url
-                    })
-                    
-                except Exception as e:
-                    continue
-            
-            # 分页
-            total = len(books)
-            start = (page - 1) * limit
-            end = start + limit
-            paginated_books = books[start:end]
-            
-            logger.info(f"搜索完成, 找到 {total} 本书籍")
-            return {
-                'books': paginated_books,
-                'total': total,
-                'page': page,
-                'keyword': keyword,
-                'hasMore': end < total
-            }
+            try:
+                data = response.json()
+                books = []
+                
+                # 解析API返回的数据
+                if isinstance(data, list):
+                    for item in data:
+                        book = self._parse_api_novel_item(item, '')
+                        if book:
+                            books.append(book)
+                elif isinstance(data, dict) and 'items' in data:
+                    for item in data.get('items', []):
+                        book = self._parse_api_novel_item(item, '')
+                        if book:
+                            books.append(book)
+                
+                # 去重
+                unique_books = {}
+                for book in books:
+                    if book.get('id') and book['id'] not in unique_books:
+                        unique_books[book['id']] = book
+                books = list(unique_books.values())
+                
+                logger.info(f"搜索完成, 找到 {len(books)} 本书籍")
+                return {
+                    'books': books,
+                    'total': len(books),
+                    'page': page,
+                    'keyword': keyword,
+                    'hasMore': len(books) >= limit
+                }
+                
+            except Exception as e:
+                logger.error(f"解析搜索结果失败: {str(e)}")
+                return {'books': [], 'total': 0, 'page': page, 'keyword': keyword, 'hasMore': False}
             
         except Exception as e:
             logger.error(f"搜索书籍失败: {str(e)}")
-            return {'books': [], 'total': 0, 'page': page, 'keyword': keyword}
+            return {'books': [], 'total': 0, 'page': page, 'keyword': keyword, 'hasMore': False}

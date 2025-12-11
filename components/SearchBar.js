@@ -8,9 +8,10 @@ const SearchBar = ({
   placeholder = '搜索...',
   placeholderTextColor = '#999',
   returnKeyType = 'search',
+  editable = true,
 }) => {
   return (
-    <View style={styles.searchContainer}>
+    <View style={[styles.searchContainer, !editable && styles.searchContainerDisabled]}>
       <Text style={styles.searchIcon}>🔍</Text>
       <TextInput
         style={styles.searchInput}
@@ -20,6 +21,7 @@ const SearchBar = ({
         onChangeText={onChangeText}
         onSubmitEditing={onSubmitEditing}
         returnKeyType={returnKeyType}
+        editable={editable}
       />
       {value.length > 0 && (
         <TouchableOpacity
@@ -42,6 +44,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     height: 38,
+  },
+  searchContainerDisabled: {
+    opacity: 0.6,
   },
   searchIcon: {
     fontSize: 16,

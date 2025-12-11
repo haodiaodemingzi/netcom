@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
 const BookCard = ({ book, viewMode = 'card', source = 'kanunu8' }) => {
   const router = useRouter();
   const isList = viewMode === 'list';
+  const [imageError, setImageError] = useState(false);
 
   // 使用传入的source或书籍自带的source
   const bookSource = book.source || source;
@@ -13,7 +14,7 @@ const BookCard = ({ book, viewMode = 'card', source = 'kanunu8' }) => {
     router.push(`/ebook/${book.id}?source=${bookSource}`);
   };
 
-  // 简单的随机纯色背景
+  // 简单的随机纯色背景（作为封面加载失败时的备用）
   const getRandomColor = (id) => {
     const colors = ['#2196F3', '#4CAF50', '#F44336', '#FF9800', '#9C27B0'];
     let hash = 0;
@@ -24,6 +25,7 @@ const BookCard = ({ book, viewMode = 'card', source = 'kanunu8' }) => {
   };
 
   const backgroundColor = getRandomColor(book.id);
+  const hasCover = book.cover && !imageError;
 
   return (
     <TouchableOpacity 
@@ -31,8 +33,17 @@ const BookCard = ({ book, viewMode = 'card', source = 'kanunu8' }) => {
       onPress={handlePress} 
       activeOpacity={0.7}
     >
-      <View style={[styles.cover, isList && styles.coverList, { backgroundColor }]}>
-        <Text style={[styles.bookIcon, isList && styles.bookIconList]}>📖</Text>
+      <View style={[styles.cover, isList && styles.coverList, !hasCover && { backgroundColor }]}>
+        {hasCover ? (
+          <Image
+            source={{ uri: book.cover }}
+            style={styles.coverImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <Text style={[styles.bookIcon, isList && styles.bookIconList]}>📖</Text>
+        )}
       </View>
       <View style={[styles.info, isList && styles.infoList]}>
         <Text style={[styles.title, isList && styles.titleList]} numberOfLines={isList ? 1 : 2}>
@@ -78,12 +89,17 @@ const styles = StyleSheet.create({
     height: 200, // 固定封面高度
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   coverList: {
     width: 75,
     height: 88, // 固定封面高度，与列表卡片高度匹配
     borderRadius: 4,
     margin: 6,
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
   },
   bookIcon: {
     fontSize: 24,

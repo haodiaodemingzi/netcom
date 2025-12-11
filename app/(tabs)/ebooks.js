@@ -19,6 +19,7 @@ import {
   getEbookCategories,
   getEbooksByCategory,
   getEbookSources,
+  searchEbooks,
 } from '../../services/api';
 import { getSettings } from '../../services/storage';
 import { getInstalledSourcesByCategory } from '../../services/sourceFilter';
@@ -38,6 +39,8 @@ const EbookTabScreen = () => {
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [viewMode, setViewMode] = useState('card');
+  const [isSearching, setIsSearching] = useState(false);  // 搜索模式标志
+  const [searchPage, setSearchPage] = useState(1);  // 搜索分页
 
   // 加载设置
   useEffect(() => {
@@ -109,6 +112,57 @@ const EbookTabScreen = () => {
 
   // 不支持元数据搜索，直接使用当前列表
   const filteredBooks = books;
+
+  // 支持搜索的数据源列表
+  const searchSupportedSources = ['ttkan'];
+  const isSearchSupported = searchSupportedSources.includes(selectedSource);
+
+  // 搜索功能
+  const handleSearch = async (reset = true) => {
+    if (!searchQuery.trim() || !isSearchSupported) return;
+    
+    try {
+      setLoading(true);
+      setIsSearching(true);
+      const currentPage = reset ? 1 : searchPage;
+      
+      const data = await searchEbooks(
+        searchQuery.trim(),
+        currentPage,
+        20,
+        selectedSource
+      );
+      
+      if (reset) {
+        setBooks(data.books || []);
+        setSearchPage(1);
+      } else {
+        setBooks(prev => [...prev, ...(data.books || [])]);
+      }
+      
+      setHasMore(data.hasMore || false);
+      if (!reset) {
+        setSearchPage(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('搜索失败:', error);
+      if (reset) {
+        setBooks([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 清除搜索，返回分类列表
+  const clearSearch = () => {
+    setSearchQuery('');
+    setIsSearching(false);
+    setSearchPage(1);
+    if (selectedCategory) {
+      loadBooks(true);
+    }
+  };
 
   const loadSources = async () => {
     try {
@@ -221,7 +275,11 @@ const EbookTabScreen = () => {
 
   const handleLoadMore = () => {
     if (hasMore && !loading) {
-      loadBooks(false);
+      if (isSearching && searchQuery.trim()) {
+        handleSearch(false);
+      } else {
+        loadBooks(false);
+      }
     }
   };
 
@@ -235,9 +293,15 @@ const EbookTabScreen = () => {
           
           <SearchBar
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={"当前数据源不支持搜索"}
-            editable={true}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              if (!text.trim()) {
+                clearSearch();
+              }
+            }}
+            onSubmitEditing={() => handleSearch(true)}
+            placeholder={isSearchSupported ? "搜索书籍..." : "当前数据源不支持搜索"}
+            editable={isSearchSupported}
           />
           
           <TouchableOpacity 
@@ -250,8 +314,16 @@ const EbookTabScreen = () => {
             <Text style={styles.sourceArrow}>▼</Text>
           </TouchableOpacity>
         </View>
-        {searchQuery.trim().length > 0 && (
+        {searchQuery.trim().length > 0 && !isSearchSupported && (
           <Text style={styles.infoText}>当前数据源不支持搜索</Text>
+        )}
+        {isSearching && searchQuery.trim().length > 0 && (
+          <View style={styles.searchInfo}>
+            <Text style={styles.searchInfoText}>搜索结果: "{searchQuery}"</Text>
+            <TouchableOpacity onPress={clearSearch}>
+              <Text style={styles.clearSearchText}>清除</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -356,7 +428,7 @@ const EbookTabScreen = () => {
             colors={['#6200EE']}
           />
         }
-        onEndReached={searchQuery.trim() ? null : handleLoadMore}
+        onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={() =>
           loading && !refreshing ? (
@@ -430,6 +502,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#999',
     marginTop: 8,
+  },
+  searchInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  searchInfoText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  clearSearchText: {
+    fontSize: 12,
+    color: '#6200EE',
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
