@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "漫剧书",
+    "name": "Cthulhu",
     "slug": "comic-reader",
-    "version": "9.0.0",
+    "version": "9.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
