@@ -298,7 +298,7 @@ class YinghuaScraper(BaseVideoScraper):
         # 常见 m3u8/mp4 直链
         match = re.search(r"(https?://[^\"'\s]+\.(?:m3u8|mp4)[^\"'\s]*)", html)
         if match:
-            return match.group(1)
+            return self._clean_video_url(match.group(1))
 
         # 有些页面把链接放在 JSON 里
         json_like = re.search(r"\{[^\}]*?(m3u8|mp4)[^\}]*\}", html)
@@ -307,10 +307,18 @@ class YinghuaScraper(BaseVideoScraper):
                 data = json.loads(json_like.group(0))
                 for v in data.values():
                     if isinstance(v, str) and ("m3u8" in v or "mp4" in v):
-                        return v
+                        return self._clean_video_url(v)
             except Exception:
                 pass
         return None
+
+    def _clean_video_url(self, url):
+        """清理视频URL末尾的 $mp4, $ff 等标记"""
+        if not url:
+            return url
+        # 移除末尾的 $xxx 标记 (如 $mp4, $ff, $m3u8 等)
+        url = re.sub(r'\$[a-zA-Z0-9]+$', '', url)
+        return url
 
     def _find_cover(self, soup):
         og = soup.find("meta", property="og:image")

@@ -42,7 +42,9 @@ echo
 echo "========================================"
 echo "构建 Release APK"
 echo "========================================"
-(cd android && ./gradlew clean assembleRelease --stacktrace)
+#(cd android && ./gradlew clean assembleRelease --stacktrace)
+(cd /c/coding/netcom/android && export JAVA_HOME="/c/Program Files/Java/jdk-17" && ./gradlew.bat :app:assembleRelease)
+
 
 echo
 echo "========================================"
