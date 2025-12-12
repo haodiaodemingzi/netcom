@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import Blueprint, request, jsonify
 from services.scraper_factory import ScraperFactory
 from services.cache import cache_response
@@ -7,6 +8,10 @@ from utils.decorators import (
 )
 from config import COMIC_SOURCES
 import logging
+import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -201,4 +206,43 @@ def get_chapter_download_info(chapter_id):
                 'total': 0,
                 'download_config': {}
             }
+        }), 500
+
+@comic_bp.route('/get-cookies', methods=['GET'])
+def get_cookies_for_download():
+    """获取下载所需的 Cookie（后端代理）"""
+    source = request.args.get('source', None)
+    cookie_url = request.args.get('cookie_url', None)
+    
+    if not cookie_url:
+        return jsonify({'success': False, 'message': '缺少 cookie_url 参数', 'cookies': ''}), 400
+    
+    try:
+        # 创建 session 访问目标网站获取 Cookie
+        session = requests.Session()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9'
+        }
+        
+        response = session.get(cookie_url, headers=headers, timeout=10, verify=False)
+        
+        # 提取 cookies
+        cookies_dict = session.cookies.get_dict()
+        cookie_string = '; '.join([f"{k}={v}" for k, v in cookies_dict.items()])
+        
+        logger.info(f"从 {cookie_url} 获取到 Cookie: {cookie_string[:50]}..." if cookie_string else f"从 {cookie_url} 未获取到 Cookie")
+        
+        return jsonify({
+            'success': True,
+            'cookies': cookie_string
+        })
+        
+    except Exception as e:
+        logger.error(f"获取 Cookie 失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': str(e),
+            'cookies': ''
         }), 500

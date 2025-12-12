@@ -789,7 +789,7 @@ class DownloadManager {
     }
   }
 
-  async downloadSingleImage(comicId, chapterId, page, imageUrl) {
+  async downloadSingleImage(comicId, chapterId, page, imageUrl, source = null) {
     const chapterDir = `${DOWNLOAD_DIR}${comicId}/${chapterId}/`;
     await makeDirectoryAsync(chapterDir, { intermediates: true });
     
@@ -809,7 +809,7 @@ class DownloadManager {
     };
     
     // 获取并添加Cookie
-    const cookies = await this.getCookies();
+    const cookies = await this.getCookies(source);
     if (cookies) {
       downloadHeaders['Cookie'] = cookies;
     }
@@ -837,7 +837,7 @@ class DownloadManager {
       });
       
       const imageData = response.data;
-      await this.downloadSingleImage(comicId, chapterId, page, imageData.url);
+      await this.downloadSingleImage(comicId, chapterId, page, imageData.url, source);
       
       return { url: filepath, isLocal: true, page, total: imageData.total };
     } catch (error) {
