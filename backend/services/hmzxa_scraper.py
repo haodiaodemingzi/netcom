@@ -423,6 +423,13 @@ class HmzxaScraper(BaseScraper):
     def get_chapter_images(self, chapter_id):
         """获取章节图片列表"""
         try:
+            # 先访问首页获取Cookie
+            logger.info("访问首页获取Cookie...")
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                logger.info("成功获取首页Cookie")
+            
+            # 然后访问章节页面
             url = f'{self.base_url}/{chapter_id}.html'
             logger.info(f"请求章节图片: {url}")
             

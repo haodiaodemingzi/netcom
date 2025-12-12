@@ -316,6 +316,12 @@ class Guoman8Scraper(BaseScraper):
     def get_chapter_images(self, chapter_id):
         """获取章节图片列表"""
         try:
+            # 先访问首页获取Cookie
+            print('访问首页获取Cookie...')
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                print('成功获取首页Cookie')
+            
             # 解析chapter_id (格式: 45043_01)
             parts = chapter_id.split('_')
             if len(parts) != 2:

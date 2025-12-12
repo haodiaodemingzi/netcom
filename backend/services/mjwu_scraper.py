@@ -490,6 +490,12 @@ class MjwuScraper(BaseVideoScraper):
         try:
             import json
             
+            # 先访问首页获取Cookie
+            print('访问首页获取Cookie...')
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                print('成功获取首页Cookie')
+            
             # 从episode_id中解析出信息
             # episode_id格式：12561_1_1
             parts = episode_id.split('_')

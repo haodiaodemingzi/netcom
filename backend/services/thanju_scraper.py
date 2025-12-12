@@ -605,6 +605,12 @@ class ThanjuScraper(BaseVideoScraper):
     def _get_episode_detail_from_source(self, series_id, playlist_id, episode_num):
         """从指定播放源获取剧集详情"""
         try:
+            # 先访问首页获取Cookie
+            print('访问首页获取Cookie...')
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                print('成功获取首页Cookie')
+            
             url = f'{self.base_url}/play/{series_id}/{playlist_id}-{episode_num}.html'
             
             # 播放页面需要携带Referer和更完整的请求头

@@ -199,9 +199,45 @@ const ReaderScreen = () => {
       }
       
       // 未下载或本地损坏，在线预览模式
+      // 1. 先获取下载配置和 Cookie
+      console.log('在线预览模式：开始获取章节配置...');
+      const downloadInfoResponse = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000/api'}/chapters/${chapterId}/download-info?source=${source}`
+      );
+      
+      if (!downloadInfoResponse.ok) {
+        console.error('获取章节配置失败:', downloadInfoResponse.status);
+        throw new Error('获取章节配置失败');
+      }
+      
+      const downloadInfoData = await downloadInfoResponse.json();
+      if (!downloadInfoData.success) {
+        console.error('章节配置返回失败:', downloadInfoData.message);
+        throw new Error(downloadInfoData.message || '获取章节配置失败');
+      }
+      
+      const { images: remoteImages, total, download_config } = downloadInfoData.data;
+      console.log(`获取到 ${total} 张图片信息`);
+      
+      // 2. 访问 cookie_url 预加载 Cookie
+      if (download_config?.cookie_url) {
+        try {
+          console.log('访问入口页面获取Cookie:', download_config.cookie_url);
+          await fetch(download_config.cookie_url, {
+            method: 'GET',
+            credentials: 'include', // 重要：保存 Cookie
+            headers: download_config.headers || {},
+          });
+          console.log('✓ Cookie 预加载完成');
+        } catch (error) {
+          console.warn('获取Cookie失败（继续尝试加载图片）:', error);
+        }
+      }
+      
+      // 3. 初始化图片占位符数组
       // 获取章节总页数
       const chapterInfo = await getChapterImages(chapterId, source);
-      const totalPages = chapterInfo.total || 0;
+      const totalPages = chapterInfo.total || total || 0;
       
       if (totalPages === 0) {
         console.error('无法获取章节信息');

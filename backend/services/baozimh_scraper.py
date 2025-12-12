@@ -505,6 +505,12 @@ class BaozimhScraper(BaseScraper):
     def get_chapter_images(self, chapter_id):
         """获取章节图片列表"""
         try:
+            # 先访问首页获取Cookie
+            logger.info("访问首页获取Cookie...")
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                logger.info("成功获取首页Cookie")
+            
             # 解析chapter_id: comic_id_slot
             parts = chapter_id.rsplit('_', 1)
             if len(parts) != 2:

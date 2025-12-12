@@ -151,6 +151,9 @@ class YinghuaScraper(BaseVideoScraper):
         return episodes
 
     def get_episode_detail(self, episode_id):
+        # 先访问首页获取Cookie
+        home_response = self._make_request(self.base_url, verify_ssl=False)
+        
         raw_ep_id = self._decode_id(episode_id)
         play_url = self._ensure_full_url(raw_ep_id)
         resp = self._make_request(play_url, verify_ssl=False)

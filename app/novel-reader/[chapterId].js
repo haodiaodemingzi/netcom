@@ -37,6 +37,30 @@ const NovelReaderScreen = () => {
   const loadChapter = async () => {
     setLoading(true);
     try {
+      // 1. 先获取配置并访问 cookie_url
+      try {
+        const source = 'kanunu8'; // 或者从 storage 获取
+        const configResponse = await fetch(
+          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000/api'}/ebooks/chapters/${chapterId}/config?source=${source}`
+        );
+        
+        if (configResponse.ok) {
+          const configData = await configResponse.json();
+          if (configData.success && configData.data?.cookie_url) {
+            console.log('访问入口页面获取Cookie:', configData.data.cookie_url);
+            await fetch(configData.data.cookie_url, {
+              method: 'GET',
+              credentials: 'include',
+              headers: configData.data.headers || {},
+            });
+            console.log('✓ Cookie 预加载完成');
+          }
+        }
+      } catch (error) {
+        console.warn('获取Cookie失败（继续加载）:', error);
+      }
+      
+      // 2. 加载章节内容
       const result = await getChapterContent(chapterId);
       if (result.success) {
         setChapter(result.data);

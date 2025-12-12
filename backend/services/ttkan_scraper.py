@@ -426,6 +426,12 @@ class TtkanScraper(BaseEbookScraper):
     def get_chapter_content(self, chapter_id):
         """获取章节内容"""
         try:
+            # 先访问首页获取Cookie
+            logger.info("访问首页获取Cookie...")
+            home_response = self._make_request(self.base_url)
+            if home_response:
+                logger.info("成功获取首页Cookie")
+            
             # 构建章节URL
             chapter_url = f"{self.base_url}/novel/pagea/{chapter_id}.html"
             logger.info(f"获取章节内容: {chapter_url}")
