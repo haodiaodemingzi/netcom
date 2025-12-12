@@ -711,16 +711,23 @@ class XmanhuaScraper(BaseScraper):
             'sec-fetch-dest': 'empty',
             'sec-fetch-mode': 'cors',
             'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
             'x-requested-with': 'XMLHttpRequest'
         }
+        
+        # 打印当前 session 的 Cookie 用于调试
+        logger.debug(f"Session cookies 数量: {len(list(self.session.cookies))}")
+        for cookie in list(self.session.cookies)[:5]:  # 只打印前5个
+            logger.debug(f"Cookie: {cookie.name}={cookie.value[:30]}...")
         
         # 创建信号量控制并发数为5
         semaphore = asyncio.Semaphore(5)
         
-        # 创建aiohttp会话
+        # 创建aiohttp会话，确保传递所有 cookies
         connector = aiohttp.TCPConnector(ssl=False)
-        async with aiohttp.ClientSession(connector=connector, cookies=self.session.cookies) as session:
+        # 将 requests.cookies.RequestsCookieJar 转换为字典
+        cookie_dict = {cookie.name: cookie.value for cookie in self.session.cookies}
+        async with aiohttp.ClientSession(connector=connector, cookies=cookie_dict) as session:
             # 创建所有任务
             tasks = []
             for page_num in range(1, total_pages + 1):
@@ -742,6 +749,13 @@ class XmanhuaScraper(BaseScraper):
         使用 chapterimage.ashx API 接口获取图片
         """
         try:
+            # 先访问主页获取Cookie
+            logger.debug("访问主页获取Cookie...")
+            home_response = self._make_request(self.base_url, verify_ssl=False)
+            if home_response:
+                logger.debug("成功获取主页Cookie")
+            
+            # 然后访问章节页面
             first_page_url = f'{self.base_url}/{chapter_id}/'
             logger.debug(f"请求章节第一页: {first_page_url}")
             
