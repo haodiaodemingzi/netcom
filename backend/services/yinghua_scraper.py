@@ -21,33 +21,25 @@ class YinghuaScraper(BaseVideoScraper):
 
     # ---------- 对外接口 ----------
     def get_categories(self):
+        """返回类型分类列表"""
         categories = [
             {"id": "hot", "name": "热门"},
-            {"id": "latest", "name": "最新"},
+            {"id": "66", "name": "热血"},
+            {"id": "64", "name": "格斗"},
+            {"id": "91", "name": "恋爱"},
+            {"id": "70", "name": "校园"},
+            {"id": "67", "name": "搞笑"},
+            {"id": "83", "name": "神魔"},
+            {"id": "81", "name": "机战"},
+            {"id": "75", "name": "科幻"},
+            {"id": "84", "name": "青春"},
+            {"id": "73", "name": "魔法"},
+            {"id": "61", "name": "冒险"},
+            {"id": "69", "name": "运动"},
+            {"id": "77", "name": "剧情"},
+            {"id": "99", "name": "后宫"},
+            {"id": "80", "name": "战争"},
         ]
-
-        resp = self._make_request(self.base_url, verify_ssl=False)
-        if not resp:
-            return categories
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # 按类型/地区/年份等导航链接补充分类
-        nav_links = soup.find_all("a", href=True)
-        seen = set([c["id"] for c in categories])
-        for link in nav_links:
-            text = link.get_text(strip=True)
-            href = link["href"]
-            if not text or len(text) > 8:  # 避免过长文本
-                continue
-            # 过滤首页等无意义分类
-            if text in ("首页", "最新更新", "排行榜"):
-                continue
-            cid = self._normalize_id(href, fallback=text)
-            if cid and cid not in seen:
-                seen.add(cid)
-                categories.append({"id": cid, "name": text})
-
         return categories
 
     def get_videos_by_category(self, category_id="hot", page=1, limit=20):
@@ -57,7 +49,11 @@ class YinghuaScraper(BaseVideoScraper):
             return []
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        videos = self._extract_video_cards(soup, limit)
+        # 首页(热门)结构与分类页不同，使用不同的解析方法
+        if category_id == "hot":
+            videos = self._extract_video_cards(soup, limit)
+        else:
+            videos = self._extract_search_results(soup, limit)
         return videos[:limit]
 
     def get_video_detail(self, video_id):
@@ -176,25 +172,33 @@ class YinghuaScraper(BaseVideoScraper):
     def search_videos(self, keyword, page=1, limit=20):
         if not keyword:
             return []
-        # 尝试常见的海报 CMS 搜索地址模式
-        search_url = f"{self.base_url}/index.php?m=vod-search-wd-{quote(keyword)}-pg-{page}.html"
+        # 使用正确的搜索URL格式: /search/{keyword}/ 或 /search/{keyword}/page/{page}.html
+        encoded_keyword = quote(keyword)
+        if page > 1:
+            search_url = f"{self.base_url}/search/{encoded_keyword}/page/{page}.html"
+        else:
+            search_url = f"{self.base_url}/search/{encoded_keyword}/"
+        
         resp = self._make_request(search_url, verify_ssl=False)
         if not resp:
             return []
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        return self._extract_video_cards(soup, limit)[:limit]
+        return self._extract_search_results(soup, limit)[:limit]
 
     # ---------- 工具方法 ----------
     def _build_list_url(self, category_id, page):
-        # 尽量兼容：热门/最新走首页分页，其余按通用 list 模式
-        if category_id in ("hot", "latest"):
+        """构建分类列表页URL"""
+        # 热门走首页
+        if category_id == "hot":
             if page > 1:
-                return f"{self.base_url}/?page={page}"
+                return f"{self.base_url}/index.php?m=vod-index-pg-{page}.html"
             return self.base_url
-        # 其他分类尝试常见列表路由
-        suffix = f"-pg-{page}.html" if page > 1 else ".html"
-        return urljoin(self.base_url, f"/list/{category_id}{suffix}")
+        
+        # 其他分类使用数字ID路径格式: /{id}/ 或 /{id}/{page}.html
+        if page > 1:
+            return f"{self.base_url}/{category_id}/{page}.html"
+        return f"{self.base_url}/{category_id}/"
 
     def _first_text(self, elements):
         """返回第一个非空文本"""
@@ -260,12 +264,26 @@ class YinghuaScraper(BaseVideoScraper):
                 continue
             seen.add(vid)
 
-            title = (
-                img.get("alt")
-                or link.get("title")
-                or link.get_text(strip=True)
-                or vid
-            )
+            # 获取标题 - 多种方式尝试
+            title = img.get("alt") or ""
+            if not title:
+                title = link.get("title") or ""
+            if not title:
+                # 尝试从链接文本中提取，去除更新信息
+                text = link.get_text(strip=True)
+                # 去除 "更新至xxx" 或 "全集" 等后缀
+                title = re.sub(r'(更新至.*|全集.*|\d+集全.*|最新.*)', '', text).strip()
+            if not title:
+                # 从父元素找标题
+                parent = link.find_parent(["li", "div"])
+                if parent:
+                    h_tag = parent.find(["h2", "h3", "h4"])
+                    if h_tag:
+                        title = h_tag.get_text(strip=True)
+            if not title:
+                # 最后回退到vid，但清理一下格式
+                title = vid.replace("show/", "").replace(".html", "")
+            
             cover = img.get("data-src") or img.get("src") or ""
             cover = self._ensure_full_url(cover) if cover.startswith("/") else cover
 
@@ -290,6 +308,85 @@ class YinghuaScraper(BaseVideoScraper):
                 }
             )
 
+        return videos
+
+    def _extract_search_results(self, soup, limit):
+        """解析搜索结果页面"""
+        videos = []
+        seen = set()
+        
+        # 搜索结果在 li 元素中，链接格式为 /show/xxxx.html
+        items = soup.find_all("li")
+        for item in items:
+            if len(videos) >= limit:
+                break
+            
+            # 找到详情链接 (/show/xxxx.html 格式)
+            link = item.find("a", href=re.compile(r"/show/\d+\.html"))
+            if not link:
+                continue
+            
+            href = link.get("href", "")
+            vid = self._normalize_id(href, keep_ext=False)
+            if not vid or vid in seen:
+                continue
+            seen.add(vid)
+            
+            # 获取标题 - 优先从 h2 > a 获取
+            title = ""
+            h2_tag = item.find("h2")
+            if h2_tag:
+                title_link = h2_tag.find("a")
+                if title_link:
+                    title = title_link.get("title") or title_link.get_text(strip=True)
+            if not title:
+                title = vid
+            # 清理标题中的 font 标签
+            title = re.sub(r'<[^>]+>', '', title)
+            
+            # 获取封面
+            img = item.find("img")
+            cover = ""
+            if img:
+                cover = img.get("data-src") or img.get("src") or ""
+                if cover.startswith("/"):
+                    cover = self._ensure_full_url(cover)
+            
+            # 获取描述
+            desc = ""
+            p_tag = item.find("p")
+            if p_tag:
+                desc = p_tag.get_text(strip=True)
+            
+            # 获取集数信息
+            item_text = item.get_text(" ", strip=True)
+            episodes = self._parse_int(self._search_text(item_text, r"更新至\s*(\d+)集"))
+            if episodes is None:
+                episodes = self._parse_int(self._search_text(item_text, r"(\d+)集全"))
+            
+            # 状态（全集/更新中）
+            status = None
+            if "全集" in item_text:
+                status = "全集"
+            elif "更新至" in item_text:
+                status = "更新中"
+            
+            videos.append({
+                "id": self._encode_id(self._normalize_id(href, keep_ext=True)),
+                "title": title,
+                "cover": cover,
+                "description": desc,
+                "rating": 0.0,
+                "status": status,
+                "episodes": episodes,
+                "source": self.source_id,
+                "detailUrl": self._ensure_full_url(href),
+            })
+        
+        # 如果 li 解析没结果，回退到通用解析
+        if not videos:
+            videos = self._extract_video_cards(soup, limit)
+        
         return videos
 
     def _extract_media_url(self, html):

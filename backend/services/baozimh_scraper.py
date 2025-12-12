@@ -466,9 +466,11 @@ class BaozimhScraper(BaseScraper):
                     if not title or title in ['收藏', '目录', '上一话', '下一话']:
                         continue
                     
-                    # 提取chapter_slot作为章节ID
+                    # 提取完整comic_id（包含后缀如_rjogsq）和chapter_slot
+                    comic_match = re.search(r'comic_id=([^&]+)', href)
                     slot_match = re.search(r'chapter_slot=(\d+)', href)
-                    if slot_match:
+                    if comic_match and slot_match:
+                        full_comic_id = comic_match.group(1)  # 完整comic_id
                         slot = slot_match.group(1)
                         
                         # 避免重复
@@ -476,8 +478,8 @@ class BaozimhScraper(BaseScraper):
                             continue
                         seen_slots.add(slot)
                         
-                        # 构建章节ID: comic_id_slot
-                        chapter_id = f"{comic_id}_{slot}"
+                        # 章节ID使用完整comic_id: full_comic_id_slot
+                        chapter_id = f"{full_comic_id}_{slot}"
                         
                         chapters.append({
                             'id': chapter_id,
@@ -511,53 +513,138 @@ class BaozimhScraper(BaseScraper):
             
             comic_id, slot = parts
             
-            # 使用API或直接请求章节页面
-            url = f'{self.base_url}/user/page_direct?comic_id={comic_id}&section_slot=0&chapter_slot={slot}'
-            logger.info(f"请求章节图片: {url}")
+            # 优先使用twbzmg.com的章节页面（图片直接在HTML中）
+            # URL格式: https://www.twbzmg.com/comic/chapter/{comic_id}/0_{slot}.html
+            twbzmg_url = f'https://www.twbzmg.com/comic/chapter/{comic_id}/0_{slot}.html'
+            logger.info(f"请求章节图片(twbzmg): {twbzmg_url}")
             
-            response = self._make_request(url)
-            if not response:
-                return {'images': [], 'total': 0}
+            # 更新Referer为twbzmg.com
+            original_referer = self.session.headers.get('Referer', '')
+            self.session.headers.update({'Referer': 'https://www.twbzmg.com/'})
+            
+            try:
+                response = self._make_request(twbzmg_url)
+            finally:
+                # 恢复原始Referer
+                if original_referer:
+                    self.session.headers.update({'Referer': original_referer})
+            
+            if not response or response.status_code != 200:
+                # 备用: baozimh的page_direct页面
+                url = f'{self.base_url}/user/page_direct?comic_id={comic_id}&section_slot=0&chapter_slot={slot}'
+                logger.info(f"尝试备用URL(baozimh): {url}")
+                response = self._make_request(url)
+                if not response:
+                    return {'images': [], 'total': 0}
+            
+            logger.info(f"响应状态码: {response.status_code}")
+            logger.info(f"响应内容长度: {len(response.text)}")
             
             soup = BeautifulSoup(response.text, 'html.parser')
             images = []
+            seen_urls = set()
             
-            # 查找图片 - 尝试多种选择器
-            img_elems = soup.select('.comic-contain img') or \
-                       soup.select('.comic-page img') or \
-                       soup.select('img[src*="static"]') or \
-                       soup.select('img')
+            # 方法1: 查找所有 img 标签，优先使用 src，其次 data-src
+            img_elements = soup.find_all('img')
+            logger.info(f"找到 {len(img_elements)} 个 img 标签")
             
-            logger.info(f"找到 {len(img_elems)} 个图片元素")
-            
-            for idx, img in enumerate(img_elems):
-                src = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '')
+            for idx, img in enumerate(img_elements):
+                # 获取所有可能的图片URL属性
+                src = img.get('src', '')
+                data_src = img.get('data-src', '')
+                data_original = img.get('data-original', '')
+                
+                # 优先使用 src（浏览器已验证可用），如果为空则使用 data_src
+                img_url = src or data_src or data_original
+                
+                if not img_url:
+                    continue
                 
                 # 过滤非漫画图片
-                if not src:
+                img_url_lower = img_url.lower()
+                if any(keyword in img_url_lower for keyword in ['logo', 'icon', 'ad', 'advertisement', 'avatar']):
                     continue
-                if 'logo' in src.lower() or 'icon' in src.lower():
-                    continue
-                if 'advertisement' in src.lower() or 'ad' in src.lower():
+                
+                # 只保留包含 baozicdn 的图片（漫画图片）
+                if 'baozicdn' not in img_url:
                     continue
                 
                 # 确保是完整URL
-                if src.startswith('//'):
-                    src = 'https:' + src
-                elif src.startswith('/'):
-                    src = urljoin(self.base_url, src)
+                if img_url.startswith('//'):
+                    img_url = 'https:' + img_url
+                elif img_url.startswith('/'):
+                    img_url = urljoin(twbzmg_url, img_url)
+                
+                # 不强制转换 URL，直接使用 src 中的 URL（浏览器已验证可用）
+                # 如果 src 是转换后的地址（-rsa1-usla），就使用它
+                # 如果 src 是原始地址（s1.baozicdn.com），也使用它
+                # 这样可以让不同网络环境使用最适合的 CDN
+                final_url = img_url
+                
+                # 去重
+                if final_url in seen_urls:
+                    continue
+                seen_urls.add(final_url)
                 
                 images.append({
-                    'index': idx,
-                    'url': src,
+                    'url': final_url,
+                    'src': src,
+                    'data_src': data_src,
+                })
+            
+            # 方法2: 查找 amp-img 标签（AMP格式）
+            amp_imgs = soup.find_all('amp-img')
+            logger.info(f"找到 {len(amp_imgs)} 个 amp-img 标签")
+            
+            for amp_img in amp_imgs:
+                src = amp_img.get('src', '')
+                data_src = amp_img.get('data-src', '')
+                img_url = src or data_src
+                
+                if not img_url or 'baozicdn' not in img_url:
+                    continue
+                
+                # 确保是完整URL
+                if img_url.startswith('//'):
+                    img_url = 'https:' + img_url
+                elif img_url.startswith('/'):
+                    img_url = urljoin(twbzmg_url, img_url)
+                
+                # 不强制转换 URL，直接使用 src 中的 URL
+                final_url = img_url
+                
+                # 去重
+                if final_url in seen_urls:
+                    continue
+                seen_urls.add(final_url)
+                
+                images.append({
+                    'url': final_url,
+                    'src': src,
+                    'data_src': data_src,
+                })
+            
+            # 按页码排序（如果URL中包含页码信息）
+            def extract_page_number(url):
+                match = re.search(r'/(\d+)\.jpg', url)
+                return int(match.group(1)) if match else 9999
+            
+            images.sort(key=lambda x: extract_page_number(x['url']))
+            
+            # 重新编号并格式化输出
+            result_images = []
+            for idx, img in enumerate(images, 1):
+                result_images.append({
+                    'page': idx,
+                    'url': img['url'],
                     'width': 0,
                     'height': 0,
                 })
             
-            logger.info(f"获取到 {len(images)} 张图片")
+            logger.info(f"获取到 {len(result_images)} 张图片")
             return {
-                'images': images,
-                'total': len(images)
+                'images': result_images,
+                'total': len(result_images)
             }
         except Exception as e:
             logger.error(f"获取章节图片失败: {e}", exc_info=True)
