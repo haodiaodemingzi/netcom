@@ -12,6 +12,7 @@ const apiClient = axios.create({
 // 请求拦截器
 apiClient.interceptors.request.use(
   (config) => {
+    // 代理在App端通过原生模块处理，不传递给后端
     return config;
   },
   (error) => {

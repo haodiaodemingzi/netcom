@@ -6,11 +6,14 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode as atob, encode as btoa } from 'base-64';
+import { setNativeProxy, clearNativeProxy, testNativeProxy, isNativeProxyAvailable } from './nativeProxyModule';
 
 const SUBSCRIPTION_KEY = '@proxy_subscription_url';
 const NODES_KEY = '@proxy_nodes';
 const SELECTED_NODE_KEY = '@proxy_selected_node';
 const PROXY_ENABLED_KEY = '@proxy_enabled';
+const MANUAL_PROXY_KEY = '@proxy_manual_config';
+const PROXY_MODE_KEY = '@proxy_mode'; // 'manual' | 'subscription' | 'off'
 
 class ProxyApi {
   constructor() {
@@ -18,6 +21,14 @@ class ProxyApi {
     this.nodes = [];
     this.selectedNode = null;
     this.proxyEnabled = false;
+    this.proxyMode = 'off'; // 'manual' | 'subscription' | 'off'
+    this.manualProxy = {
+      type: 'http', // 'http' | 'https' | 'socks5'
+      host: '',
+      port: '',
+      username: '',
+      password: '',
+    };
     this.init();
   }
 
@@ -28,6 +39,8 @@ class ProxyApi {
       const nodesJson = await AsyncStorage.getItem(NODES_KEY);
       const selectedJson = await AsyncStorage.getItem(SELECTED_NODE_KEY);
       const enabled = await AsyncStorage.getItem(PROXY_ENABLED_KEY);
+      const manualJson = await AsyncStorage.getItem(MANUAL_PROXY_KEY);
+      const mode = await AsyncStorage.getItem(PROXY_MODE_KEY);
       
       if (url) {
         this.subscriptionUrl = url;
@@ -41,9 +54,41 @@ class ProxyApi {
         this.selectedNode = JSON.parse(selectedJson);
       }
       
+      if (manualJson) {
+        this.manualProxy = JSON.parse(manualJson);
+      }
+      
+      this.proxyMode = mode || 'off';
       this.proxyEnabled = enabled === 'true';
+      
+      // 如果启用了代理，同步设置原生代理
+      if (this.proxyEnabled && this.proxyMode !== 'off') {
+        this._syncNativeProxy();
+      }
     } catch (error) {
       console.error('初始化代理配置失败:', error);
+    }
+  }
+
+  /**
+   * 同步代理配置到原生模块
+   */
+  async _syncNativeProxy() {
+    if (!isNativeProxyAvailable()) {
+      return;
+    }
+    
+    const config = this.getProxyConfig();
+    if (config && config.host && config.port) {
+      await setNativeProxy({
+        type: config.type,
+        host: config.host,
+        port: parseInt(config.port),
+        username: config.username,
+        password: config.password,
+      });
+    } else {
+      await clearNativeProxy();
     }
   }
 
@@ -374,17 +419,170 @@ class ProxyApi {
    * 注意: React Native需要配置原生代理或使用VPN
    */
   getProxyConfig() {
-    if (!this.proxyEnabled || !this.selectedNode) {
+    if (!this.proxyEnabled) {
       return null;
     }
 
-    // React Native中需要在系统层面配置代理
-    // 这里返回配置信息供参考
+    // 手动代理模式
+    if (this.proxyMode === 'manual' && this.manualProxy.host) {
+      return {
+        type: this.manualProxy.type,
+        host: this.manualProxy.host,
+        port: this.manualProxy.port,
+        username: this.manualProxy.username,
+        password: this.manualProxy.password,
+      };
+    }
+
+    // 订阅节点模式
+    if (this.proxyMode === 'subscription' && this.selectedNode) {
+      return {
+        type: this.selectedNode.protocol,
+        host: this.selectedNode.server,
+        port: this.selectedNode.port,
+        password: this.selectedNode.password,
+      };
+    }
+
+    return null;
+  }
+
+  // ==================== 手动代理配置 ====================
+
+  /**
+   * 获取手动代理配置
+   * @returns {Object}
+   */
+  getManualProxy() {
+    return this.manualProxy;
+  }
+
+  /**
+   * 保存手动代理配置
+   * @param {Object} config - 代理配置 {type, host, port, username, password}
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async saveManualProxy(config) {
+    try {
+      this.manualProxy = {
+        type: config.type || 'http',
+        host: config.host || '',
+        port: config.port || '',
+        username: config.username || '',
+        password: config.password || '',
+      };
+      
+      await AsyncStorage.setItem(MANUAL_PROXY_KEY, JSON.stringify(this.manualProxy));
+      
+      // 如果当前是手动模式，同步到原生模块
+      if (this.proxyMode === 'manual') {
+        await this._syncNativeProxy();
+      }
+      
+      return {
+        success: true,
+        message: '代理配置已保存',
+      };
+    } catch (error) {
+      console.error('保存代理配置失败:', error);
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  /**
+   * 获取代理模式
+   * @returns {string} 'manual' | 'subscription' | 'off'
+   */
+  getProxyMode() {
+    return this.proxyMode;
+  }
+
+  /**
+   * 设置代理模式
+   * @param {string} mode - 'manual' | 'subscription' | 'off'
+   */
+  async setProxyMode(mode) {
+    this.proxyMode = mode;
+    this.proxyEnabled = mode !== 'off';
+    
+    await AsyncStorage.setItem(PROXY_MODE_KEY, mode);
+    await AsyncStorage.setItem(PROXY_ENABLED_KEY, this.proxyEnabled.toString());
+    
+    // 同步原生代理配置
+    if (mode === 'off') {
+      await clearNativeProxy();
+    } else {
+      await this._syncNativeProxy();
+    }
+  }
+
+  /**
+   * 获取代理URL字符串（用于显示或传递给后端）
+   * @returns {string|null}
+   */
+  getProxyUrl() {
+    const config = this.getProxyConfig();
+    if (!config || !config.host || !config.port) {
+      return null;
+    }
+
+    let auth = '';
+    if (config.username && config.password) {
+      auth = `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@`;
+    }
+
+    // 格式: http://user:pass@host:port 或 socks5://host:port
+    return `${config.type}://${auth}${config.host}:${config.port}`;
+  }
+
+  /**
+   * 测试代理连接
+   * @param {Object} config - 可选，不传则使用当前配置
+   * @returns {Promise<{success: boolean, message: string, latency: number}>}
+   */
+  async testProxy(config = null) {
+    const proxyConfig = config || this.getProxyConfig();
+    
+    if (!proxyConfig || !proxyConfig.host || !proxyConfig.port) {
+      return {
+        success: false,
+        message: '代理配置不完整',
+        latency: -1,
+      };
+    }
+
+    // 使用原生模块测试（代理完全在App端处理）
+    if (isNativeProxyAvailable()) {
+      try {
+        // 先设置原生代理
+        await setNativeProxy({
+          type: proxyConfig.type,
+          host: proxyConfig.host,
+          port: parseInt(proxyConfig.port),
+          username: proxyConfig.username,
+          password: proxyConfig.password,
+        });
+        
+        // 使用原生模块测试
+        const result = await testNativeProxy('https://www.google.com');
+        return result;
+      } catch (error) {
+        return {
+          success: false,
+          message: `测试失败: ${error.message}`,
+          latency: -1,
+        };
+      }
+    }
+
+    // 原生模块不可用，提示用户重新构建APK
     return {
-      type: this.selectedNode.protocol,
-      host: this.selectedNode.server,
-      port: this.selectedNode.port,
-      password: this.selectedNode.password,
+      success: false,
+      message: '原生代理模块不可用，请重新构建APK后使用',
+      latency: -1,
     };
   }
 }
