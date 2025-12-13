@@ -550,29 +550,28 @@ class BaozimhScraper(BaseScraper):
             images = []
             seen_urls = set()
             
-            # 方法1: 查找所有 img 标签，优先使用 src，其次 data-src
-            img_elements = soup.find_all('img')
-            logger.info(f"找到 {len(img_elements)} 个 img 标签")
+            # 辅助函数：检查是否为漫画图片URL
+            def is_comic_image_url(url):
+                """检查URL是否为漫画图片（支持多种CDN格式）"""
+                if not url:
+                    return False
+                url_lower = url.lower()
+                # 支持 bzcdn.net（如 s2-rsa1-usla.bzcdn.net）和 baozicdn.com
+                is_baozi_cdn = 'bzcdn' in url_lower or 'baozicdn' in url_lower
+                # 检查是否在 scomic 路径下（漫画内容）
+                is_comic_path = 'scomic' in url_lower or '/comic/' in url_lower
+                return is_baozi_cdn and is_comic_path
             
-            for idx, img in enumerate(img_elements):
-                # 获取所有可能的图片URL属性
-                src = img.get('src', '')
-                data_src = img.get('data-src', '')
-                data_original = img.get('data-original', '')
+            # 方法1: 查找所有 amp-img 标签（AMP格式，twbzmg.com主要使用这种）
+            amp_imgs = soup.find_all('amp-img')
+            logger.info(f"找到 {len(amp_imgs)} 个 amp-img 标签")
+            
+            for amp_img in amp_imgs:
+                src = amp_img.get('src', '')
+                data_src = amp_img.get('data-src', '')
+                img_url = src or data_src
                 
-                # 优先使用 src（浏览器已验证可用），如果为空则使用 data_src
-                img_url = src or data_src or data_original
-                
-                if not img_url:
-                    continue
-                
-                # 过滤非漫画图片
-                img_url_lower = img_url.lower()
-                if any(keyword in img_url_lower for keyword in ['logo', 'icon', 'ad', 'advertisement', 'avatar']):
-                    continue
-                
-                # 只保留包含 baozicdn 的图片（漫画图片）
-                if 'baozicdn' not in img_url:
+                if not is_comic_image_url(img_url):
                     continue
                 
                 # 确保是完整URL
@@ -581,10 +580,6 @@ class BaozimhScraper(BaseScraper):
                 elif img_url.startswith('/'):
                     img_url = urljoin(twbzmg_url, img_url)
                 
-                # 不强制转换 URL，直接使用 src 中的 URL（浏览器已验证可用）
-                # 如果 src 是转换后的地址（-rsa1-usla），就使用它
-                # 如果 src 是原始地址（s1.baozicdn.com），也使用它
-                # 这样可以让不同网络环境使用最适合的 CDN
                 final_url = img_url
                 
                 # 去重
@@ -598,16 +593,20 @@ class BaozimhScraper(BaseScraper):
                     'data_src': data_src,
                 })
             
-            # 方法2: 查找 amp-img 标签（AMP格式）
-            amp_imgs = soup.find_all('amp-img')
-            logger.info(f"找到 {len(amp_imgs)} 个 amp-img 标签")
+            # 方法2: 查找所有 img 标签，优先使用 src，其次 data-src
+            img_elements = soup.find_all('img')
+            logger.info(f"找到 {len(img_elements)} 个 img 标签")
             
-            for amp_img in amp_imgs:
-                src = amp_img.get('src', '')
-                data_src = amp_img.get('data-src', '')
-                img_url = src or data_src
+            for idx, img in enumerate(img_elements):
+                # 获取所有可能的图片URL属性
+                src = img.get('src', '')
+                data_src = img.get('data-src', '')
+                data_original = img.get('data-original', '')
                 
-                if not img_url or 'baozicdn' not in img_url:
+                # 优先使用 src（浏览器已验证可用），如果为空则使用 data_src
+                img_url = src or data_src or data_original
+                
+                if not is_comic_image_url(img_url):
                     continue
                 
                 # 确保是完整URL
@@ -616,7 +615,6 @@ class BaozimhScraper(BaseScraper):
                 elif img_url.startswith('/'):
                     img_url = urljoin(twbzmg_url, img_url)
                 
-                # 不强制转换 URL，直接使用 src 中的 URL
                 final_url = img_url
                 
                 # 去重
