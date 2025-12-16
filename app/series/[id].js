@@ -10,9 +10,11 @@ import {
   Alert,
   Image,
   ScrollView,
-  Dimensions,
   Animated,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
 } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import eventBus, { EVENTS } from '../../services/eventBus';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -23,11 +25,10 @@ import EpisodeCard from '../../components/EpisodeCard';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 const SeriesDetailScreen = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [series, setSeries] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,8 +37,17 @@ const SeriesDetailScreen = () => {
   const [showPlayer, setShowPlayer] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false); // 视频加载状态
   const [loadingEpisodeId, setLoadingEpisodeId] = useState(null); // 正在加载的剧集ID
+  const progressTrackWidthRef = useRef(0);
   const [downloadState, setDownloadState] = useState(null);
   const [preparingDownloads, setPreparingDownloads] = useState(new Set());
+  const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [videoFitMode, setVideoFitMode] = useState('contain'); // contain, cover, fill
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const controlsTimeoutRef = useRef(null);
   
   // 多选模式状态
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -121,16 +131,21 @@ const SeriesDetailScreen = () => {
     const interval = setInterval(() => {
       try {
         const playing = player.playing;
-        const currentTime = player.currentTime || 0;
-        const duration = player.duration || 0;
+        const time = player.currentTime || 0;
+        const dur = player.duration || 0;
         
-        if (playing && currentTime > 0) {
-          console.log('播放中 - 当前时间:', currentTime, '总时长:', duration);
+        setIsPlaying(playing);
+        setCurrentTime(time);
+        setDuration(dur);
+        
+        if ((playing && time > 0) || dur > 0) {
+          setIsLoadingVideo(false);
+          setLoadingEpisodeId(null);
         }
       } catch (error) {
         console.error('获取播放器状态失败:', error);
       }
-    }, 2000); // 每2秒检查一次
+    }, 500); // 每500ms检查一次
     
     return () => clearInterval(interval);
   }, [player]);
@@ -139,6 +154,28 @@ const SeriesDetailScreen = () => {
     loadData();
     checkFavorite();
   }, [id]);
+
+  useEffect(() => {
+    if (showControls && player && player.playing) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 4000);
+    }
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [showControls, player]);
+
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
 
   // 检查收藏状态
   const checkFavorite = async () => {
@@ -206,36 +243,21 @@ const SeriesDetailScreen = () => {
       console.log('=== 开始加载剧集 ===');
       console.log('剧集ID:', episode.id);
       console.log('剧集信息:', episode);
-      
-      // 设置加载状态
       setIsLoadingVideo(true);
       setLoadingEpisodeId(episode.id);
-      
-      // 加载剧集详情获取视频URL
       console.log('正在调用后端API获取剧集详情...');
       console.log('API路径:', `/videos/episodes/${episode.id}?source=thanju`);
-      
       const result = await getEpisodeDetail(episode.id);
       console.log('=== 后端API响应 ===');
       console.log('响应结果:', JSON.stringify(result, null, 2));
-      
       if (result.success && result.data) {
         console.log('=== 剧集数据解析 ===');
         console.log('剧集数据:', result.data);
         console.log('视频URL (原始):', result.data.videoUrl);
-        console.log('视频URL类型:', typeof result.data.videoUrl);
-        console.log('视频URL是否为空:', !result.data.videoUrl);
-        console.log('视频URL是否为null:', result.data.videoUrl === null);
         console.log('播放页面URL:', result.data.playUrl);
-        
         if (result.data.videoUrl) {
           console.log('=== 设置视频源 ===');
-          console.log('原始视频URL:', result.data.videoUrl);
-          
-          // 先设置播放的剧集信息
           setPlayingEpisode(result.data);
-          
-          // 使用统一的视频播放服务获取播放URL
           try {
             const currentSource = getCurrentVideoSource();
             const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
@@ -243,16 +265,13 @@ const SeriesDetailScreen = () => {
               result.data,
               currentSource || 'thanju'
             );
-            
             console.log('=== 视频播放URL信息 ===');
             console.log('最终URL:', playUrlInfo.url);
             console.log('是否本地:', playUrlInfo.isLocal);
             console.log('视频类型:', playUrlInfo.videoType);
-            
             setVideoSource(playUrlInfo.url);
-            
-            // 显示播放器
             setShowPlayer(true);
+            setShowControls(true);
             console.log('播放器已显示，等待视频加载...');
           } catch (error) {
             console.error('获取视频播放URL失败:', error);
@@ -293,18 +312,134 @@ const SeriesDetailScreen = () => {
   };
 
   const handleClosePlayer = () => {
+    if (isFullscreen) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
     setShowPlayer(false);
     setPlayingEpisode(null);
     setVideoSource('');
-    setIsLoadingVideo(false);
-    setLoadingEpisodeId(null);
-    if (player) {
-      try {
+    setIsFullscreen(false);
+  };
+
+  const handleControlsPress = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 4000);
+  };
+
+  const handlePlayPause = () => {
+    if (!player) return;
+    try {
+      if (player.playing) {
         player.pause();
-      } catch (e) {
-        console.error('停止播放失败:', e);
+        setIsPlaying(false);
+      } else {
+        player.play();
+        setIsPlaying(true);
+      }
+    } catch (e) {
+      console.error('PlayPause failed:', e);
+    }
+  };
+
+  const handleSeekForward = () => {
+    if (!player) return;
+    try {
+      player.seekBy(10);
+      setCurrentTime(Math.min((player.currentTime || 0) + 10, player.duration || 0));
+    } catch (e) {
+      console.error('SeekForward failed:', e);
+    }
+  };
+
+  const handleSeekBackward = () => {
+    if (!player) return;
+    try {
+      player.seekBy(-10);
+      setCurrentTime(Math.max((player.currentTime || 0) - 10, 0));
+    } catch (e) {
+      console.error('SeekBackward failed:', e);
+    }
+  };
+
+  const handlePlaybackRate = () => {
+    if (!player) return;
+    const rates = [0.5, 1, 1.5, 2];
+    const currentIndex = rates.indexOf(playbackRate);
+    const nextIndex = (currentIndex + 1) % rates.length;
+    const nextRate = rates[nextIndex];
+    try {
+      player.playbackRate = nextRate;
+      setPlaybackRate(nextRate);
+    } catch (e) {
+      console.error('PlaybackRate failed:', e);
+    }
+  };
+
+  const handleFullscreen = async () => {
+    const nextFullscreen = !isFullscreen;
+    if (nextFullscreen) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT).catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+    setIsFullscreen(nextFullscreen);
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 4000);
+  };
+
+  const handleVideoFitMode = () => {
+    const modes = ['contain', 'cover', 'fill'];
+    const currentIndex = modes.indexOf(videoFitMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setVideoFitMode(modes[nextIndex]);
+  };
+
+  const getVideoFitModeName = () => {
+    const modeNames = { contain: '适应', cover: '填充', fill: '拉伸' };
+    return modeNames[videoFitMode] || '适应';
+  };
+
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '00:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleSeekPress = (event) => {
+    if (!player) return;
+    const width = progressTrackWidthRef.current || 0;
+    const locationX = event.nativeEvent.locationX || 0;
+    const dur = player.duration || 0;
+    console.log('=== Seek Press ===');
+    console.log('width:', width, 'locationX:', locationX, 'duration:', dur);
+    if (width <= 0 || dur <= 0) return;
+    const ratio = Math.min(Math.max(locationX / width, 0), 1);
+    const nextTime = dur * ratio;
+    console.log('ratio:', ratio, 'nextTime:', nextTime);
+    try {
+      player.seekBy(nextTime - (player.currentTime || 0));
+      setCurrentTime(nextTime);
+    } catch (e) {
+      console.error('Seek failed:', e);
+      try {
+        player.currentTime = nextTime;
+        setCurrentTime(nextTime);
+      } catch (e2) {
+        console.error('Seek fallback failed:', e2);
       }
     }
+    setShowControls(true);
   };
 
   // 获取集数下载状态
@@ -600,57 +735,139 @@ const SeriesDetailScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, isFullscreen && styles.fullscreenContainer]} edges={isFullscreen ? [] : ['top']}>
+      <StatusBar barStyle="dark-content" hidden={isFullscreen} />
       
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButton}>← 返回</Text>
-        </TouchableOpacity>
-      </View>
+      {!isFullscreen && (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.backButton}>← 返回</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* 播放器区域 - 默认显示 */}
-        <View style={styles.coverContainer}>
+        <View
+          style={[
+            styles.coverContainer,
+            isFullscreen && styles.fullscreenContainer,
+            { width: screenWidth, height: isFullscreen ? screenHeight : 300 }
+          ]}
+        >
           {showPlayer && playingEpisode && videoSource && player ? (
             // 正在播放
-            <View style={styles.playerWrapper}>
-              <View style={styles.playerHeader}>
-                <Text style={styles.playerTitle}>{playingEpisode.title}</Text>
-                <TouchableOpacity onPress={handleClosePlayer} style={styles.closeButton}>
-                  <Text style={styles.closeButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <VideoView
-                player={player}
-                style={styles.videoPlayer}
-                nativeControls={true}
-                contentFit="contain"
-                onLoadStart={() => {
-                  console.log('=== 视频开始加载 ===');
-                }}
-                onLoad={(event) => {
-                  console.log('=== 视频加载完成 ===');
-                  // 视频加载完成后自动播放并关闭加载状态
-                  setIsLoadingVideo(false);
-                  setLoadingEpisodeId(null);
-                  if (player && !player.playing) {
-                    try {
-                      player.play();
-                      console.log('已自动开始播放');
-                    } catch (e) {
-                      console.error('自动播放失败:', e);
-                    }
+            <View
+                style={[
+                  styles.videoContainer,
+                  {
+                    width: screenWidth,
+                    height: isFullscreen ? screenHeight : 300,
                   }
-                }}
-                onError={(error) => {
-                  console.error('=== 视频加载错误 ===');
-                  setIsLoadingVideo(false);
-                  setLoadingEpisodeId(null);
-                  Alert.alert('播放错误', '视频加载失败，请检查网络连接');
-                }}
-              />
-            </View>
+                ]}
+              >
+                {player ? (
+                  <VideoView
+                    player={player}
+                    style={StyleSheet.absoluteFill}
+                    nativeControls={false}
+                    contentFit={videoFitMode}
+                    onLoadStart={() => {
+                      console.log('=== 视频开始加载 ===');
+                      setIsLoadingVideo(true);
+                    }}
+                    onLoad={() => {
+                      console.log('=== 视频加载完成 ===');
+                      setIsLoadingVideo(false);
+                      setLoadingEpisodeId(null);
+                      if (player && !player.playing) {
+                        try {
+                          player.play();
+                          console.log('已自动开始播放');
+                        } catch (e) {
+                          console.error('自动播放失败:', e);
+                        }
+                      }
+                    }}
+                    onError={() => {
+                      console.error('=== 视频加载错误 ===');
+                      setIsLoadingVideo(false);
+                      setLoadingEpisodeId(null);
+                      Alert.alert('播放错误', '视频加载失败，请检查网络连接');
+                    }}
+                  />
+                ) : (
+                  <View style={styles.loadingVideo}>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={styles.loadingText}>正在初始化播放器...</Text>
+                  </View>
+                )}
+
+                {isLoadingVideo && (
+                  <View style={styles.loadingOverlay}>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={styles.loadingText}>正在加载视频...</Text>
+                  </View>
+                )}
+
+                <TouchableWithoutFeedback onPress={handleControlsPress}>
+                  <View style={[styles.controlsOverlay, !showControls && styles.controlsOverlayHidden]}>
+                    {showControls && (
+                      <>
+                        <View style={styles.topBar}>
+                          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                            <Text style={styles.btnText}>← 返回</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.playerTitle} numberOfLines={1}>{playingEpisode?.title || ''}</Text>
+                          <TouchableOpacity style={styles.closeButton} onPress={handleClosePlayer}>
+                            <Text style={styles.closeButtonText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.centerArea}>
+                          <TouchableOpacity style={styles.seekBtn} onPress={handleSeekBackward}>
+                            <Text style={styles.seekBtnText}>⏪</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
+                            <Text style={styles.playBtnText}>{isPlaying ? '⏸' : '▶'}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.seekBtn} onPress={handleSeekForward}>
+                            <Text style={styles.seekBtnText}>⏩</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.bottomBar}>
+                          <View style={styles.progressRow}>
+                            <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+                            <TouchableOpacity
+                              style={styles.progressTrack}
+                              onPress={handleSeekPress}
+                              onLayout={(e) => {
+                                progressTrackWidthRef.current = e.nativeEvent.layout.width;
+                              }}
+                              activeOpacity={0.8}
+                            >
+                              <View style={[styles.progressFill, { width: `${duration > 0 ? (currentTime / duration * 100) : 0}%` }]} />
+                            </TouchableOpacity>
+                            <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                          </View>
+                          <View style={styles.buttonRow}>
+                            <TouchableOpacity style={styles.actionBtn} onPress={handlePlaybackRate}>
+                              <Text style={styles.btnText}>{playbackRate}x</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
+                              <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
+                              <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
           ) : (
             // 播放器预览界面（显示封面和播放按钮）
             <View style={styles.playerPreview}>
@@ -888,6 +1105,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  fullscreenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    backgroundColor: '#000',
   },
   header: {
     paddingHorizontal: 16,
@@ -1262,6 +1488,9 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#000',
   },
+  videoContainer: {
+    backgroundColor: '#000',
+  },
   playerContainer: {
     backgroundColor: '#000',
     paddingTop: 8,
@@ -1296,6 +1525,106 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#000',
+  },
+  loadingVideo: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  controlsOverlayHidden: {
+    backgroundColor: 'transparent',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  centerArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  seekBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seekBtnText: {
+    fontSize: 20,
+    color: '#fff',
+  },
+  bottomBar: {
+    gap: 10,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 20,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
+    justifyContent: 'center',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#6200EE',
+    borderRadius: 2,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  playBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#6200EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playBtnText: {
+    fontSize: 28,
+    color: '#fff',
+  },
+  actionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#fff',
   },
 });
 

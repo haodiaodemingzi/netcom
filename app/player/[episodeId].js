@@ -11,6 +11,8 @@ import {
   Pressable,
   useWindowDimensions,
 } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -33,6 +35,7 @@ const PlayerScreen = () => {
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [videoFitMode, setVideoFitMode] = useState('contain'); // contain, cover, fill
   const controlsTimeoutRef = useRef(null);
+  const pinchScaleRef = useRef(1);
 
   // 使用 expo-video 的 useVideoPlayer hook
   // 注意：useVideoPlayer需要传入source URL，如果URL变化需要重新创建player
@@ -220,8 +223,14 @@ const PlayerScreen = () => {
     Alert.alert('清晰度已切换', `已切换至${selectedQuality === 'high' ? '高' : selectedQuality === 'medium' ? '中' : '低'}清晰度`);
   };
 
-  const handleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
+  const handleFullscreen = async () => {
+    const nextFullscreen = !isFullscreen;
+    if (nextFullscreen) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT).catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+    setIsFullscreen(nextFullscreen);
   };
 
   // 切换视频缩放模式
@@ -238,6 +247,29 @@ const PlayerScreen = () => {
     const modeNames = { contain: '适应', cover: '填充', fill: '拉伸' };
     return modeNames[videoFitMode] || '适应';
   };
+
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
+
+  const pinchGesture = Gesture.Pinch()
+    .onBegin(() => {
+      pinchScaleRef.current = 1;
+    })
+    .onUpdate((event) => {
+      pinchScaleRef.current = event.scale;
+    })
+    .onEnd((event) => {
+      const scale = event.scale;
+      if (scale > 1.1) {
+        setVideoFitMode('cover');
+      } else if (scale < 0.9) {
+        setVideoFitMode('contain');
+      }
+      pinchScaleRef.current = 1;
+    });
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '00:00';
@@ -271,71 +303,73 @@ const PlayerScreen = () => {
       <StatusBar hidden={isFullscreen} barStyle="light-content" />
       
       {/* 视频播放区域 */}
-      <Pressable
-        style={[
-          styles.videoContainer,
-          {
-            width: screenWidth,
-            height: isFullscreen ? screenHeight : screenWidth * 0.5625,
-          }
-        ]}
-        onPress={handleControlsPress}
-      >
-        {/* 视频播放器 */}
-        {player ? (
-          <VideoView
-            player={player}
-            style={StyleSheet.absoluteFill}
-            nativeControls={false}
-            contentFit={videoFitMode}
-          />
-        ) : (
-          <View style={styles.loadingVideo}>
-            <Text style={{ color: '#fff' }}>正在初始化播放器...</Text>
-          </View>
-        )}
-
-        {/* 控制栏覆盖层 */}
-        {showControls && (
-          <View style={styles.controlsOverlay}>
-            {/* 顶部控制栏 */}
-            <View style={styles.topBar}>
-              <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <Text style={styles.btnText}>← 返回</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.qualityBtn} onPress={() => setShowQualityMenu(!showQualityMenu)}>
-                <Text style={styles.btnText}>{quality === 'high' ? '高清' : quality === 'medium' ? '标清' : '流畅'}</Text>
-              </TouchableOpacity>
+      <GestureDetector gesture={pinchGesture}>
+        <Pressable
+          style={[
+            styles.videoContainer,
+            {
+              width: screenWidth,
+              height: isFullscreen ? screenHeight : screenWidth * 0.5625,
+            }
+          ]}
+          onPress={handleControlsPress}
+        >
+          {/* 视频播放器 */}
+          {player ? (
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              nativeControls={false}
+              contentFit={videoFitMode}
+            />
+          ) : (
+            <View style={styles.loadingVideo}>
+              <Text style={{ color: '#fff' }}>正在初始化播放器...</Text>
             </View>
+          )}
 
-            {/* 中间播放按钮 */}
-            <View style={styles.centerArea}>
-              <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
-                <Text style={styles.playBtnText}>{player?.playing ? '⏸' : '▶'}</Text>
-              </TouchableOpacity>
-            </View>
+          {/* 控制栏覆盖层 */}
+          {showControls && (
+            <View style={styles.controlsOverlay}>
+              {/* 顶部控制栏 */}
+              <View style={styles.topBar}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                  <Text style={styles.btnText}>← 返回</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.qualityBtn} onPress={() => setShowQualityMenu(!showQualityMenu)}>
+                  <Text style={styles.btnText}>{quality === 'high' ? '高清' : quality === 'medium' ? '标清' : '流畅'}</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* 底部控制栏 */}
-            <View style={styles.bottomBar}>
-              <View style={styles.progressRow}>
-                <Text style={styles.timeText}>{formatTime(player?.currentTime || 0)}</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${player?.duration ? ((player.currentTime || 0) / player.duration * 100) : 0}%` }]} />
+              {/* 中间播放按钮 */}
+              <View style={styles.centerArea}>
+                <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
+                  <Text style={styles.playBtnText}>{player?.playing ? '⏸' : '▶'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 底部控制栏 */}
+              <View style={styles.bottomBar}>
+                <View style={styles.progressRow}>
+                  <Text style={styles.timeText}>{formatTime(player?.currentTime || 0)}</Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${player?.duration ? ((player.currentTime || 0) / player.duration * 100) : 0}%` }]} />
+                  </View>
+                  <Text style={styles.timeText}>{formatTime(player?.duration || 0)}</Text>
                 </View>
-                <Text style={styles.timeText}>{formatTime(player?.duration || 0)}</Text>
-              </View>
-              <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
-                  <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
-                  <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
+                    <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
+                    <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        )}
-      </Pressable>
+          )}
+        </Pressable>
+      </GestureDetector>
 
       {/* 全屏时隐藏信息区域 */}
       {!isFullscreen && (
