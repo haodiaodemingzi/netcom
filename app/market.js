@@ -13,12 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import SourceCard from '../components/SourceCard';
-import { getMarketSources, getMarketCategories } from '../services/marketApi';
+import { getMarketSources, getMarketCategories, activateMarket } from '../services/marketApi';
 import {
   installSource,
   uninstallSource,
   isSourceInstalled,
   getInstalledSources,
+  getActivationToken,
+  saveActivationToken,
 } from '../services/storage';
 import eventBus, { EVENTS } from '../services/eventBus';
 
@@ -32,6 +34,9 @@ const MarketScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [installedSources, setInstalledSources] = useState({});
   const [installedSourceIds, setInstalledSourceIds] = useState(new Set());
+  const [activationToken, setActivationToken] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
 
   useEffect(() => {
     loadInitialData();
@@ -46,13 +51,21 @@ const MarketScreen = () => {
   }, []);
 
   const loadInitialData = async () => {
-    await Promise.all([loadCategories(), loadInstalledSources()]);
-    await loadSources();
+    const token = await loadToken();
+    await Promise.all([loadCategories(token), loadInstalledSources()]);
+    await loadSources(token);
   };
 
-  const loadCategories = async () => {
+  const loadToken = async () => {
+    const token = await getActivationToken();
+    setActivationToken(token);
+    return token;
+  };
+
+  const loadCategories = async (tokenParam) => {
     try {
-      const result = await getMarketCategories();
+      const tokenToUse = tokenParam !== undefined ? tokenParam : activationToken;
+      const result = await getMarketCategories(tokenToUse);
       if (result.success) {
         setCategories(result.data);
       }
@@ -77,10 +90,11 @@ const MarketScreen = () => {
     }
   };
 
-  const loadSources = async () => {
+  const loadSources = async (tokenParam) => {
     setLoading(true);
     try {
-      const result = await getMarketSources(selectedCategory, searchQuery);
+      const tokenToUse = tokenParam !== undefined ? tokenParam : activationToken;
+      const result = await getMarketSources(selectedCategory, searchQuery, tokenToUse);
       if (result.success) {
         setSources(result.data);
       }
@@ -91,9 +105,35 @@ const MarketScreen = () => {
     }
   };
 
+  const handleActivate = async () => {
+    if (!codeInput.trim()) {
+      alert('请输入激活码');
+      return;
+    }
+    setActivating(true);
+    try {
+      const result = await activateMarket(codeInput.trim());
+      if (result.success) {
+        await saveActivationToken(result.token);
+        setActivationToken(result.token);
+        setCodeInput('');
+        await loadCategories(result.token);
+        await loadSources(result.token);
+        alert('激活成功');
+      } else {
+        alert(result.message || '无效的激活码');
+      }
+    } catch (error) {
+      alert('激活失败');
+    } finally {
+      setActivating(false);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSources(), loadInstalledSources()]);
+    const token = await loadToken();
+    await Promise.all([loadSources(token), loadInstalledSources(), loadCategories(token)]);
     setRefreshing(false);
   };
 
@@ -175,6 +215,31 @@ const MarketScreen = () => {
           returnKeyType="search"
         />
       </View>
+
+      {/* 激活状态/输入 */}
+      {activationToken ? (
+        <View style={styles.activatedContainer}>
+          <Text style={styles.activatedText}>已激活，全部资源可用</Text>
+        </View>
+      ) : (
+        <View style={styles.activateContainer}>
+          <TextInput
+            style={styles.activateInput}
+            placeholder="输入激活码解锁全部资源"
+            placeholderTextColor="#999"
+            value={codeInput}
+            onChangeText={setCodeInput}
+          />
+          <TouchableOpacity
+            style={styles.activateButton}
+            onPress={handleActivate}
+            activeOpacity={0.7}
+            disabled={activating}
+          >
+            <Text style={styles.activateButtonText}>{activating ? '激活中' : '激活'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 分类标签栏 */}
       <View style={styles.categoriesContainer}>
@@ -291,6 +356,36 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#999',
+  },
+  activateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  activateInput: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    marginRight: 8,
+  },
+  activateButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+  },
+  activateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

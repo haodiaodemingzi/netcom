@@ -7,6 +7,7 @@ const KEYS = {
   SEARCH_HISTORY: '@search_history',
   CURRENT_SOURCE: '@current_source',
   INSTALLED_SOURCES: '@installed_sources',
+  ACTIVATION_TOKEN: '@activation_token',
 };
 
 // 内存缓存，减少 AsyncStorage 读取次数
@@ -218,6 +219,28 @@ export const setCurrentSource = async (source) => {
   }
 };
 
+export const getActivationToken = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.ACTIVATION_TOKEN);
+    return data || '';
+  } catch (error) {
+    return '';
+  }
+};
+
+export const saveActivationToken = async (token) => {
+  try {
+    if (!token) {
+      await AsyncStorage.removeItem(KEYS.ACTIVATION_TOKEN);
+      return true;
+    }
+    await AsyncStorage.setItem(KEYS.ACTIVATION_TOKEN, token);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 // 已安装数据源相关
 export const getInstalledSources = async () => {
   try {
@@ -319,6 +342,9 @@ export const clearAllCache = async () => {
     
     // 清除当前数据源（重置为null，让应用重新选择）
     await AsyncStorage.removeItem(KEYS.CURRENT_SOURCE);
+    
+    // 清除激活令牌
+    await AsyncStorage.removeItem(KEYS.ACTIVATION_TOKEN);
     
     // 清除下载记录
     await AsyncStorage.removeItem('downloaded_chapters');

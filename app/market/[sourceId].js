@@ -16,6 +16,7 @@ import {
   installSource,
   uninstallSource,
   isSourceInstalled,
+  getActivationToken,
 } from '../../services/storage';
 
 const SourceDetailScreen = () => {
@@ -24,16 +25,28 @@ const SourceDetailScreen = () => {
   const [source, setSource] = useState(null);
   const [loading, setLoading] = useState(true);
   const [installed, setInstalled] = useState(false);
+  const [activationToken, setActivationToken] = useState('');
 
   useEffect(() => {
-    loadSourceDetail();
-    checkInstalled();
+    init();
   }, [sourceId]);
 
-  const loadSourceDetail = async () => {
+  const init = async () => {
+    const token = await loadToken();
+    await Promise.all([loadSourceDetail(token), checkInstalled()]);
+  };
+
+  const loadToken = async () => {
+    const token = await getActivationToken();
+    setActivationToken(token);
+    return token;
+  };
+
+  const loadSourceDetail = async (tokenParam) => {
     setLoading(true);
     try {
-      const result = await getSourceDetail(sourceId);
+      const tokenToUse = tokenParam !== undefined ? tokenParam : activationToken;
+      const result = await getSourceDetail(sourceId, tokenToUse);
       if (result.success) {
         setSource(result.data);
       }
