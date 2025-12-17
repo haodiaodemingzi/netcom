@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
-import { isFavorite, addFavorite, removeFavorite } from '../../services/storage';
+import { isFavorite, addFavorite, removeFavorite, addVideoHistory } from '../../services/storage';
 import EpisodeCard from '../../components/EpisodeCard';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
@@ -177,6 +177,33 @@ const SeriesDetailScreen = () => {
     };
   }, []);
 
+  const saveVideoHistoryIfNeeded = async (episode = null) => {
+    const ep = episode || playingEpisode;
+    if (!series || !series.id) return;
+    if (!ep || !ep.id) return;
+
+    const safePosition = Number.isFinite(currentTime) ? Math.floor(currentTime) : 0;
+    const safeDuration = Number.isFinite(duration) ? Math.floor(duration) : 0;
+    if (safeDuration <= 0) return;
+
+    await addVideoHistory(
+      {
+        id: series.id,
+        title: series.title,
+        cover: series.cover,
+      },
+      ep.id,
+      safePosition,
+      safeDuration
+    );
+  };
+
+  useEffect(() => {
+    return () => {
+      saveVideoHistoryIfNeeded();
+    };
+  }, [series, playingEpisode, currentTime, duration]);
+
   // 检查收藏状态
   const checkFavorite = async () => {
     const result = await isFavorite(id);
@@ -240,6 +267,7 @@ const SeriesDetailScreen = () => {
 
   const handleEpisodePress = async (episode) => {
     try {
+      await saveVideoHistoryIfNeeded();
       console.log('=== 开始加载剧集 ===');
       console.log('剧集ID:', episode.id);
       console.log('剧集信息:', episode);
@@ -312,6 +340,7 @@ const SeriesDetailScreen = () => {
   };
 
   const handleClosePlayer = () => {
+    saveVideoHistoryIfNeeded();
     if (isFullscreen) {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     }

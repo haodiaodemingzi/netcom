@@ -13,13 +13,28 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getChapterContent, saveReadingProgress } from '../../services/novelApi';
+import { addNovelHistory } from '../../services/storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const NovelReaderScreen = () => {
   const router = useRouter();
-  const { chapterId } = useLocalSearchParams();
+  const { chapterId, novelId, novelTitle, cover } = useLocalSearchParams();
   const scrollViewRef = useRef(null);
+  const lastSavedBucketRef = useRef(-1);
+  const lastOffsetRef = useRef(0);
+
+  const decodeParam = (value) => {
+    if (typeof value !== 'string') return '';
+    try {
+      return decodeURIComponent(value);
+    } catch (e) {
+      return value;
+    }
+  };
+
+  const resolvedNovelTitle = decodeParam(novelTitle);
+  const resolvedCover = decodeParam(cover);
 
   const [chapter, setChapter] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,14 +95,65 @@ const NovelReaderScreen = () => {
     const contentHeight = event.nativeEvent.contentSize.height;
     const scrollViewHeight = event.nativeEvent.layoutMeasurement.height;
 
-    // 计算阅读位置（字符位置）
-    const scrollPercentage = offsetY / (contentHeight - scrollViewHeight);
-    const position = Math.floor(chapter.content.length * scrollPercentage);
+    const safeOffsetY = Number.isFinite(offsetY) ? offsetY : 0;
+    lastOffsetRef.current = safeOffsetY;
 
-    // 每 10% 进度时保存一次
-    if (Math.floor(scrollPercentage * 10) % 1 === 0) {
-      saveReadingProgress(chapter.novelId, chapterId, position);
+    if (!chapter || !chapter.novelId || !chapterId) {
+      return;
     }
+
+    const denominator = contentHeight - scrollViewHeight;
+    if (!Number.isFinite(denominator) || denominator <= 0) {
+      return;
+    }
+
+    // 计算阅读位置（字符位置）
+    const scrollPercentage = safeOffsetY / denominator;
+    const safePercentage = Math.min(Math.max(scrollPercentage, 0), 1);
+    const contentLength = typeof chapter.content === 'string' ? chapter.content.length : 0;
+    const position = Math.floor(contentLength * safePercentage);
+
+    const bucket = Math.floor(safePercentage * 10);
+    if (bucket === lastSavedBucketRef.current) {
+      return;
+    }
+    lastSavedBucketRef.current = bucket;
+
+    saveReadingProgress(chapter.novelId, chapterId, position);
+    addNovelHistory(
+      {
+        id: novelId || chapter.novelId,
+        title: resolvedNovelTitle || chapter.novelTitle || chapter.title,
+        cover: resolvedCover || chapter.cover || '',
+      },
+      chapterId,
+      safeOffsetY
+    );
+  };
+
+  const handleBackPress = () => {
+    if (!chapterId) {
+      router.back();
+      return;
+    }
+
+    const resolvedNovelId = novelId || chapter?.novelId;
+    if (!resolvedNovelId) {
+      router.back();
+      return;
+    }
+
+    addNovelHistory(
+      {
+        id: resolvedNovelId,
+        title: resolvedNovelTitle || chapter?.novelTitle || chapter?.title,
+        cover: resolvedCover || chapter?.cover || '',
+      },
+      chapterId,
+      lastOffsetRef.current
+    );
+
+    router.back();
   };
 
   const handleControlsPress = () => {
@@ -187,7 +253,7 @@ const NovelReaderScreen = () => {
         {showControls && (
           <View style={styles.controls}>
             <View style={styles.topBar}>
-              <TouchableOpacity onPress={() => router.back()}>
+              <TouchableOpacity onPress={handleBackPress}>
                 <Text style={[styles.backButton, { color: textColor }]}>← 返回</Text>
               </TouchableOpacity>
               <Text style={[styles.chapterTitle, { color: textColor }]}>

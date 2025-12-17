@@ -73,13 +73,18 @@ const ComicDetailScreen = () => {
   };
 
   const handleChapterPress = (chapter) => {
-    router.push(`/reader/${chapter.id}?comicId=${id}`);
+    if (!chapter || !chapter.id) return;
+    const safeTitle = encodeURIComponent(comic?.title || '');
+    const safeCover = encodeURIComponent(comic?.cover || '');
+    router.push(`/reader/${chapter.id}?comicId=${id}&comicTitle=${safeTitle}&cover=${safeCover}`);
   };
 
   const handleStartReading = () => {
     if (chapters.length > 0) {
       const firstChapter = chapters[0];
-      router.push(`/reader/${firstChapter.id}?comicId=${id}`);
+      const safeTitle = encodeURIComponent(comic?.title || '');
+      const safeCover = encodeURIComponent(comic?.cover || '');
+      router.push(`/reader/${firstChapter.id}?comicId=${id}&comicTitle=${safeTitle}&cover=${safeCover}`);
     }
   };
 

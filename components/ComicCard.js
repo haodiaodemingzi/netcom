@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -8,13 +8,24 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
+const ComicCard = ({ comic, darkMode = false, viewMode = 'card', onPress }) => {
   const router = useRouter();
   const isList = viewMode === 'list';
+  const [imageError, setImageError] = useState(false);
+
+  if (!comic || !comic.id) {
+    return null;
+  }
 
   const handlePress = () => {
+    if (typeof onPress === 'function') {
+      onPress(comic);
+      return;
+    }
     router.push(`/comic/${comic.id}`);
   };
+
+  const hasCover = !imageError && !!comic.cover;
 
   return (
     <TouchableOpacity 
@@ -22,11 +33,18 @@ const ComicCard = ({ comic, darkMode = false, viewMode = 'card' }) => {
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      <Image 
-        source={{ uri: comic.cover }} 
-        style={[styles.cover, isList && styles.coverList]}
-        resizeMode="cover"
-      />
+      {hasCover ? (
+        <Image 
+          source={{ uri: comic.cover }} 
+          style={[styles.cover, isList && styles.coverList]}
+          resizeMode="cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <View style={[styles.cover, isList && styles.coverList, styles.coverPlaceholder]}>
+          <Text style={styles.coverPlaceholderText}>📚</Text>
+        </View>
+      )}
       <View style={[styles.info, isList && styles.infoList]}>
         <Text 
           style={[
@@ -141,6 +159,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200, // 固定封面高度
     backgroundColor: '#f0f0f0',
+  },
+  coverPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e0e0e0',
+  },
+  coverPlaceholderText: {
+    fontSize: 24,
+    color: '#666',
   },
   coverList: {
     width: 75,

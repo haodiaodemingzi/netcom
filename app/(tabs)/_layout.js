@@ -52,14 +52,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="favorite"
         options={{
-          title: '收藏',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons 
-              name="heart" 
-              size={size} 
-              color={color} 
-            />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -26,7 +26,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ReaderScreen = () => {
   const router = useRouter();
-  const { chapterId, comicId } = useLocalSearchParams();
+  const { chapterId, comicId, comicTitle, cover } = useLocalSearchParams();
   const flatListRef = useRef(null);
   const hasShownNextChapterPrompt = useRef(false);
   const isRestoringProgress = useRef(false);
@@ -49,6 +49,31 @@ const ReaderScreen = () => {
   const [allChapters, setAllChapters] = useState([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
   const [comicInfo, setComicInfo] = useState(null);
+
+  const decodeParam = useCallback((value) => {
+    if (typeof value !== 'string') return '';
+    try {
+      return decodeURIComponent(value);
+    } catch (e) {
+      return value;
+    }
+  }, []);
+
+  const resolvedComicTitle = decodeParam(comicTitle);
+  const resolvedCover = decodeParam(cover);
+
+  useEffect(() => {
+    if (!comicId) return;
+    if (!resolvedComicTitle && !resolvedCover) return;
+    setComicInfo((prev) => {
+      if (prev && prev.comicId) return prev;
+      return {
+        comicId,
+        comicTitle: resolvedComicTitle || '未知漫画',
+        cover: resolvedCover || '',
+      };
+    });
+  }, [comicId, resolvedComicTitle, resolvedCover]);
   
   // 下载状态
   const [isDownloading, setIsDownloading] = useState(false);

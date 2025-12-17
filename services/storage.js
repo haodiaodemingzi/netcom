@@ -25,6 +25,38 @@ export const getFavorites = async () => {
   }
 };
 
+export const addEbookHistory = async (book, chapterId, page, source) => {
+  try {
+    if (!book || !book.id) return false;
+    if (!chapterId) return false;
+    const history = await getHistory();
+    const existingIndex = findHistoryIndex(history, 'ebook', book.id);
+
+    const historyItem = {
+      ...book,
+      type: 'ebook',
+      source,
+      lastChapterId: chapterId,
+      lastPage: page,
+      timestamp: Date.now(),
+    };
+
+    if (existingIndex >= 0) {
+      history.splice(existingIndex, 1);
+    }
+
+    history.unshift(historyItem);
+    if (history.length > 100) {
+      history.pop();
+    }
+
+    await saveHistoryInternal(history);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 export const addFavorite = async (comic) => {
   try {
     const favorites = await getFavorites();
@@ -73,26 +105,55 @@ export const getHistory = async (forceRefresh = false) => {
     
     const data = await AsyncStorage.getItem(KEYS.HISTORY);
     const history = data ? JSON.parse(data) : [];
+    const normalized = Array.isArray(history)
+      ? history
+          .filter(Boolean)
+          .map((item) => {
+            if (!item || !item.id) return null;
+            if (item.type) return item;
+            if (item.source) {
+              return { ...item, type: 'ebook' };
+            }
+            return { ...item, type: 'comic' };
+          })
+          .filter(Boolean)
+      : [];
     
     // 更新缓存
-    historyCache = history;
+    historyCache = normalized;
     historyCacheTime = now;
     
-    return history;
+    return normalized;
   } catch (error) {
     return [];
   }
 };
 
+const findHistoryIndex = (history, type, id) => {
+  if (!Array.isArray(history) || !type || !id) return -1;
+  return history.findIndex((item) => {
+    if (!item) return false;
+    const itemType = item.type || 'comic';
+    return itemType === type && item.id === id;
+  });
+};
+
+const saveHistoryInternal = async (history) => {
+  const safeHistory = Array.isArray(history) ? history : [];
+  historyCache = safeHistory;
+  historyCacheTime = Date.now();
+  await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(safeHistory));
+};
+
 export const addHistory = async (comic, chapterId, page) => {
   try {
+    if (!comic || !comic.id) return false;
     const history = await getHistory();
-    const existingIndex = history.findIndex(
-      item => item.id === comic.id
-    );
+    const existingIndex = findHistoryIndex(history, 'comic', comic.id);
     
     const historyItem = {
       ...comic,
+      type: 'comic',
       lastChapterId: chapterId,
       lastPage: page,
       timestamp: Date.now(),
@@ -108,11 +169,70 @@ export const addHistory = async (comic, chapterId, page) => {
       history.pop();
     }
     
-    // 更新缓存
-    historyCache = history;
-    historyCacheTime = Date.now();
-    
-    await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(history));
+    await saveHistoryInternal(history);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const addVideoHistory = async (series, episodeId, positionSeconds, durationSeconds) => {
+  try {
+    if (!series || !series.id) return false;
+    if (!episodeId) return false;
+    const history = await getHistory();
+    const existingIndex = findHistoryIndex(history, 'video', series.id);
+
+    const historyItem = {
+      ...series,
+      type: 'video',
+      lastEpisodeId: episodeId,
+      lastPositionSeconds: positionSeconds,
+      lastDurationSeconds: durationSeconds,
+      timestamp: Date.now(),
+    };
+
+    if (existingIndex >= 0) {
+      history.splice(existingIndex, 1);
+    }
+
+    history.unshift(historyItem);
+    if (history.length > 100) {
+      history.pop();
+    }
+
+    await saveHistoryInternal(history);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const addNovelHistory = async (novel, chapterId, scrollOffset) => {
+  try {
+    if (!novel || !novel.id) return false;
+    if (!chapterId) return false;
+    const history = await getHistory();
+    const existingIndex = findHistoryIndex(history, 'novel', novel.id);
+
+    const historyItem = {
+      ...novel,
+      type: 'novel',
+      lastChapterId: chapterId,
+      scrollOffset,
+      timestamp: Date.now(),
+    };
+
+    if (existingIndex >= 0) {
+      history.splice(existingIndex, 1);
+    }
+
+    history.unshift(historyItem);
+    if (history.length > 100) {
+      history.pop();
+    }
+
+    await saveHistoryInternal(history);
     return true;
   } catch (error) {
     return false;
@@ -146,6 +266,7 @@ export const getSettings = async () => {
       autoLoadHD: false,
       maxConcurrentDownloads: 10,
       viewMode: 'card', // 默认卡片视图
+      showFavoriteTab: true,
     };
   } catch (error) {
     return {};

@@ -47,7 +47,11 @@ const NovelDetailScreen = () => {
   };
 
   const handleChapterPress = (chapter) => {
-    router.push(`/novel-reader/${chapter.id}`);
+    if (!chapter || !chapter.id) return;
+    const safeNovelId = novel?.id || id;
+    const safeTitle = encodeURIComponent(novel?.title || '');
+    const safeCover = encodeURIComponent(novel?.cover || '');
+    router.push(`/novel-reader/${chapter.id}?novelId=${safeNovelId}&novelTitle=${safeTitle}&cover=${safeCover}`);
   };
 
   const renderChapterCard = ({ item }) => (

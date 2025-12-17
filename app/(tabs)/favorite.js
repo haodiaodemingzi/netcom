@@ -1,52 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   StatusBar,
+  TouchableOpacity,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
 import VideoCard from '../../components/VideoCard';
-import { getFavorites, getSettings } from '../../services/storage';
+import { getFavorites } from '../../services/storage';
 
 const FavoriteScreen = () => {
   const router = useRouter();
+  const navigation = useNavigation();
   const [favorites, setFavorites] = useState([]);
-  const [viewMode, setViewMode] = useState('card');
+  const viewMode = 'list';
 
   useFocusEffect(
     React.useCallback(() => {
       loadFavorites();
-      loadViewMode();
     }, [])
   );
 
-  useEffect(() => {
-    loadViewMode();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      let handled = false;
+      const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+        if (handled) return;
+        handled = true;
+        e.preventDefault();
+        router.replace('/(tabs)/profile');
+      });
+      return unsubscribe;
+    }, [navigation, router])
+  );
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadViewMode();
-    }, 1000);
+  useFocusEffect(
+    React.useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.replace('/(tabs)/profile');
+        return true;
+      });
 
-    return () => clearInterval(interval);
-  }, []);
+      return () => subscription.remove();
+    }, [router])
+  );
 
   const loadFavorites = async () => {
     const data = await getFavorites();
     setFavorites(data || []);
-  };
-
-  const loadViewMode = async () => {
-    const settings = await getSettings();
-    if (settings?.viewMode) {
-      setViewMode(settings.viewMode);
-    }
   };
 
   const handlePress = (item) => {
@@ -62,13 +69,17 @@ const FavoriteScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>我的收藏</Text>
-        <Text style={styles.headerSubtitle}>
-          共 {favorites.length} 个
-        </Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/profile')} style={styles.backButton}>
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>我的收藏</Text>
+          <Text style={styles.headerSubtitle}>
+            共 {favorites.length} 个
+          </Text>
+        </View>
       </View>
       <FlatList
-        key={viewMode}
         data={favorites}
         renderItem={({ item }) => {
           if (!item) return null;
@@ -89,7 +100,7 @@ const FavoriteScreen = () => {
           );
         }}
         keyExtractor={(item, index) => `${item?.id || 'unknown'}-${index}`}
-        numColumns={viewMode === 'list' ? 1 : 3}
+        numColumns={1}
         contentContainerStyle={[
           styles.listContent,
           viewMode === 'list' && styles.listContentList
@@ -113,10 +124,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#000',
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,

@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getChapterContent, getEbookChapters } from '../../services/api';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { addHistory } from '../../services/storage';
+import { addEbookHistory } from '../../services/storage';
 
 const EbookReaderScreen = () => {
   const router = useRouter();
@@ -174,7 +174,7 @@ const EbookReaderScreen = () => {
     };
 
     try {
-      await addHistory(meta, chapterToSave, pageToSave);
+      await addEbookHistory(meta, chapterToSave, pageToSave, source);
       lastSavedRef.current = { chapterId: chapterToSave, page: pageToSave };
     } catch (error) {
       // 静默失败即可

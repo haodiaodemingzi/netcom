@@ -8,12 +8,20 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const VideoCard = ({ video, darkMode = false, viewMode = 'card' }) => {
+const VideoCard = ({ video, darkMode = false, viewMode = 'card', onPress }) => {
   const router = useRouter();
   const isList = viewMode === 'list';
   const [imageError, setImageError] = React.useState(false);
 
+  if (!video || !video.id) {
+    return null;
+  }
+
   const handlePress = () => {
+    if (typeof onPress === 'function') {
+      onPress(video);
+      return;
+    }
     router.push(`/series/${video.id}`);
   };
 

@@ -196,6 +196,9 @@ const ProfileScreen = () => {
           {renderMenuItem('数据源市场', () => {
             router.push('/market');
           })}
+          {renderMenuItem('我的收藏', () => {
+            router.push('/favorite-page');
+          })}
           {renderMenuItem('阅读历史', () => {
             router.push('/history');
           })}
