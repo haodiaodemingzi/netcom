@@ -1,6 +1,7 @@
 from .thanju_scraper import ThanjuScraper
 from .badnews_scraper import BadNewsScraper
 from .badnews_av_scraper import BadNewsAVScraper
+from .badnews_original_video_scraper import BadNewsOriginalVideoScraper
 from .mjwu_scraper import MjwuScraper
 from .yinghua_scraper import YinghuaScraper
 
@@ -11,6 +12,7 @@ class VideoScraperFactory:
         'thanju': ThanjuScraper,
         'badnews': BadNewsScraper,
         'badnews_av': BadNewsAVScraper,
+        '原创视频': BadNewsOriginalVideoScraper,
         'mjwu': MjwuScraper,
         'yinghua': YinghuaScraper,
     }
@@ -31,6 +33,11 @@ class VideoScraperFactory:
                 'id': 'thanju',
                 'name': '热播韩剧网',
                 'description': '热播韩剧网(thanju.com) - 提供最新韩剧资源'
+            },
+            {
+                'id': '原创视频',
+                'name': '原创视频',
+                'description': 'Bad.news - 标签页短视频与长视频'
             },
             {
                 'id': 'badnews',

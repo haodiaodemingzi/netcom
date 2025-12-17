@@ -209,7 +209,7 @@ def proxy_video():
                 headers['Referer'] = f'https://www.thanju.com/detail/{series_id}.html'
             else:
                 headers['Referer'] = 'https://www.thanju.com/'
-        elif source == 'badnews' or source == 'badnews_av':
+        elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
         
@@ -345,7 +345,7 @@ def convert_video():
                     else:
                         referer = 'https://www.thanju.com/'
                     headers.append(f'Referer: {referer}')
-                elif source == 'badnews' or source == 'badnews_av':
+                elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')
                 

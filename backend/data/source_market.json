@@ -37,6 +37,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "原创视频",
+      "name": "原创视频",
+      "description": "Bad.news - 标签页短视频与长视频",
+      "url": "https://bad.news/tag/long-porn",
+      "icon": "https://via.placeholder.com/128/3D5AFE/FFFFFF?text=原创",
+      "category": "video",
+      "tags": ["短视频", "长视频", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "mjwu",
       "name": "美剧屋",
       "description": "美剧屋(mjwu.cc) - 提供最新美剧、电影资源",

@@ -15,7 +15,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
+import { getCurrentVideoSource, getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
 import FullScreenLoader from '../../components/FullScreenLoader';
@@ -120,9 +120,10 @@ const PlayerScreen = () => {
       
       // 1. 先获取配置并访问 cookie_url
       try {
-        const source = 'thanju'; // 或者从 storage 获取
+        const source = getCurrentVideoSource() || 'thanju';
+        const encodedSource = encodeURIComponent(source);
         const configResponse = await fetch(
-          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000/api'}/videos/episodes/${episodeId}/config?source=${source}`
+          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000/api'}/videos/episodes/${episodeId}/config?source=${encodedSource}`
         );
         
         if (configResponse.ok) {
@@ -159,10 +160,11 @@ const PlayerScreen = () => {
         
         // 使用统一的视频播放服务获取播放URL
         try {
+          const source = getCurrentVideoSource() || 'thanju';
           const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
             episodeId,
             result.data,
-            'thanju'
+            source
           );
           
           console.log('=== 视频播放URL信息 ===');
