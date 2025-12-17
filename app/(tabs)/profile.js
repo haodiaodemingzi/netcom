@@ -9,9 +9,11 @@ import {
   StatusBar,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { 
   getSettings, 
   saveSettings, 
@@ -30,6 +32,31 @@ const ProfileScreen = () => {
     autoLoadHD: false,
     keepScreenOn: true,
   });
+
+  const getAppVersionText = () => {
+    const config = Constants.expoConfig || Constants.manifest;
+    const version = (config && typeof config.version === 'string' && config.version) ? config.version : '';
+    const iosBuildNumber = config && config.ios ? config.ios.buildNumber : null;
+    const androidVersionCode = config && config.android ? config.android.versionCode : null;
+
+    const parts = [];
+    if (version) {
+      parts.push(`v${version}`);
+    }
+
+    if (Platform.OS === 'ios' && iosBuildNumber) {
+      parts.push(`build ${iosBuildNumber}`);
+    }
+
+    if (Platform.OS === 'android' && androidVersionCode) {
+      parts.push(`build ${androidVersionCode}`);
+    }
+
+    if (parts.length <= 0) {
+      return '漫画阅读器';
+    }
+    return `漫画阅读器 ${parts.join(' ')}`;
+  };
 
   useEffect(() => {
     loadSettings();
@@ -263,7 +290,7 @@ const ProfileScreen = () => {
           {renderMenuItem('清除缓存', handleClearCache)}
           {renderMenuItem('清除历史记录', handleClearHistory)}
           {renderMenuItem('关于应用', () => {
-            toast.info('漫画阅读器 v1.0.0');
+            toast.info(getAppVersionText());
           })}
         </View>
       </ScrollView>
