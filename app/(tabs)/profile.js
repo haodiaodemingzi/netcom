@@ -38,6 +38,8 @@ const ProfileScreen = () => {
     const version = (config && typeof config.version === 'string' && config.version) ? config.version : '';
     const iosBuildNumber = config && config.ios ? config.ios.buildNumber : null;
     const androidVersionCode = config && config.android ? config.android.versionCode : null;
+    const extra = config && config.extra ? config.extra : null;
+    const gitCommitHash = extra && typeof extra.gitCommitHash === 'string' ? extra.gitCommitHash : '';
 
     const parts = [];
     if (version) {
@@ -50,6 +52,11 @@ const ProfileScreen = () => {
 
     if (Platform.OS === 'android' && androidVersionCode) {
       parts.push(`build ${androidVersionCode}`);
+    }
+
+    if (gitCommitHash) {
+      const shortHash = gitCommitHash.length > 8 ? gitCommitHash.slice(0, 8) : gitCommitHash;
+      parts.push(`sha ${shortHash}`);
     }
 
     if (parts.length <= 0) {
