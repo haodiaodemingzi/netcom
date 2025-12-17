@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getNovelDetail, getNovelChapters } from '../../services/novelApi';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const NovelDetailScreen = () => {
   const router = useRouter();
@@ -71,11 +71,7 @@ const NovelDetailScreen = () => {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="detail" />;
   }
 
   if (!novel) {

@@ -4,12 +4,12 @@ import {
   Image,
   Dimensions,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { 
   GestureDetector, 
   Gesture 
 } from 'react-native-gesture-handler';
+import InlineSkeleton from './InlineSkeleton';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -132,7 +132,7 @@ const ImageViewer = ({
     <View style={styles.container}>
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6200EE" />
+          <InlineSkeleton theme="dark" size={44} />
         </View>
       )}
       <GestureDetector gesture={composed}>

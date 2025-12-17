@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import downloadManager from '../services/downloadManager';
 import { getHistory } from '../services/storage';
+import InlineSkeleton from './InlineSkeleton';
 
 const ChapterList = ({ 
   chapters, 

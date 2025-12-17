@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  ActivityIndicator,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getSeriesList, setVideoDataSource, getVideoDataSource } from '../../services/videoApi';
 import { useToast } from '../../components/MessageToast';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const SeriesScreen = () => {
   const router = useRouter();
@@ -78,11 +78,7 @@ const SeriesScreen = () => {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="list" />;
   }
 
   return (

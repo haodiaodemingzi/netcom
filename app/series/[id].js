@@ -22,6 +22,8 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
 import { isFavorite, addFavorite, removeFavorite, addVideoHistory } from '../../services/storage';
 import EpisodeCard from '../../components/EpisodeCard';
+import FullScreenLoader from '../../components/FullScreenLoader';
+import InlineSkeleton from '../../components/InlineSkeleton';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
 
@@ -748,11 +750,7 @@ const SeriesDetailScreen = () => {
   }, [getEpisodeDownloadStatus, playingEpisode, handleEpisodePress, handleDownloadEpisode, handlePauseDownload, handleResumeDownload, handleCancelDownload, handleRetryDownload, isMultiSelectMode, selectedEpisodes, toggleEpisodeSelection, loadingEpisodeId]);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="detail" />;
   }
 
   if (!series) {
@@ -827,14 +825,14 @@ const SeriesDetailScreen = () => {
                   />
                 ) : (
                   <View style={styles.loadingVideo}>
-                    <ActivityIndicator color="#fff" />
+                    <InlineSkeleton theme="dark" size={28} />
                     <Text style={styles.loadingText}>正在初始化播放器...</Text>
                   </View>
                 )}
 
                 {isLoadingVideo && (
                   <View style={styles.loadingOverlay}>
-                    <ActivityIndicator color="#fff" />
+                    <InlineSkeleton theme="dark" size={28} />
                     <Text style={styles.loadingText}>正在加载视频...</Text>
                   </View>
                 )}
@@ -910,7 +908,7 @@ const SeriesDetailScreen = () => {
                 {isLoadingVideo ? (
                   // 加载中
                   <View style={styles.loadingContent}>
-                    <ActivityIndicator size="large" color="#fff" />
+                    <InlineSkeleton theme="dark" size={44} />
                     <Text style={styles.loadingText}>正在加载视频...</Text>
                   </View>
                 ) : (

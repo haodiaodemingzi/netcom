@@ -8,19 +8,18 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
-  StatusBar,
-  Dimensions,
+  Modal,
   Animated,
+  Dimensions,
   ScrollView,
   FlatList,
-  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ebookDownloadManager from '../../services/ebookDownloadManager';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -484,10 +483,11 @@ const EbookOfflineReaderScreen = () => {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6200EE" />
-          <Text style={[styles.loadingText, { color: colors.text }]}>加载中...</Text>
-        </View>
+        <FullScreenLoader
+          variant="reader"
+          theme={theme === 'dark' ? 'dark' : 'light'}
+          accentColor="#6200EE"
+        />
       ) : (
         <PanGestureHandler
           ref={gestureRef}

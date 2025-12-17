@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Dimensions,
   StatusBar,
@@ -19,6 +18,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const PlayerScreen = () => {
   const router = useRouter();
@@ -279,11 +279,7 @@ const PlayerScreen = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#fff" />
-      </View>
-    );
+    return <FullScreenLoader variant="detail" theme="dark" accentColor="#6200EE" />;
   }
 
   if (!episode) {

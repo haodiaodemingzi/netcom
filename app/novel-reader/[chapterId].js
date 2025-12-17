@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   StatusBar,
   ScrollView,
@@ -14,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getChapterContent, saveReadingProgress } from '../../services/novelApi';
 import { addNovelHistory } from '../../services/storage';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -200,11 +200,7 @@ const NovelReaderScreen = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="reader" />;
   }
 
   if (!chapter) {

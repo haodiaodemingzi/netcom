@@ -6,7 +6,6 @@ import {
   StyleSheet,
   StatusBar,
   Dimensions,
-  ActivityIndicator,
   Text,
   Alert,
   BackHandler,
@@ -15,6 +14,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import ImageViewer from '../../components/ImageViewer';
+import FullScreenLoader from '../../components/FullScreenLoader';
+import InlineSkeleton from '../../components/InlineSkeleton';
 import { getChapterImages, getChapters } from '../../services/api';
 import { getSettings, addHistory, getCurrentSource, getHistory } from '../../services/storage';
 import downloadManager from '../../services/downloadManager';
@@ -694,7 +695,7 @@ const ReaderScreen = () => {
           <View style={isHorizontal ? styles.loadingWrapper : styles.loadingWrapperVertical}>
             {item.isLoading ? (
               <>
-                <ActivityIndicator size="large" color="#6200EE" />
+                <InlineSkeleton theme={settings.backgroundColor === 'black' ? 'dark' : 'light'} size={36} />
                 <Text style={styles.loadingText}>加载中...</Text>
               </>
             ) : (
@@ -716,12 +717,7 @@ const ReaderScreen = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-        <Text style={styles.loadingText}>加载中...</Text>
-      </View>
-    );
+    return <FullScreenLoader variant="reader" theme="dark" accentColor="#6200EE" />;
   }
 
   // 下载进度界面
@@ -732,7 +728,7 @@ const ReaderScreen = () => {
         
         {/* 中间显示加载中 */}
         <View style={styles.downloadContent}>
-          <ActivityIndicator size="large" color="#6200EE" />
+          <InlineSkeleton theme="dark" size={44} />
           <Text style={styles.downloadStatusText}>正在加载...</Text>
         </View>
         

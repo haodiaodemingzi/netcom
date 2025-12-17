@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import ChapterList from '../../components/ChapterList';
+import FullScreenLoader from '../../components/FullScreenLoader';
 import { getComicDetail, getChapters } from '../../services/api';
 import { 
   isFavorite, 
@@ -89,11 +89,7 @@ const ComicDetailScreen = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="detail" />;
   }
 
   if (!comic) {

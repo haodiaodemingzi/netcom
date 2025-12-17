@@ -6,8 +6,8 @@ import {
   StyleSheet,
   Animated,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
+import InlineSkeleton from './InlineSkeleton';
 
 const EpisodeCard = ({ 
   item, 
@@ -170,7 +170,7 @@ const EpisodeCard = ({
             ]}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="#6200EE" />
+              <InlineSkeleton size={16} />
             ) : (
               <Text style={[styles.playIcon, isActive && styles.playIconActive]}>
                 {isPlaying ? '⏳' : '▶'}

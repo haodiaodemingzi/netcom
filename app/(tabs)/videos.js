@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  ActivityIndicator,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import VideoCard from '../../components/VideoCard';
 import SearchBar from '../../components/SearchBar';
+import FullScreenLoader from '../../components/FullScreenLoader';
+import InlineSkeleton from '../../components/InlineSkeleton';
 import {
   getSeriesList,
   getVideoCategories,
@@ -463,7 +464,7 @@ const VideosTabScreen = () => {
         <View style={styles.categoryBar}>
           {categoriesLoading ? (
             <View style={styles.categoryLoadingContainer}>
-              <ActivityIndicator size="small" color="#6200EE" />
+              <InlineSkeleton size={16} />
               <Text style={styles.categoryLoadingText}>加载分类中...</Text>
             </View>
           ) : (
@@ -504,9 +505,7 @@ const VideosTabScreen = () => {
 
       {/* 视频列表 */}
       {loading && filteredVideos.length === 0 && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6200EE" />
-        </View>
+        <FullScreenLoader variant="list" />
       ) : (
         <FlatList
           key={viewMode}
@@ -527,7 +526,7 @@ const VideosTabScreen = () => {
           ListFooterComponent={() =>
             loading && !refreshing ? (
               <View style={styles.loadingFooter}>
-                <ActivityIndicator size="small" color="#6200EE" />
+                <InlineSkeleton size={16} />
               </View>
             ) : null
           }
@@ -680,51 +679,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 'auto',
-    minWidth: '22%',
-    maxWidth: '48%',
-    paddingHorizontal: 8,
-    height: 34,
-    borderRadius: 4,
-    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    height: 30,
+    borderRadius: 16,
+    backgroundColor: '#f2f3f5',
     justifyContent: 'center',
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#ededed',
   },
   categoryChipActive: {
-    backgroundColor: '#6200EE',
-    borderColor: '#6200EE',
+    backgroundColor: '#efe7ff',
+    borderColor: '#d8c7ff',
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
   },
   categoryTextActive: {
-    color: '#fff',
+    color: '#5a2fd6',
     fontWeight: '600',
   },
   moreButton: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 'auto',
-    minWidth: '22%',
-    maxWidth: '48%',
-    paddingHorizontal: 8,
-    height: 34,
-    borderRadius: 4,
-    backgroundColor: '#fff',
+    paddingHorizontal: 6,
+    height: 30,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#6200EE',
   },
   moreButtonText: {
-    fontSize: 13,
-    color: '#6200EE',
-    fontWeight: '600',
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '500',
   },
   listContent: {
     paddingBottom: 24,

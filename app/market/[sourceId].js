@@ -6,12 +6,12 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getSourceDetail } from '../../services/marketApi';
+import FullScreenLoader from '../../components/FullScreenLoader';
 import {
   installSource,
   uninstallSource,
@@ -91,13 +91,7 @@ const SourceDetailScreen = () => {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      </SafeAreaView>
-    );
+    return <FullScreenLoader variant="detail" />;
   }
 
   if (!source) {

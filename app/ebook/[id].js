@@ -6,13 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   StatusBar,
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChapterList from '../../components/ChapterList';
+import FullScreenLoader from '../../components/FullScreenLoader';
 import { getEbookDetail, getEbookChapters } from '../../services/api';
 import ebookDownloadManager from '../../services/ebookDownloadManager';
 
@@ -173,11 +173,7 @@ const EbookDetailScreen = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="detail" />;
   }
 
   if (!book) {

@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  ActivityIndicator,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getNovelList, setNovelDataSource, getNovelDataSource } from '../../services/novelApi';
 import { useToast } from '../../components/MessageToast';
+import FullScreenLoader from '../../components/FullScreenLoader';
 
 const NovelScreen = () => {
   const router = useRouter();
@@ -79,11 +79,7 @@ const NovelScreen = () => {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-      </View>
-    );
+    return <FullScreenLoader variant="list" />;
   }
 
   return (

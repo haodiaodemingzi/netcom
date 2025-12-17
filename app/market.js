@@ -7,12 +7,12 @@ import {
   RefreshControl,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import SourceCard from '../components/SourceCard';
+import FullScreenLoader from '../components/FullScreenLoader';
 import { getMarketSources, getMarketCategories, activateMarket } from '../services/marketApi';
 import {
   installSource,
@@ -255,9 +255,7 @@ const MarketScreen = () => {
 
       {/* 数据源列表 */}
       {loading && sources.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
+        <FullScreenLoader variant="list" />
       ) : (
         <FlatList
           data={sources}

@@ -4,16 +4,16 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
-  StatusBar,
-  Dimensions,
+  ScrollView,
   Animated,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getChapterContent, getEbookChapters } from '../../services/api';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import FullScreenLoader from '../../components/FullScreenLoader';
+import { getChapterContent, getEbookChapters } from '../../services/api';
 import { addEbookHistory } from '../../services/storage';
 
 const EbookReaderScreen = () => {
@@ -396,10 +396,11 @@ const EbookReaderScreen = () => {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6200EE" />
-          <Text style={[styles.loadingText, { color: colors.text }]}>加载章节内容中...</Text>
-        </View>
+        <FullScreenLoader
+          variant="reader"
+          theme={theme === 'dark' ? 'dark' : 'light'}
+          accentColor="#6200EE"
+        />
       ) : (
         <PanGestureHandler
           ref={gestureRef}
