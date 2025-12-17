@@ -8,28 +8,55 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
-import { getFavorites } from '../../services/storage';
+import VideoCard from '../../components/VideoCard';
+import { getFavorites, getSettings } from '../../services/storage';
 
 const FavoriteScreen = () => {
+  const router = useRouter();
   const [favorites, setFavorites] = useState([]);
+  const [viewMode, setViewMode] = useState('card');
 
   useFocusEffect(
     React.useCallback(() => {
       loadFavorites();
+      loadViewMode();
     }, [])
   );
 
+  useEffect(() => {
+    loadViewMode();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadViewMode();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const loadFavorites = async () => {
     const data = await getFavorites();
-    setFavorites(data);
+    setFavorites(data || []);
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.cardWrapper}>
-      <ComicCard comic={item} />
-    </View>
-  );
+  const loadViewMode = async () => {
+    const settings = await getSettings();
+    if (settings?.viewMode) {
+      setViewMode(settings.viewMode);
+    }
+  };
+
+  const handlePress = (item) => {
+    if (!item || !item.id) return;
+    if (item.type === 'video') {
+      router.push(`/series/${item.id}`);
+      return;
+    }
+    router.push(`/comic/${item.id}`);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -37,20 +64,41 @@ const FavoriteScreen = () => {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>我的收藏</Text>
         <Text style={styles.headerSubtitle}>
-          共 {favorites.length} 部漫画
+          共 {favorites.length} 个
         </Text>
       </View>
       <FlatList
+        key={viewMode}
         data={favorites}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
-        numColumns={2}
-        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => {
+          if (!item) return null;
+          const isVideo = item.type === 'video';
+          return (
+            <View
+              style={[
+                styles.cardWrapper,
+                viewMode === 'list' && styles.cardWrapperList
+              ]}
+            >
+              {isVideo ? (
+                <VideoCard video={item} viewMode={viewMode} />
+              ) : (
+                <ComicCard comic={item} viewMode={viewMode} />
+              )}
+            </View>
+          );
+        }}
+        keyExtractor={(item, index) => `${item?.id || 'unknown'}-${index}`}
+        numColumns={viewMode === 'list' ? 1 : 3}
+        contentContainerStyle={[
+          styles.listContent,
+          viewMode === 'list' && styles.listContentList
+        ]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>暂无收藏</Text>
             <Text style={styles.emptyHint}>
-              快去收藏你喜欢的漫画吧
+              快去收藏你喜欢的内容吧
             </Text>
           </View>
         }
@@ -81,10 +129,21 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   listContent: {
-    padding: 4,
+    paddingBottom: 24,
+    padding: 2,
+  },
+  listContentList: {
+    padding: 0,
   },
   cardWrapper: {
-    width: '50%',
+    width: '33.333%',
+    padding: 2,
+  },
+  cardWrapperList: {
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginBottom: 0,
   },
   emptyContainer: {
     padding: 40,

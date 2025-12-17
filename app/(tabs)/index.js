@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import ComicCard from '../../components/ComicCard';
 import SearchBar from '../../components/SearchBar';
+import FullScreenLoader from '../../components/FullScreenLoader';
 import { 
   getHotComics, 
   getLatestComics,
@@ -50,6 +51,9 @@ const HomeScreen = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [viewMode, setViewMode] = useState('card');
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [contentReady, setContentReady] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadInitialData();
