@@ -237,7 +237,7 @@ class DownloadManager {
     const allTasks = this.queue.getAllTasks();
     
     return {
-      queue: [...allTasks.pending, ...allTasks.running, ...allTasks.paused].map(task => task.getInfo()),
+      queue: [...allTasks.pending, ...allTasks.running, ...allTasks.paused, ...allTasks.failed].map(task => task.getInfo()),
       activeDownloads: allTasks.running.map(task => task.getInfo()),
       downloadedChapters: Array.from(this.downloadedChapters.keys()),
       queueInfo: queueInfo,
@@ -310,6 +310,7 @@ class DownloadManager {
       comicTitle: task.comicTitle,
       chapterId: task.chapterId,
       chapterTitle: task.chapterTitle,
+      source: task.source,
       totalImages: task.totalImages,
       downloadedAt: new Date().toISOString()
     };
@@ -515,34 +516,36 @@ class DownloadManager {
   }
 
   pauseAll() {
-    this.queue.forEach(task => {
-      if (task.status === 'downloading' || task.status === 'pending') {
-        task.status = 'paused';
+    const allTasks = this.queue.getAllTasks();
+    const tasksToPause = [...allTasks.pending, ...allTasks.running];
+    for (const task of tasksToPause) {
+      if (!task || !task.id) {
+        continue;
       }
-    });
-    this.notifyListeners();
+      this.queue.pauseTask(task.id);
+    }
   }
 
   resumeAll() {
-    this.queue.forEach(task => {
-      if (task.status === 'paused') {
-        task.status = 'pending';
+    const allTasks = this.queue.getAllTasks();
+    const tasksToResume = [...allTasks.paused];
+    for (const task of tasksToResume) {
+      if (!task || !task.id) {
+        continue;
       }
-    });
-    this.notifyListeners();
-    this.processQueue();
+      this.queue.resumeTask(task.id);
+    }
   }
 
   retryFailed() {
-    this.queue.forEach(task => {
-      if (task.status === 'failed') {
-        task.status = 'pending';
-        task.retries = 0;
-        task.error = null;
+    const allTasks = this.queue.getAllTasks();
+    const tasksToRetry = [...allTasks.failed];
+    for (const task of tasksToRetry) {
+      if (!task || !task.id) {
+        continue;
       }
-    });
-    this.notifyListeners();
-    this.processQueue();
+      this.queue.retryTask(task.id);
+    }
   }
 
   async saveToGallery(chapterDir, totalImages, chapterTitle) {

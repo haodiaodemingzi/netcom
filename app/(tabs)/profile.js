@@ -203,7 +203,7 @@ const ProfileScreen = () => {
             router.push('/history');
           })}
           {renderMenuItem('下载管理', () => {
-            toast.info('功能开发中...');
+            router.push('/downloads');
           })}
         </View>
 

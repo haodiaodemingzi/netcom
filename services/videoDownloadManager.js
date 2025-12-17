@@ -109,11 +109,44 @@ class VideoDownloadManager {
     const allTasks = this.queue.getAllTasks();
     
     return {
-      queue: [...allTasks.pending, ...allTasks.running, ...allTasks.paused].map(task => task.getInfo()),
+      queue: [...allTasks.pending, ...allTasks.running, ...allTasks.paused, ...allTasks.failed].map(task => task.getInfo()),
       activeDownloads: allTasks.running.map(task => task.getInfo()),
       downloadedEpisodes: Array.from(this.downloadedEpisodes.keys()),
       queueInfo: queueInfo,
     };
+  }
+
+  pauseAll() {
+    const allTasks = this.queue.getAllTasks();
+    const tasksToPause = [...allTasks.pending, ...allTasks.running];
+    for (const task of tasksToPause) {
+      if (!task || !task.id) {
+        continue;
+      }
+      this.queue.pauseTask(task.id);
+    }
+  }
+
+  resumeAll() {
+    const allTasks = this.queue.getAllTasks();
+    const tasksToResume = [...allTasks.paused];
+    for (const task of tasksToResume) {
+      if (!task || !task.episodeId) {
+        continue;
+      }
+      this.resumeDownload(task.episodeId);
+    }
+  }
+
+  retryFailed() {
+    const allTasks = this.queue.getAllTasks();
+    const tasksToRetry = [...allTasks.failed];
+    for (const task of tasksToRetry) {
+      if (!task || !task.episodeId) {
+        continue;
+      }
+      this.retryDownload(task.episodeId);
+    }
   }
 
   async downloadEpisode(seriesId, seriesTitle, episode, source, onProgress) {
@@ -219,6 +252,7 @@ class VideoDownloadManager {
       seriesTitle: task.seriesTitle,
       episodeId: task.episodeId,
       episodeTitle: task.episodeTitle,
+      source: task.source,
       outputPath: task.outputPath,
       downloadedAt: new Date().toISOString()
     };

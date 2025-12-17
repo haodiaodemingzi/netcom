@@ -69,6 +69,16 @@ export class DownloadQueue {
   }
 
   pauseTask(taskId) {
+    const pendingIndex = this.pendingTasks.findIndex(t => t.id === taskId);
+    if (pendingIndex !== -1) {
+      const task = this.pendingTasks[pendingIndex];
+      this.pendingTasks.splice(pendingIndex, 1);
+      task.pause();
+      this.pausedTasks.set(taskId, task);
+      this.notifyQueueChange();
+      return true;
+    }
+
     if (this.runningTasks.has(taskId)) {
       const task = this.runningTasks.get(taskId);
       task.pause();
