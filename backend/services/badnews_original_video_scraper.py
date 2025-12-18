@@ -238,7 +238,7 @@ class BadNewsOriginalVideoScraper(BaseVideoScraper):
         depth = 0
         while current and depth < 10:
             if getattr(current, 'name', None) and current.find('video'):
-                return currenmg
+                return current
             current = getattr(current, 'parent', None)
             depth += 1
         return None

@@ -28,7 +28,13 @@ def handle_errors(error_message="操作失败"):
             try:
                 return f(*args, **kwargs)
             except Exception as e:
-                logger.error(f"{error_message}: {str(e)}")
+                logger.error(
+                    '%s path=%s query=%s err=%s',
+                    error_message,
+                    request.path,
+                    request.query_string.decode('utf-8', errors='ignore'),
+                    str(e),
+                )
                 return jsonify({'error': str(e)}), 500
         return wrapper
     return decorator
