@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cthulhu",
     "slug": "comic-reader",
-    "version": "11.0.0",
+    "version": "11.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.comicreader.app",
-      "buildNumber": "13",
+      "buildNumber": "14",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,7 +23,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.comicreader.app",
-      "versionCode": 13,
+      "versionCode": 14,
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
