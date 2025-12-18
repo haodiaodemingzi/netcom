@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getCurrentVideoSource, getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
+import { getSettings, saveSettings } from '../../services/storage';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
 import FullScreenLoader from '../../components/FullScreenLoader';
@@ -34,8 +35,37 @@ const PlayerScreen = () => {
   const [quality, setQuality] = useState('high'); // high, medium, low
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [videoFitMode, setVideoFitMode] = useState('contain'); // contain, cover, fill
+  const [orientationMode, setOrientationMode] = useState('auto');
   const controlsTimeoutRef = useRef(null);
   const pinchScaleRef = useRef(1);
+
+  const getOrientationModeLabel = (mode) => {
+    if (mode === 'portrait') return '竖屏';
+    if (mode === 'landscape') return '横屏';
+    return '自动';
+  };
+
+  const applyOrientationMode = async (mode) => {
+    const safeMode = mode || 'auto';
+    if (safeMode === 'portrait') {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      return;
+    }
+    if (safeMode === 'landscape') {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      return;
+    }
+    await ScreenOrientation.unlockAsync();
+  };
+
+  const persistOrientationMode = async (mode) => {
+    const safeMode = mode || 'auto';
+    const settings = await getSettings();
+    await saveSettings({
+      ...(settings || {}),
+      videoOrientationMode: safeMode,
+    });
+  };
 
   // 使用 expo-video 的 useVideoPlayer hook
   // 注意：useVideoPlayer需要传入source URL，如果URL变化需要重新创建player
@@ -75,6 +105,25 @@ const PlayerScreen = () => {
   useEffect(() => {
     loadEpisode();
   }, [episodeId]);
+
+  useEffect(() => {
+    const initOrientation = async () => {
+      const settings = await getSettings();
+      const mode = settings?.videoOrientationMode || 'auto';
+      setOrientationMode(mode);
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    };
+
+    initOrientation().catch((e) => {
+      console.warn('初始化方向模式失败', e);
+    });
+
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((e) => {
+        console.warn('退出播放器恢复竖屏失败', e);
+      });
+    };
+  }, []);
 
   // 当episode加载完成后，更新video source（如果还没有设置本地视频）
   useEffect(() => {
@@ -228,11 +277,32 @@ const PlayerScreen = () => {
   const handleFullscreen = async () => {
     const nextFullscreen = !isFullscreen;
     if (nextFullscreen) {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT).catch(() => {});
+      try {
+        await applyOrientationMode(orientationMode);
+      } catch (e) {
+        console.warn('进入全屏应用方向模式失败', e);
+      }
     } else {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((e) => {
+        console.warn('退出全屏恢复竖屏失败', e);
+      });
     }
     setIsFullscreen(nextFullscreen);
+  };
+
+  const handleToggleOrientationMode = async () => {
+    const modes = ['auto', 'portrait', 'landscape'];
+    const currentIndex = modes.indexOf(orientationMode);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % modes.length : 0;
+    const nextMode = modes[nextIndex];
+    setOrientationMode(nextMode);
+    try {
+      await persistOrientationMode(nextMode);
+      if (!isFullscreen) return;
+      await applyOrientationMode(nextMode);
+    } catch (e) {
+      console.warn('切换方向模式失败', e);
+    }
   };
 
   // 切换视频缩放模式
@@ -249,12 +319,6 @@ const PlayerScreen = () => {
     const modeNames = { contain: '适应', cover: '填充', fill: '拉伸' };
     return modeNames[videoFitMode] || '适应';
   };
-
-  useEffect(() => {
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    };
-  }, []);
 
   const pinchGesture = Gesture.Pinch()
     .onBegin(() => {
@@ -358,6 +422,9 @@ const PlayerScreen = () => {
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
                     <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handleToggleOrientationMode}>
+                    <Text style={styles.btnText}>方向:{getOrientationModeLabel(orientationMode)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
                     <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>

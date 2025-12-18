@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
-import { isFavorite, addFavorite, removeFavorite, addVideoHistory } from '../../services/storage';
+import { isFavorite, addFavorite, removeFavorite, addVideoHistory, getSettings, saveSettings } from '../../services/storage';
 import EpisodeCard from '../../components/EpisodeCard';
 import FullScreenLoader from '../../components/FullScreenLoader';
 import InlineSkeleton from '../../components/InlineSkeleton';
@@ -45,11 +45,40 @@ const SeriesDetailScreen = () => {
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoFitMode, setVideoFitMode] = useState('contain'); // contain, cover, fill
+  const [orientationMode, setOrientationMode] = useState('auto');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const controlsTimeoutRef = useRef(null);
+
+  const getOrientationModeLabel = (mode) => {
+    if (mode === 'portrait') return '竖屏';
+    if (mode === 'landscape') return '横屏';
+    return '自动';
+  };
+
+  const applyOrientationMode = async (mode) => {
+    const safeMode = mode || 'auto';
+    if (safeMode === 'portrait') {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      return;
+    }
+    if (safeMode === 'landscape') {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      return;
+    }
+    await ScreenOrientation.unlockAsync();
+  };
+
+  const persistOrientationMode = async (mode) => {
+    const safeMode = mode || 'auto';
+    const settings = await getSettings();
+    await saveSettings({
+      ...(settings || {}),
+      videoOrientationMode: safeMode,
+    });
+  };
   
   // 多选模式状态
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -174,8 +203,21 @@ const SeriesDetailScreen = () => {
   }, [showControls, player]);
 
   useEffect(() => {
+    const initOrientation = async () => {
+      const settings = await getSettings();
+      const mode = settings?.videoOrientationMode || 'auto';
+      setOrientationMode(mode);
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    };
+
+    initOrientation().catch((e) => {
+      console.warn('初始化方向模式失败', e);
+    });
+
     return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((e) => {
+        console.warn('退出页面恢复竖屏失败', e);
+      });
     };
   }, []);
 
@@ -343,9 +385,6 @@ const SeriesDetailScreen = () => {
 
   const handleClosePlayer = () => {
     saveVideoHistoryIfNeeded();
-    if (isFullscreen) {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    }
     setShowPlayer(false);
     setPlayingEpisode(null);
     setVideoSource('');
@@ -414,9 +453,15 @@ const SeriesDetailScreen = () => {
   const handleFullscreen = async () => {
     const nextFullscreen = !isFullscreen;
     if (nextFullscreen) {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT).catch(() => {});
+      try {
+        await applyOrientationMode(orientationMode);
+      } catch (e) {
+        console.warn('进入全屏应用方向模式失败', e);
+      }
     } else {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch((e) => {
+        console.warn('退出全屏恢复竖屏失败', e);
+      });
     }
     setIsFullscreen(nextFullscreen);
     setShowControls(true);
@@ -426,6 +471,21 @@ const SeriesDetailScreen = () => {
     controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
     }, 4000);
+  };
+
+  const handleToggleOrientationMode = async () => {
+    const modes = ['auto', 'portrait', 'landscape'];
+    const currentIndex = modes.indexOf(orientationMode);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % modes.length : 0;
+    const nextMode = modes[nextIndex];
+    setOrientationMode(nextMode);
+    try {
+      await persistOrientationMode(nextMode);
+      if (!isFullscreen) return;
+      await applyOrientationMode(nextMode);
+    } catch (e) {
+      console.warn('切换方向模式失败', e);
+    }
   };
 
   const handleVideoFitMode = () => {
@@ -884,6 +944,9 @@ const SeriesDetailScreen = () => {
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
                               <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionBtn} onPress={handleToggleOrientationMode}>
+                              <Text style={styles.btnText}>方向:{getOrientationModeLabel(orientationMode)}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.actionBtn} onPress={handleFullscreen}>
                               <Text style={styles.btnText}>{isFullscreen ? '退出全屏' : '全屏'}</Text>

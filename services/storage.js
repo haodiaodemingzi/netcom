@@ -267,6 +267,7 @@ export const getSettings = async () => {
       maxConcurrentDownloads: 10,
       viewMode: 'card', // 默认卡片视图
       showFavoriteTab: true,
+      videoOrientationMode: 'auto',
     };
   } catch (error) {
     return {};
