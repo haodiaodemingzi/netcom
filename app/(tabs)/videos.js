@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -50,6 +50,11 @@ const VideosTabScreen = () => {
   const [viewMode, setViewMode] = useState('card');
   const [dataLoaded, setDataLoaded] = useState(false); // 标记数据是否已加载
 
+  const loadingCategoriesRef = useRef(false);
+  const loadingVideosRef = useRef(false);
+  const initialLoadKeyRef = useRef(null);
+  const endReachedLockedRef = useRef(true);
+
   // 加载设置
   useEffect(() => {
     loadViewMode();
@@ -87,6 +92,8 @@ const VideosTabScreen = () => {
       setHasMore(true);
       setSelectedCategory('hot');
       setCategoriesLoading(true);
+      setDataLoaded(false);
+      initialLoadKeyRef.current = null;
       loadSources();
     });
     
@@ -94,6 +101,8 @@ const VideosTabScreen = () => {
     const unsubscribeSourceChange = eventBus.on(EVENTS.SOURCE_CHANGED, () => {
       setPage(1);
       setVideos([]);
+      setDataLoaded(false);
+      initialLoadKeyRef.current = null;
       loadVideos(true);
     });
     
@@ -138,6 +147,11 @@ const VideosTabScreen = () => {
   // 分类加载完成后，且已选择分类时，加载视频列表（只在未加载过时执行）
   useEffect(() => {
     if (selectedCategory && selectedSource && !categoriesLoading && !dataLoaded) {
+      const key = `${selectedSource}__${selectedCategory}`;
+      if (initialLoadKeyRef.current === key) {
+        return;
+      }
+      initialLoadKeyRef.current = key;
       setPage(1);
       setVideos([]);
       loadVideos(true).then(() => setDataLoaded(true));
@@ -198,6 +212,10 @@ const VideosTabScreen = () => {
   };
 
   const loadCategories = async (source = null) => {
+    if (loadingCategoriesRef.current) {
+      return;
+    }
+    loadingCategoriesRef.current = true;
     setCategoriesLoading(true);
     try {
       // 使用传入的 source 参数，如果没有则使用 selectedSource
@@ -229,11 +247,19 @@ const VideosTabScreen = () => {
       setSelectedCategory(null);
     } finally {
       setCategoriesLoading(false);
+      loadingCategoriesRef.current = false;
     }
   };
 
   const loadVideos = async (reset = false) => {
-    if (loading) return;
+    if (loadingVideosRef.current) {
+      return;
+    }
+    if (loading) {
+      return;
+    }
+
+    loadingVideosRef.current = true;
 
     try {
       setLoading(true);
@@ -252,6 +278,7 @@ const VideosTabScreen = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      loadingVideosRef.current = false;
     }
   };
 
@@ -260,6 +287,7 @@ const VideosTabScreen = () => {
     setPage(1);
     setVideos([]);
     setDataLoaded(false); // 允许重新加载
+    initialLoadKeyRef.current = null;
     loadVideos(true).then(() => setDataLoaded(true));
   };
 
@@ -267,6 +295,18 @@ const VideosTabScreen = () => {
     if (!loading && hasMore) {
       setPage(prev => prev + 1);
     }
+  };
+
+  const handleEndReached = () => {
+    if (endReachedLockedRef.current) {
+      return;
+    }
+    endReachedLockedRef.current = true;
+    if (searchQuery.trim()) {
+      handleSearchLoadMore();
+      return;
+    }
+    handleLoadMore();
   };
 
   const resetSearchState = () => {
@@ -324,6 +364,7 @@ const VideosTabScreen = () => {
     setPage(1);
     setVideos([]);
     setDataLoaded(false); // 重置加载状态，允许加载新数据源的数据
+    initialLoadKeyRef.current = null;
     // 重置分类选择
     setSelectedCategory(null);
     // 传入新的 sourceId 确保使用正确的数据源加载分类
@@ -346,8 +387,14 @@ const VideosTabScreen = () => {
 
   // 为指定分类加载视频
   const loadVideosForCategory = async (categoryId) => {
-    if (loading) return;
+    if (loadingVideosRef.current) {
+      return;
+    }
+    if (loading) {
+      return;
+    }
     try {
+      loadingVideosRef.current = true;
       setLoading(true);
       const result = await getSeriesList(categoryId, 1, 20, selectedSource);
       if (result.success) {
@@ -358,6 +405,7 @@ const VideosTabScreen = () => {
       console.error('加载视频失败:', error);
     } finally {
       setLoading(false);
+      loadingVideosRef.current = false;
     }
   };
 
@@ -521,8 +569,11 @@ const VideosTabScreen = () => {
               colors={['#6200EE']}
             />
           }
-          onEndReached={searchQuery.trim() ? handleSearchLoadMore : handleLoadMore}
+          onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
+          onMomentumScrollBegin={() => {
+            endReachedLockedRef.current = false;
+          }}
           ListFooterComponent={() =>
             loading && !refreshing ? (
               <View style={styles.loadingFooter}>

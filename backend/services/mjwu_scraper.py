@@ -287,6 +287,43 @@ class MjwuScraper(BaseVideoScraper):
         
         return videos
 
+    def _clean_detail_title(self, title):
+        if not title:
+            return ''
+        safe_title = re.sub(r'\s+', ' ', str(title)).strip()
+        safe_title = re.sub(r'\s*[-|｜_]\s*美剧屋.*$', '', safe_title).strip()
+        return safe_title
+
+    def _extract_detail_title(self, soup):
+        if not soup:
+            return ''
+
+        h1 = soup.find('h1', class_='hl-dc-title')
+        if h1:
+            title = self._clean_detail_title(h1.get_text(strip=True))
+            if title:
+                return title
+
+        title_elem = soup.find('div', class_='hl-item-title')
+        if title_elem:
+            title = self._clean_detail_title(title_elem.get_text(strip=True))
+            if title:
+                return title
+
+        og_title = soup.find('meta', attrs={'property': 'og:title'})
+        if og_title:
+            title = self._clean_detail_title(og_title.get('content', ''))
+            if title:
+                return title
+
+        doc_title = soup.find('title')
+        if doc_title:
+            title = self._clean_detail_title(doc_title.get_text(strip=True))
+            if title:
+                return title
+
+        return ''
+
     def get_video_detail(self, video_id):
         """获取视频详情"""
         try:
@@ -298,15 +335,7 @@ class MjwuScraper(BaseVideoScraper):
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # 获取标题
-            title = ''
-            h1 = soup.find('h1', class_='hl-dc-title')
-            if h1:
-                title = h1.get_text(strip=True)
-            
-            if not title:
-                title_elem = soup.find('div', class_='hl-item-title')
-                if title_elem:
-                    title = title_elem.get_text(strip=True)
+            title = self._extract_detail_title(soup)
             
             # 获取封面 - 美剧屋的封面URL在data-original属性中，可能在<a>或<span>标签上
             cover = ''
@@ -397,6 +426,7 @@ class MjwuScraper(BaseVideoScraper):
             detail = {
                 'id': video_id,
                 'title': title,
+                'name': title,
                 'cover': cover,
                 'score': score,
                 'status': status,
