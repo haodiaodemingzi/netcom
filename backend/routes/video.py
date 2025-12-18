@@ -80,6 +80,34 @@ def get_episode_detail(episode_id):
         return success_response(episode)
     return not_found_response("剧集不存在")
 
+@video_bp.route('/videos/episodes/<path:episode_id>/config', methods=['GET'])
+@handle_errors("获取剧集配置失败")
+def get_episode_config(episode_id):
+    """获取剧集播放前的配置
+    
+    前端会先访问 cookie_url 预热 Cookie
+    """
+    source = request.args.get('source', 'thanju')
+    scraper = VideoScraperFactory.create_scraper(source)
+
+    base_url = getattr(scraper, 'base_url', None)
+    headers = getattr(scraper, 'headers', None)
+    safe_headers = headers if isinstance(headers, dict) else {}
+
+    cookie_url = None
+    if base_url:
+        cookie_url = base_url.rstrip('/') + '/'
+
+    return jsonify(
+        {
+            'success': True,
+            'data': {
+                'cookie_url': cookie_url,
+                'headers': safe_headers,
+            },
+        }
+    ), 200
+
 @video_bp.route('/videos/search', methods=['GET'])
 def search_videos():
     """搜索视频"""
@@ -209,9 +237,27 @@ def proxy_video():
                 headers['Referer'] = f'https://www.thanju.com/detail/{series_id}.html'
             else:
                 headers['Referer'] = 'https://www.thanju.com/'
+        elif source == 'netflixgc':
+            if series_id:
+                headers['Referer'] = f'https://www.netflixgc.com/detail/{series_id}.html'
+            else:
+                headers['Referer'] = 'https://www.netflixgc.com/'
         elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
+        elif source == 'heli999':
+            if series_id:
+                headers['Referer'] = f'https://www.heli999.com/shipingdetail/{series_id}.html'
+            else:
+                headers['Referer'] = 'https://www.heli999.com/'
+            headers['Origin'] = 'https://www.heli999.com'
+
+        elif source == 'keke6':
+            if series_id:
+                headers['Referer'] = f'https://www.keke6.app/detail/{series_id}.html'
+            else:
+                headers['Referer'] = 'https://www.keke6.app/'
+            headers['Origin'] = 'https://www.keke6.app'
         
         # 转发Range请求头（用于视频断点续传）
         if 'Range' in request.headers:
@@ -345,10 +391,22 @@ def convert_video():
                     else:
                         referer = 'https://www.thanju.com/'
                     headers.append(f'Referer: {referer}')
+                elif source == 'netflixgc':
+                    if series_id:
+                        referer = f'https://www.netflixgc.com/detail/{series_id}.html'
+                    else:
+                        referer = 'https://www.netflixgc.com/'
+                    headers.append(f'Referer: {referer}')
                 elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')
-                
+                elif source == 'heli999':
+                    if series_id:
+                        headers.append(f'Referer: https://www.heli999.com/shipingdetail/{series_id}.html')
+                    else:
+                        headers.append('Referer: https://www.heli999.com/')
+                    headers.append('Origin: https://www.heli999.com')
+
                 # 添加通用请求头
                 headers.append('User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
                 

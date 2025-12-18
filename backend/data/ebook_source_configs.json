@@ -1,0 +1,18 @@
+{
+  "sources": {
+    "cool18": {
+      "enabled": false,
+      "base_url": "",
+      "category_entry_url": "",
+      "category_group": "分类",
+      "category_link_selector": "",
+      "thread_link_selector": "",
+      "next_page_selector": "",
+      "page_param": "p",
+      "thread_title_selector": "",
+      "thread_content_selector": "",
+      "comment_container_selector": "",
+      "chapter_link_selectors": []
+    }
+  }
+}

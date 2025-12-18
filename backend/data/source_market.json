@@ -67,7 +67,67 @@
       "url": "http://www.yinghuajinju.com",
       "icon": "https://via.placeholder.com/128/7C4DFF/FFFFFF?text=樱花",
       "category": "video",
-      "tags": ["动漫", "日本动漫", "国漫", "视频"],
+      "tags": ["动漫", "日本动漫", "国漫", "美漫", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube订阅",
+      "description": "YouTube - 订阅博主视频列表",
+      "url": "https://www.youtube.com",
+      "icon": "https://via.placeholder.com/128/FF0000/FFFFFF?text=YT",
+      "category": "video",
+      "tags": ["YouTube", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "heli999",
+      "name": "河狸影视",
+      "description": "河狸影视(heli999.com) - 电影/电视剧/综艺/动漫/短剧",
+      "url": "https://www.heli999.com",
+      "icon": "https://via.placeholder.com/128/26C6DA/FFFFFF?text=河狸",
+      "category": "video",
+      "tags": ["电影", "电视剧", "综艺", "动漫", "短剧", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "didahd",
+      "name": "嘀嗒影视",
+      "description": "嘀嗒影视(didahd.pro) - 电影电视剧动漫综艺",
+      "url": "https://didahd.pro",
+      "icon": "https://via.placeholder.com/128/5C6BC0/FFFFFF?text=嘀嗒",
+      "category": "video",
+      "tags": ["电影", "电视剧", "综艺", "动漫", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "keke6",
+      "name": "可可影视",
+      "description": "可可影视(keke6.app) - 电影 连续剧 动漫 综艺纪录 短剧",
+      "url": "https://keke6.app",
+      "icon": "https://via.placeholder.com/128/FFB300/000000?text=可可",
+      "category": "video",
+      "tags": ["电影", "电视剧", "综艺", "纪录片", "动漫", "短剧", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "netflixgc",
+      "name": "奈飞工厂",
+      "description": "奈飞工厂(netflixgc.com) - 电影/连续剧/综艺/纪录片/漫剧",
+      "url": "https://netflixgc.com",
+      "icon": "https://via.placeholder.com/128/111111/FFFFFF?text=NF",
+      "category": "video",
+      "tags": ["电影", "电视剧", "综艺", "纪录片", "动漫", "视频"],
       "enabled": true,
       "version": "1.0.0",
       "author": "NetCom Team"
@@ -125,10 +185,17 @@
       "name": "努努书坊",
       "description": "努努书坊(kanunu8.com) - 提供大量免费电子书",
       "url": "https://kanunu8.com",
+      "base_url": "https://www.kanunu8.com",
       "icon": "https://via.placeholder.com/128/A8E6CF/000000?text=努努",
       "category": "ebook",
       "tags": ["电子书", "小说", "阅读"],
       "enabled": true,
+      "proxy": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 7897,
+        "type": "http"
+      },
       "version": "1.0.0",
       "author": "NetCom Team"
     },
@@ -137,10 +204,86 @@
       "name": "天天看小说",
       "description": "天天看小说(ttkan.co) - 海量小说免费在线阅读",
       "url": "https://cn.ttkan.co",
+      "base_url": "https://cn.ttkan.co",
       "icon": "https://via.placeholder.com/128/6200EE/FFFFFF?text=天天看",
       "category": "ebook",
       "tags": ["电子书", "小说", "在线阅读", "玄幻", "言情"],
       "enabled": true,
+      "proxy": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 7897,
+        "type": "http"
+      },
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "youshu",
+      "name": "优书网",
+      "description": "优书网(youshu.me) - 书籍元数据 + 跨源阅读",
+      "url": "https://www.youshu.me",
+      "base_url": "https://www.youshu.me",
+      "icon": "https://via.placeholder.com/128/4CAF50/FFFFFF?text=优书",
+      "category": "ebook",
+      "tags": ["电子书", "小说", "元数据"],
+      "enabled": true,
+      "proxy": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 7897,
+        "type": "http"
+      },
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "cddaoyue",
+      "name": "独阅读",
+      "description": "独阅读(cddaoyue.cn) - 高书龄读者小说站",
+      "url": "https://www.cddaoyue.cn/index/book_list",
+      "base_url": "https://www.cddaoyue.cn",
+      "icon": "https://via.placeholder.com/128/26A69A/FFFFFF?text=%E7%8B%AC%E9%98%85%E8%AF%BB",
+      "category": "ebook",
+      "tags": ["电子书", "小说", "在线阅读"],
+      "enabled": true,
+      "proxy": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 7897,
+        "type": "http"
+      },
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
+      "id": "cool18",
+      "name": "论坛小说",
+      "description": "可配置论坛小说数据源",
+      "url": "https://example.com",
+      "base_url": "https://example.com",
+      "icon": "https://via.placeholder.com/128/607D8B/FFFFFF?text=BBS",
+      "category": "ebook",
+      "tags": ["电子书", "小说", "论坛", "可配置"],
+      "enabled": false,
+      "proxy": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 7897,
+        "type": "http"
+      },
+      "site_rules": {
+        "category_entry_url": "",
+        "category_group": "分类",
+        "category_link_selector": "",
+        "thread_link_selector": "",
+        "next_page_selector": "",
+        "page_param": "p",
+        "thread_title_selector": "",
+        "thread_content_selector": "",
+        "comment_container_selector": "",
+        "chapter_link_selectors": []
+      },
       "version": "1.0.0",
       "author": "NetCom Team"
     }
