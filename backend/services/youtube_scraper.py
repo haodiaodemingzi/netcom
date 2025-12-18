@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import shutil
 import subprocess
+import sys
 from urllib.parse import urlparse
 
 from .base_video_scraper import BaseVideoScraper
@@ -125,6 +127,8 @@ class YouTubeScraper(BaseVideoScraper):
         url = self._video_watch_url(video_id)
         data = self._yt_dlp_json([*self._yt_dlp_lang_args(), '-j', url], timeout=60)
         if not isinstance(data, dict):
+            data = self._yt_dlp_json(['-j', url], timeout=60)
+        if not isinstance(data, dict):
             return None
 
         title = data.get('title')
@@ -184,6 +188,16 @@ class YouTubeScraper(BaseVideoScraper):
             timeout=60,
         )
         if not mp4_url:
+            mp4_url = self._yt_dlp_first_url(
+                [
+                    '-f',
+                    'best[ext=mp4][acodec!=none]/best[ext=mp4]/best',
+                    '-g',
+                    watch_url,
+                ],
+                timeout=60,
+            )
+        if not mp4_url:
             logger.error('youtube episode url empty episode_id=%s', episode_id)
             return None
 
@@ -217,11 +231,24 @@ class YouTubeScraper(BaseVideoScraper):
             timeout=60,
         )
         if not isinstance(data, dict):
+            data = self._yt_dlp_json(
+                ['--dump-single-json', '--flat-playlist', f'ytsearchdate{fetch_limit}:{keyword}'],
+                timeout=60,
+            )
+        if not isinstance(data, dict):
             return []
 
         entries = data.get('entries')
         if not isinstance(entries, list) or not entries:
-            return []
+            data = self._yt_dlp_json(
+                ['--dump-single-json', '--flat-playlist', f'ytsearchdate{fetch_limit}:{keyword}'],
+                timeout=60,
+            )
+            if not isinstance(data, dict):
+                return []
+            entries = data.get('entries')
+            if not isinstance(entries, list) or not entries:
+                return []
 
         page_entries = entries[start:end]
         if not page_entries:
@@ -357,7 +384,11 @@ class YouTubeScraper(BaseVideoScraper):
         if not args:
             return None
 
-        cmd = ['yt-dlp']
+        cmd = self._resolve_yt_dlp_cmd()
+        if not cmd:
+            logger.error('yt-dlp not found in PATH and python -m yt_dlp unavailable')
+            return None
+
         cmd.extend(args)
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -371,6 +402,16 @@ class YouTubeScraper(BaseVideoScraper):
             return None
 
         return result.stdout
+
+    def _resolve_yt_dlp_cmd(self):
+        yt_dlp_path = shutil.which('yt-dlp')
+        if yt_dlp_path:
+            return [yt_dlp_path]
+
+        if sys.executable:
+            return [sys.executable, '-m', 'yt_dlp']
+
+        return None
 
     def _pick_thumbnail(self, data):
         if not isinstance(data, dict):
