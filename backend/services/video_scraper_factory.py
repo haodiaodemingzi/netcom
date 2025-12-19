@@ -9,6 +9,7 @@ from .youtube_scraper import YouTubeScraper
 from .didahd_scraper import DidahdScraper
 from .netflixgc_scraper import NetflixgcScraper
 from .keke6_scraper import Keke6Scraper
+from .contentchina_minidrama_scraper import ContentChinaMiniDramaScraper
 
 class VideoScraperFactory:
     """视频爬虫工厂类"""
@@ -25,6 +26,7 @@ class VideoScraperFactory:
         'didahd': DidahdScraper,
         'netflixgc': NetflixgcScraper,
         'keke6': Keke6Scraper,
+        'contentchina_minidrama': ContentChinaMiniDramaScraper,
     }
     
     @classmethod
@@ -93,6 +95,11 @@ class VideoScraperFactory:
                 'id': 'netflixgc',
                 'name': '奈飞工厂',
                 'description': '奈飞工厂(netflixgc.com) - 电影/连续剧/综艺/纪录片/漫剧'
+            },
+            {
+                'id': 'contentchina_minidrama',
+                'name': '喜福网短剧',
+                'description': '喜福网(minidrama.contentchina.com) - 免费短剧'
             }
         ]
     

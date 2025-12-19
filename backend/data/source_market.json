@@ -133,6 +133,18 @@
       "author": "NetCom Team"
     },
     {
+      "id": "contentchina_minidrama",
+      "name": "喜福网短剧",
+      "description": "喜福网(minidrama.contentchina.com) - 免费短剧",
+      "url": "https://minidrama.contentchina.com",
+      "icon": "https://via.placeholder.com/128/2ECC71/FFFFFF?text=短剧",
+      "category": "video",
+      "tags": ["短剧", "视频"],
+      "enabled": true,
+      "version": "1.0.0",
+      "author": "NetCom Team"
+    },
+    {
       "id": "xmanhua",
       "name": "X漫画",
       "description": "X漫画网 - 提供海量漫画资源",
