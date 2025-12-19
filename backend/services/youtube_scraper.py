@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from .base_video_scraper import BaseVideoScraper
 
@@ -124,25 +124,28 @@ class YouTubeScraper(BaseVideoScraper):
         if cached:
             return cached
 
-        url = self._video_watch_url(video_id)
-        data = self._yt_dlp_json([*self._yt_dlp_lang_args(), '-j', url], timeout=60)
-        if not isinstance(data, dict):
-            data = self._yt_dlp_json(['-j', url], timeout=60)
-        if not isinstance(data, dict):
-            return None
+        detail = self._fetch_oembed_detail(video_id)
+        if not detail:
+            url = self._video_watch_url(video_id)
+            data = self._yt_dlp_json([*self._yt_dlp_lang_args(), '-j', url], timeout=60)
+            if not isinstance(data, dict):
+                data = self._yt_dlp_json(['-j', url], timeout=60)
+            if not isinstance(data, dict):
+                return None
 
-        title = data.get('title')
-        if not title:
-            return None
+            title = data.get('title')
+            if not title:
+                return None
 
-        detail = {
-            'id': video_id,
-            'title': title,
-            'cover': data.get('thumbnail') or f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg',
-            'description': data.get('description') or '',
-            'uploader': data.get('uploader') or '',
-            'source': self.source_id,
-        }
+            detail = {
+                'id': video_id,
+                'title': title,
+                'cover': data.get('thumbnail') or f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg',
+                'description': data.get('description') or '',
+                'uploader': data.get('uploader') or '',
+                'source': self.source_id,
+            }
+
         self._put_cached_video(video_id, detail)
         return detail
 
@@ -379,6 +382,39 @@ class YouTubeScraper(BaseVideoScraper):
             return None
 
         return lines[0]
+
+    def _fetch_oembed_detail(self, video_id):
+        if not video_id:
+            return None
+
+        watch_url = self._video_watch_url(video_id)
+        oembed_url = f'https://www.youtube.com/oembed?format=json&url={quote(watch_url, safe="")}'
+
+        response = self._make_request(oembed_url)
+        if not response:
+            return None
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            logger.error('youtube oembed parse failed video_id=%s err=%s', video_id, str(e))
+            return None
+
+        title = data.get('title')
+        if not isinstance(title, str) or not title.strip():
+            return None
+
+        cover = data.get('thumbnail_url') or f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+        uploader = data.get('author_name') or ''
+
+        return {
+            'id': video_id,
+            'title': title.strip(),
+            'cover': cover,
+            'description': '',
+            'uploader': uploader,
+            'source': self.source_id,
+        }
 
     def _yt_dlp_common_args(self):
         args = []
