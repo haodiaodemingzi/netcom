@@ -35,6 +35,7 @@ const MarketScreen = () => {
   const [installedSources, setInstalledSources] = useState({});
   const [installedSourceIds, setInstalledSourceIds] = useState(new Set());
   const [activationToken, setActivationToken] = useState('');
+  const [tokenReady, setTokenReady] = useState(false);
   const [activating, setActivating] = useState(false);
   const [codeInput, setCodeInput] = useState('');
 
@@ -43,8 +44,9 @@ const MarketScreen = () => {
   }, []);
 
   useEffect(() => {
+    if (!tokenReady) return;
     loadSources();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, activationToken, tokenReady]);
 
   useEffect(() => {
     loadInstalledSources();
@@ -57,9 +59,13 @@ const MarketScreen = () => {
   };
 
   const loadToken = async () => {
-    const token = await getActivationToken();
-    setActivationToken(token);
-    return token;
+    try {
+      const token = (await getActivationToken()) || '';
+      setActivationToken(token);
+      return token;
+    } finally {
+      setTokenReady(true);
+    }
   };
 
   const loadCategories = async (tokenParam) => {
