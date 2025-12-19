@@ -380,6 +380,24 @@ class YouTubeScraper(BaseVideoScraper):
 
         return lines[0]
 
+    def _yt_dlp_common_args(self):
+        args = []
+
+        if sys.platform.startswith('linux'):
+            cookies_path = '/root/yt_cookies.txt'
+            if os.path.exists(cookies_path):
+                args.extend(['--cookies', cookies_path])
+            else:
+                logger.warning('youtube cookies file missing path=%s', cookies_path)
+
+            node_runtime = '/usr/bin/node'
+            if os.path.exists(node_runtime):
+                args.extend(['--js-runtimes', f'node:{node_runtime}'])
+            else:
+                logger.warning('node runtime missing path=%s for youtube scraper', node_runtime)
+
+        return args
+
     def _run_yt_dlp(self, args, timeout=30):
         if not args:
             return None
@@ -389,6 +407,7 @@ class YouTubeScraper(BaseVideoScraper):
             logger.error('yt-dlp not found in PATH and python -m yt_dlp unavailable')
             return None
 
+        cmd.extend(self._yt_dlp_common_args())
         cmd.extend(args)
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
