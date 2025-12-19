@@ -172,6 +172,7 @@ class VideoDownloadManager {
       }
 
       const videoUrl = episodeDetail.data.videoUrl;
+      const playReferer = typeof episodeDetail.data.playUrl === 'string' ? episodeDetail.data.playUrl : null;
       console.log(`视频URL: ${videoUrl}`);
 
       // 检查视频类型
@@ -189,7 +190,8 @@ class VideoDownloadManager {
         seriesTitle,
         episode.title || `第${episode.episodeNumber || ''}集`,
         videoUrl,
-        source
+        source,
+        playReferer
       );
 
       if (onProgress) {

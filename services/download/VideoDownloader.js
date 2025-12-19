@@ -65,12 +65,16 @@ export class VideoDownloader {
       // 步骤1: 调用后端转换接口
       let convertResponse;
       try {
-        convertResponse = await axios.post(`${API_BASE_URL}/videos/convert`, {
+        const body = {
           m3u8_url: task.videoUrl,
           episode_id: task.episodeId,
           series_id: task.seriesId,
           source: task.source,
-        });
+        };
+        if (task.playReferer) {
+          body.play_referer = task.playReferer;
+        }
+        convertResponse = await axios.post(`${API_BASE_URL}/videos/convert`, body);
       } catch (apiError) {
         // 检查是否是 ffmpeg 未安装的错误
         const errorMsg = apiError.response?.data?.error || apiError.message || '';

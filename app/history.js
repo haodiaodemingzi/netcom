@@ -72,7 +72,9 @@ const HistoryScreen = () => {
     if (!item || !item.id) return;
     const type = item.type || 'comic';
     if (type === 'video') {
-      router.push(`/series/${item.id}`);
+      const source = typeof item.source === 'string' ? item.source.trim() : '';
+      const suffix = source ? `?source=${encodeURIComponent(source)}` : '';
+      router.push(`/series/${item.id}${suffix}`);
       return;
     }
     if (type === 'ebook') {

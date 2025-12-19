@@ -1,11 +1,27 @@
 import videoDownloadManager from './videoDownloadManager';
+import { API_BASE_URL } from '../utils/constants';
 
 /**
  * 统一的视频播放服务
  * 处理本地视频检查、URL类型判断等逻辑
- * 原则：所有视频都直接使用原始URL，不走代理
+ * 原则：默认直接使用原始URL
+ * netflixgc 等需要 Referer 的源走后端代理
  */
 class VideoPlayerService {
+  getUrlHost(url) {
+    if (!url) return '';
+    const text = String(url);
+    const match = text.match(/^https?:\/\/([^\/]+)/i);
+    return match ? match[1].toLowerCase() : '';
+  }
+
+  shouldDirectPlayNetflixgc(url) {
+    const host = this.getUrlHost(url);
+    if (!host) return false;
+    if (host.includes('lzcdn')) return true;
+    if (host.includes('cdn')) return true;
+    return false;
+  }
   /**
    * 检测视频URL类型
    * @param {string} url - 视频URL
@@ -29,9 +45,19 @@ class VideoPlayerService {
    */
   processVideoUrl(originalUrl) {
     if (!originalUrl) return null;
-    // 原则：所有视频都直接使用原始URL，不走代理
+    // 默认直接使用原始URL
     // app端的播放器应该能够处理各种格式的视频URL
     return originalUrl;
+  }
+
+  buildProxyUrl({ url, source, seriesId, playReferer }) {
+    if (!url) return null;
+    const parts = [];
+    parts.push(`url=${encodeURIComponent(url)}`);
+    if (source) parts.push(`source=${encodeURIComponent(source)}`);
+    if (seriesId) parts.push(`series_id=${encodeURIComponent(seriesId)}`);
+    if (playReferer) parts.push(`play_referer=${encodeURIComponent(playReferer)}`);
+    return `${API_BASE_URL}/videos/proxy?${parts.join('&')}`;
   }
 
   /**
@@ -45,7 +71,7 @@ class VideoPlayerService {
    * @param {string} options.source - 数据源（可选，已废弃，保留用于兼容）
    * @returns {Promise<Object>} - { url: string, isLocal: boolean, videoType: string }
    */
-  async getVideoPlayUrl({ episodeId, seriesId = null, videoUrl = null, source = null }) {
+  async getVideoPlayUrl({ episodeId, seriesId = null, videoUrl = null, source = null, playReferer = null }) {
     if (!episodeId) {
       throw new Error('episodeId is required');
     }
@@ -70,8 +96,18 @@ class VideoPlayerService {
     console.log('[VideoPlayerService] 使用在线视频URL');
     const videoType = this.detectVideoType(videoUrl);
 
-    // 3. 原则：不走代理，直接使用原始URL
-    // app端的播放器（expo-video）应该能够处理各种格式的视频URL
+    const safeSource = source || null;
+    if (safeSource === 'netflixgc') {
+      const finalUrl = this.processVideoUrl(videoUrl);
+      console.log('[VideoPlayerService] netflixgc 直接播放解析后的URL:', finalUrl);
+      return {
+        url: finalUrl,
+        isLocal: false,
+        videoType,
+        originalUrl: videoUrl,
+      };
+    }
+
     const finalUrl = this.processVideoUrl(videoUrl);
     console.log('[VideoPlayerService] 直接使用原始URL（不走代理）:', finalUrl);
 
@@ -96,6 +132,7 @@ class VideoPlayerService {
       seriesId: episodeData?.seriesId || episodeData?.series_id || null,
       videoUrl: episodeData?.videoUrl || null,
       source: source || episodeData?.source || null,
+      playReferer: typeof episodeData?.playUrl === 'string' ? episodeData.playUrl : null,
     });
   }
 }

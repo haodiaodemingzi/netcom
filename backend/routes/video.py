@@ -2,11 +2,12 @@ from flask import Blueprint, request, jsonify, Response, stream_with_context
 from services.video_scraper_factory import VideoScraperFactory
 from utils.decorators import (
     handle_errors, get_source_param, get_pagination_params,
-    success_response, not_found_response
+    success_response, not_found_response, bad_request_response
 )
 import logging
 import requests
-from urllib.parse import urlparse, urlencode
+import re
+from urllib.parse import urlparse, urlencode, urljoin, urlsplit, urlunsplit, unquote, quote
 import subprocess
 import os
 import tempfile
@@ -17,6 +18,123 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 video_bp = Blueprint('video', __name__)
+
+
+def _is_blank(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return len(value.strip()) == 0
+    return False
+
+
+def _build_proxy_url(target_url, source, series_id, play_referer):
+    if _is_blank(target_url):
+        return None
+
+    params = {'url': target_url}
+    if not _is_blank(source):
+        params['source'] = str(source).strip()
+    if not _is_blank(series_id):
+        params['series_id'] = str(series_id).strip()
+    if not _is_blank(play_referer):
+        params['play_referer'] = str(play_referer).strip()
+
+    base = request.host_url.rstrip('/') + '/api/videos/proxy'
+    return base + '?' + urlencode(params)
+
+
+def _decode_percent_u(value):
+    if _is_blank(value):
+        return value
+
+    def repl(m):
+        hex_str = m.group(1)
+        try:
+            return chr(int(hex_str, 16))
+        except Exception:
+            return m.group(0)
+
+    return re.sub(r'%u([0-9a-fA-F]{4})', repl, str(value))
+
+
+def _normalize_media_url(raw_url):
+    if _is_blank(raw_url):
+        return None
+
+    value = str(raw_url).strip().replace('\\/', '/').replace('&amp;', '&')
+    if _is_blank(value):
+        return None
+
+    for _ in range(3):
+        if '%25u' not in value and '%u' not in value and '%' not in value:
+            break
+        try:
+            next_value = unquote(value)
+        except Exception:
+            break
+        if next_value == value:
+            break
+        value = next_value
+
+    value = _decode_percent_u(value)
+
+    try:
+        parts = urlsplit(value)
+    except Exception:
+        return value
+
+    if _is_blank(parts.scheme) or _is_blank(parts.netloc):
+        return value
+
+    path = quote(parts.path or '', safe='/%')
+    query = quote(parts.query or '', safe='=&%')
+    fragment = quote(parts.fragment or '', safe='')
+    return urlunsplit((parts.scheme, parts.netloc, path, query, fragment))
+
+
+def _rewrite_m3u8_line_uri_attr(line, m3u8_url, source, series_id, play_referer):
+    if _is_blank(line) or 'URI="' not in line:
+        return line
+
+    m = re.search(r'URI="([^"]+)"', line)
+    if not m:
+        return line
+
+    uri_value = m.group(1)
+    absolute = urljoin(m3u8_url, uri_value)
+    proxied = _build_proxy_url(absolute, source, series_id, play_referer)
+    if _is_blank(proxied):
+        return line
+
+    return line.replace(f'URI="{uri_value}"', f'URI="{proxied}"')
+
+
+def _rewrite_m3u8_content(m3u8_text, m3u8_url, source, series_id, play_referer):
+    if _is_blank(m3u8_text) or _is_blank(m3u8_url):
+        return m3u8_text
+
+    lines = str(m3u8_text).splitlines()
+    out_lines = []
+    for raw in lines:
+        line = raw.strip()
+        if _is_blank(line):
+            out_lines.append('')
+            continue
+
+        if line.startswith('#EXT-X-KEY') or line.startswith('#EXT-X-MAP'):
+            out_lines.append(_rewrite_m3u8_line_uri_attr(line, m3u8_url, source, series_id, play_referer))
+            continue
+
+        if line.startswith('#'):
+            out_lines.append(line)
+            continue
+
+        absolute = urljoin(m3u8_url, line)
+        proxied = _build_proxy_url(absolute, source, series_id, play_referer)
+        out_lines.append(proxied or line)
+
+    return '\n'.join(out_lines) + '\n'
 
 @video_bp.route('/videos/sources', methods=['GET'])
 @handle_errors("获取数据源列表失败")
@@ -74,7 +192,11 @@ def get_episodes(series_id):
 def get_episode_detail(episode_id):
     """获取单个剧集详情"""
     source = request.args.get('source', 'thanju')
-    scraper = VideoScraperFactory.create_scraper(source)
+    try:
+        scraper = VideoScraperFactory.create_scraper(source)
+    except ValueError as e:
+        logger.error("获取剧集详情数据源不支持 source=%s episode_id=%s err=%s", source, episode_id, e)
+        return bad_request_response(str(e))
     episode = scraper.get_episode_detail(episode_id)
     if episode:
         return success_response(episode)
@@ -88,7 +210,11 @@ def get_episode_config(episode_id):
     前端会先访问 cookie_url 预热 Cookie
     """
     source = request.args.get('source', 'thanju')
-    scraper = VideoScraperFactory.create_scraper(source)
+    try:
+        scraper = VideoScraperFactory.create_scraper(source)
+    except ValueError as e:
+        logger.error("获取剧集配置数据源不支持 source=%s episode_id=%s err=%s", source, episode_id, e)
+        return bad_request_response(str(e))
 
     base_url = getattr(scraper, 'base_url', None)
     headers = getattr(scraper, 'headers', None)
@@ -214,17 +340,24 @@ def proxy_video():
     video_url = request.args.get('url')
     series_id = request.args.get('series_id')
     source = request.args.get('source', 'thanju')
+    play_referer = request.args.get('play_referer')
     
     if not video_url:
         return jsonify({'error': '缺少视频URL参数'}), 400
+
+    normalized_url = _normalize_media_url(video_url)
+    if not _is_blank(normalized_url):
+        video_url = normalized_url
     
     try:
+        is_m3u8 = video_url.endswith('.m3u8') or 'm3u8' in video_url
+
         # 根据数据源设置请求头
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
             'Sec-Fetch-Dest': 'video',
             'Sec-Fetch-Mode': 'no-cors',
@@ -238,10 +371,13 @@ def proxy_video():
             else:
                 headers['Referer'] = 'https://www.thanju.com/'
         elif source == 'netflixgc':
-            if series_id:
-                headers['Referer'] = f'https://www.netflixgc.com/detail/{series_id}.html'
+            if play_referer:
+                headers['Referer'] = play_referer
+            elif series_id:
+                headers['Referer'] = f'https://www.netflixgc.com/play/{series_id}-1-1.html'
             else:
                 headers['Referer'] = 'https://www.netflixgc.com/'
+            headers['Origin'] = 'https://www.netflixgc.com'
         elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
             headers['Referer'] = 'https://bad.news/'
             headers['Origin'] = 'https://bad.news'
@@ -267,7 +403,7 @@ def proxy_video():
         response = requests.get(
             video_url,
             headers=headers,
-            stream=True,
+            stream=not is_m3u8,
             timeout=30,
             verify=True
         )
@@ -276,17 +412,15 @@ def proxy_video():
         response_headers = {}
         
         # 检查是否是m3u8文件，设置正确的Content-Type
-        if video_url.endswith('.m3u8') or 'm3u8' in video_url:
+        if is_m3u8:
             response_headers['Content-Type'] = 'application/vnd.apple.mpegurl'
-            # 对于m3u8文件，需要处理文本内容，可能需要修改其中的URL
-            # 但先尝试直接返回，看看是否能正常工作
         elif 'Content-Type' in response.headers:
             response_headers['Content-Type'] = response.headers['Content-Type']
         else:
             # 默认Content-Type
             response_headers['Content-Type'] = 'video/mp2t' if video_url.endswith('.ts') else 'application/octet-stream'
         
-        if 'Content-Length' in response.headers:
+        if (not is_m3u8) and ('Content-Length' in response.headers):
             response_headers['Content-Length'] = response.headers['Content-Length']
         if 'Accept-Ranges' in response.headers:
             response_headers['Accept-Ranges'] = response.headers['Accept-Ranges']
@@ -298,13 +432,26 @@ def proxy_video():
         response_headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
         response_headers['Access-Control-Allow-Headers'] = 'Range'
         
-        # 对于m3u8文件，可能需要处理内容
-        if video_url.endswith('.m3u8') or 'm3u8' in video_url:
-            # 读取m3u8内容
-            content = response.text
-            # 流式返回m3u8内容
+        if is_m3u8:
+            play_referer_value = play_referer
+            if _is_blank(play_referer_value) and series_id and source == 'netflixgc':
+                play_referer_value = f'https://www.netflixgc.com/detail/{series_id}.html'
+
+            if response.encoding is None or str(response.encoding).lower() == 'iso-8859-1':
+                response.encoding = response.apparent_encoding
+
+            effective_m3u8_url = response.url or video_url
+            logger.info(
+                "m3u8 代理重写 source=%s series_id=%s req_url=%s effective_url=%s",
+                source,
+                series_id,
+                video_url,
+                effective_m3u8_url,
+            )
+            rewritten = _rewrite_m3u8_content(response.text, effective_m3u8_url, source, series_id, play_referer_value)
+
             def generate():
-                yield content.encode('utf-8')
+                yield (rewritten or '').encode('utf-8')
         else:
             # 流式返回视频数据
             def generate():
@@ -337,9 +484,14 @@ def convert_video():
     episode_id = data.get('episode_id')
     series_id = data.get('series_id')
     source = data.get('source', 'thanju')
+    play_referer = data.get('play_referer')
     
     if not m3u8_url or not episode_id:
         return jsonify({'error': '缺少必要参数'}), 400
+
+    normalized_m3u8 = _normalize_media_url(m3u8_url)
+    if not _is_blank(normalized_m3u8):
+        m3u8_url = normalized_m3u8
     
     try:
         # 检查 FFmpeg 是否可用
@@ -392,11 +544,14 @@ def convert_video():
                         referer = 'https://www.thanju.com/'
                     headers.append(f'Referer: {referer}')
                 elif source == 'netflixgc':
-                    if series_id:
+                    if play_referer:
+                        referer = play_referer
+                    elif series_id:
                         referer = f'https://www.netflixgc.com/detail/{series_id}.html'
                     else:
                         referer = 'https://www.netflixgc.com/'
                     headers.append(f'Referer: {referer}')
+                    headers.append('Origin: https://www.netflixgc.com')
                 elif source == 'badnews' or source == 'badnews_av' or source == '原创视频':
                     headers.append('Referer: https://bad.news/')
                     headers.append('Origin: https://bad.news')

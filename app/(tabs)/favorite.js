@@ -59,7 +59,9 @@ const FavoriteScreen = () => {
   const handlePress = (item) => {
     if (!item || !item.id) return;
     if (item.type === 'video') {
-      router.push(`/series/${item.id}`);
+      const source = typeof item.source === 'string' ? item.source.trim() : '';
+      const suffix = source ? `?source=${encodeURIComponent(source)}` : '';
+      router.push(`/series/${item.id}${suffix}`);
       return;
     }
     router.push(`/comic/${item.id}`);

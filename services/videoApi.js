@@ -251,7 +251,7 @@ export const getEpisodes = async (seriesId) => {
 };
 
 // 获取单个剧集详情
-export const getEpisodeDetail = async (episodeId) => {
+export const getEpisodeDetail = async (episodeId, source = null) => {
   try {
     if (currentDataSource === 'mock') {
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -268,7 +268,8 @@ export const getEpisodeDetail = async (episodeId) => {
       throw new Error('剧集不存在');
     } else {
       const params = {};
-      if (currentSource) params.source = currentSource;
+      const sourceToUse = source || currentSource;
+      if (sourceToUse) params.source = sourceToUse;
       const response = await axios.get(`${API_BASE_URL}/videos/episodes/${episodeId}`, { params });
       
       // 如果返回的视频URL是外部链接，转换为代理URL

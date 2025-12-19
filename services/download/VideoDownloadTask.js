@@ -6,7 +6,7 @@ export const VideoTaskStatus = TaskStatus;
  * 视频剧集下载任务 - 继承基础下载任务类
  */
 export class VideoDownloadTask extends BaseDownloadTask {
-  constructor(episodeId, seriesId, seriesTitle, episodeTitle, videoUrl, source) {
+  constructor(episodeId, seriesId, seriesTitle, episodeTitle, videoUrl, source, playReferer = null) {
     super(episodeId, seriesId, seriesTitle, episodeTitle, source);
     
     // 视频任务的 id 直接使用 episodeId（与原实现保持一致）
@@ -21,6 +21,7 @@ export class VideoDownloadTask extends BaseDownloadTask {
     // 视频特有属性
     this.videoUrl = videoUrl;
     this.videoType = this.detectVideoType(videoUrl);
+    this.playReferer = typeof playReferer === 'string' ? playReferer : null;
     this.currentTime = 0; // FFmpeg转换的当前时间
     this.duration = 0;    // 视频总时长
     this.outputPath = null;
@@ -105,6 +106,7 @@ export class VideoDownloadTask extends BaseDownloadTask {
       episodeTitle: this.episodeTitle,
       videoUrl: this.videoUrl,
       videoType: this.videoType,
+      playReferer: this.playReferer,
       outputPath: this.outputPath,
       currentTime: this.currentTime,
       duration: this.duration,

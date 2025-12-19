@@ -19,7 +19,7 @@ import eventBus, { EVENTS } from '../../services/eventBus';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource } from '../../services/videoApi';
+import { getSeriesDetail, getEpisodes, getEpisodeDetail, getCurrentVideoSource, setCurrentVideoSource } from '../../services/videoApi';
 import { isFavorite, addFavorite, removeFavorite, addVideoHistory, getSettings, saveSettings } from '../../services/storage';
 import EpisodeCard from '../../components/EpisodeCard';
 import FullScreenLoader from '../../components/FullScreenLoader';
@@ -29,7 +29,7 @@ import videoPlayerService from '../../services/videoPlayerService';
 
 const SeriesDetailScreen = () => {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id, source } = useLocalSearchParams();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [series, setSeries] = useState(null);
   const [episodes, setEpisodes] = useState([]);
@@ -51,6 +51,8 @@ const SeriesDetailScreen = () => {
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const controlsTimeoutRef = useRef(null);
+  const playToEndHandledRef = useRef(false);
+  const [showEpisodePicker, setShowEpisodePicker] = useState(false);
 
   const getOrientationModeLabel = (mode) => {
     if (mode === 'portrait') return '竖屏';
@@ -158,33 +160,69 @@ const SeriesDetailScreen = () => {
   // 监听播放器状态
   useEffect(() => {
     if (!player) return;
-    
-    const interval = setInterval(() => {
-      try {
-        const playing = player.playing;
-        const time = player.currentTime || 0;
-        const dur = player.duration || 0;
-        
-        setIsPlaying(playing);
-        setCurrentTime(time);
-        setDuration(dur);
-        
-        if ((playing && time > 0) || dur > 0) {
-          setIsLoadingVideo(false);
-          setLoadingEpisodeId(null);
-        }
-      } catch (error) {
-        console.error('获取播放器状态失败:', error);
-      }
-    }, 500); // 每500ms检查一次
-    
-    return () => clearInterval(interval);
+
+    try {
+      player.timeUpdateEventInterval = 0.5;
+    } catch (e) {
+      console.warn('设置 timeUpdateEventInterval 失败', e);
+    }
+
+    const subscriptions = [];
+
+    try {
+      subscriptions.push(
+        player.addListener('playingChange', ({ playing }) => {
+          setIsPlaying(!!playing);
+        })
+      );
+    } catch (error) {
+      console.error('监听 playingChange 失败', error);
+    }
+
+    try {
+      subscriptions.push(
+        player.addListener('timeUpdate', ({ currentTime: nextTime }) => {
+          const safeTime = Number.isFinite(nextTime) ? nextTime : 0;
+          setCurrentTime(safeTime);
+          const safeDur = Number.isFinite(player.duration) ? player.duration : 0;
+          setDuration(safeDur);
+          if (safeDur > 0 || safeTime > 0) {
+            setIsLoadingVideo(false);
+            setLoadingEpisodeId(null);
+          }
+        })
+      );
+    } catch (error) {
+      console.error('监听 timeUpdate 失败', error);
+    }
+
+    try {
+      subscriptions.push(
+        player.addListener('sourceLoad', () => {
+          const safeDur = Number.isFinite(player.duration) ? player.duration : 0;
+          setDuration(safeDur);
+        })
+      );
+    } catch (error) {
+      console.error('监听 sourceLoad 失败', error);
+    }
+
+    return () => {
+      subscriptions.forEach((sub) => {
+        if (!sub?.remove) return;
+        sub.remove();
+      });
+    };
   }, [player]);
 
   useEffect(() => {
+    const nextSource = typeof source === 'string' ? source.trim() : '';
+    if (nextSource) {
+      setCurrentVideoSource(nextSource);
+    }
     loadData();
     checkFavorite();
-  }, [id]);
+  }, [id, source]);
 
   useEffect(() => {
     if (showControls && player && player.playing) {
@@ -235,6 +273,7 @@ const SeriesDetailScreen = () => {
         id: series.id,
         title: series.title,
         cover: series.cover,
+        source: getCurrentVideoSource() || series.source,
       },
       ep.id,
       safePosition,
@@ -266,6 +305,7 @@ const SeriesDetailScreen = () => {
         title: series.title,
         cover: series.cover,
         type: 'video',
+        source: getCurrentVideoSource() || series.source,
       });
       setFavorited(true);
     }
@@ -310,16 +350,27 @@ const SeriesDetailScreen = () => {
   };
 
   const handleEpisodePress = async (episode) => {
+    if (!episode?.id) return;
+
+    setIsLoadingVideo(true);
+    setLoadingEpisodeId(episode.id);
+    saveVideoHistoryIfNeeded().catch((error) => {
+      console.error('保存播放历史失败', {
+        seriesId: series?.id,
+        currentEpisodeId: playingEpisode?.id,
+        nextEpisodeId: episode.id,
+        error,
+      });
+    });
+
     try {
-      await saveVideoHistoryIfNeeded();
       console.log('=== 开始加载剧集 ===');
       console.log('剧集ID:', episode.id);
       console.log('剧集信息:', episode);
-      setIsLoadingVideo(true);
-      setLoadingEpisodeId(episode.id);
       console.log('正在调用后端API获取剧集详情...');
       console.log('API路径:', `/videos/episodes/${episode.id}?source=thanju`);
-      const result = await getEpisodeDetail(episode.id);
+      const sourceToUse = getCurrentVideoSource() || series?.source || 'thanju';
+      const result = await getEpisodeDetail(episode.id, sourceToUse);
       console.log('=== 后端API响应 ===');
       console.log('响应结果:', JSON.stringify(result, null, 2));
       if (result.success && result.data) {
@@ -388,6 +439,7 @@ const SeriesDetailScreen = () => {
     setShowPlayer(false);
     setPlayingEpisode(null);
     setVideoSource('');
+    setShowEpisodePicker(false);
     setIsFullscreen(false);
   };
 
@@ -603,6 +655,121 @@ const SeriesDetailScreen = () => {
       return sortOrder === 'asc' ? numA - numB : numB - numA;
     });
   }, [episodes, sortOrder]);
+
+  const currentEpisodeIndex = useMemo(() => {
+    const currentId = playingEpisode?.id;
+    if (!currentId) return -1;
+    return sortedEpisodes.findIndex(e => e?.id === currentId);
+  }, [sortedEpisodes, playingEpisode?.id]);
+
+  const hasPrevEpisode = currentEpisodeIndex > 0;
+  const hasNextEpisode = currentEpisodeIndex >= 0 && currentEpisodeIndex < sortedEpisodes.length - 1;
+
+  const canSkipIntro = useMemo(() => {
+    if (!player) return false;
+    if (!Number.isFinite(currentTime)) return true;
+    return currentTime < 89.5;
+  }, [player, currentTime]);
+
+  const switchEpisodeByIndex = useCallback((index) => {
+    if (index < 0) return;
+    if (index >= sortedEpisodes.length) return;
+    const target = sortedEpisodes[index];
+    if (!target?.id) return;
+    if (loadingEpisodeId && loadingEpisodeId === target.id) return;
+    handleEpisodePress(target);
+  }, [sortedEpisodes, loadingEpisodeId, handleEpisodePress]);
+
+  const handlePrevEpisode = useCallback(() => {
+    if (!hasPrevEpisode) return;
+    switchEpisodeByIndex(currentEpisodeIndex - 1);
+  }, [hasPrevEpisode, currentEpisodeIndex, switchEpisodeByIndex]);
+
+  const handleNextEpisode = useCallback(() => {
+    if (!hasNextEpisode) {
+      Alert.alert('提示', '已经是最后一集');
+      return;
+    }
+    switchEpisodeByIndex(currentEpisodeIndex + 1);
+  }, [hasNextEpisode, currentEpisodeIndex, switchEpisodeByIndex]);
+
+  const handleSkipIntro = useCallback(() => {
+    if (!player) return;
+    const targetSeconds = 90;
+    const safeCurrent = Number.isFinite(player.currentTime) ? player.currentTime : 0;
+    const safeDuration = Number.isFinite(player.duration) ? player.duration : 0;
+    const safeTarget = safeDuration > 0
+      ? Math.min(targetSeconds, Math.max(0, safeDuration - 1))
+      : targetSeconds;
+
+    const delta = safeTarget - safeCurrent;
+    if (delta <= 0.5) return;
+
+    try {
+      player.seekBy(delta);
+    } catch (error) {
+      console.error('跳过片头失败', {
+        seriesId: series?.id,
+        episodeId: playingEpisode?.id,
+        safeTarget,
+        safeCurrent,
+        error,
+      });
+      try {
+        player.currentTime = safeTarget;
+      } catch (error2) {
+        console.error('跳过片头回退失败', {
+          seriesId: series?.id,
+          episodeId: playingEpisode?.id,
+          safeTarget,
+          safeCurrent,
+          error: error2,
+        });
+      }
+    }
+  }, [player, series?.id, playingEpisode?.id]);
+
+  useEffect(() => {
+    playToEndHandledRef.current = false;
+  }, [playingEpisode?.id]);
+
+  useEffect(() => {
+    setShowEpisodePicker(false);
+  }, [playingEpisode?.id]);
+
+  useEffect(() => {
+    if (!player) return;
+    if (!showPlayer) return;
+    if (!player.addListener) return;
+
+    const subscription = player.addListener('playToEnd', () => {
+      if (playToEndHandledRef.current) return;
+      playToEndHandledRef.current = true;
+      if (!hasNextEpisode) {
+        Alert.alert('提示', '已经是最后一集');
+        return;
+      }
+      switchEpisodeByIndex(currentEpisodeIndex + 1);
+    });
+
+    return () => {
+      if (!subscription?.remove) return;
+      subscription.remove();
+    };
+  }, [player, showPlayer, hasNextEpisode, currentEpisodeIndex, switchEpisodeByIndex]);
+
+  const toggleEpisodePicker = useCallback(() => {
+    if (!showPlayer) return;
+    if (!Array.isArray(sortedEpisodes) || sortedEpisodes.length === 0) return;
+    setShowEpisodePicker(prev => !prev);
+  }, [showPlayer, sortedEpisodes]);
+
+  const handleEpisodePickerSelect = useCallback((episode) => {
+    if (!episode?.id) return;
+    if (isLoadingVideo) return;
+    setShowEpisodePicker(false);
+    handleEpisodePress(episode);
+  }, [isLoadingVideo, handleEpisodePress]);
 
   // 计算分组信息（基于排序后的列表）
   const episodeGroups = useMemo(() => {
@@ -939,6 +1106,27 @@ const SeriesDetailScreen = () => {
                             <Text style={styles.timeText}>{formatTime(duration)}</Text>
                           </View>
                           <View style={styles.buttonRow}>
+                            <TouchableOpacity
+                              style={[styles.actionBtn, !hasPrevEpisode && styles.actionBtnDisabled]}
+                              onPress={handlePrevEpisode}
+                              disabled={!hasPrevEpisode}
+                            >
+                              <Text style={styles.btnText}>上一集</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.actionBtn, !hasNextEpisode && styles.actionBtnDisabled]}
+                              onPress={handleNextEpisode}
+                              disabled={!hasNextEpisode}
+                            >
+                              <Text style={styles.btnText}>下一集</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.actionBtn, !canSkipIntro && styles.actionBtnDisabled]}
+                              onPress={handleSkipIntro}
+                              disabled={!canSkipIntro}
+                            >
+                              <Text style={styles.btnText}>跳过片头</Text>
+                            </TouchableOpacity>
                             <TouchableOpacity style={styles.actionBtn} onPress={handlePlaybackRate}>
                               <Text style={styles.btnText}>{playbackRate}x</Text>
                             </TouchableOpacity>
@@ -1179,13 +1367,13 @@ const SeriesDetailScreen = () => {
           )}
         </View>
 
-        <FlatList
-          data={displayedEpisodes}
-          renderItem={renderEpisodeCard}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          contentContainerStyle={styles.episodesList}
-        />
+        <View style={styles.episodesList}>
+          {displayedEpisodes.map((item, index) => (
+            <View key={item.id}>
+              {renderEpisodeCard({ item, index })}
+            </View>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1692,6 +1880,7 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
     gap: 10,
   },
   playBtn: {
@@ -1711,6 +1900,78 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 4,
+  },
+  actionBtnDisabled: {
+    opacity: 0.5,
+  },
+  episodePickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  episodePickerPanel: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    maxHeight: '70%',
+    minHeight: 200,
+    overflow: 'hidden',
+  },
+  episodePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
+  },
+  episodePickerTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  episodePickerClose: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  episodePickerCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  episodePickerList: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  episodePickerScroll: {
+    flex: 1,
+  },
+  episodePickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  episodeChip: {
+    flex: 1,
+    margin: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  episodeChipActive: {
+    backgroundColor: 'rgba(98, 0, 238, 0.9)',
+  },
+  episodeChipText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  episodeChipTextActive: {
+    fontWeight: '700',
   },
   timeText: {
     fontSize: 12,

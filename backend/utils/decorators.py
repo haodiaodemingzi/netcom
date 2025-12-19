@@ -34,6 +34,7 @@ def handle_errors(error_message="操作失败"):
                     request.path,
                     request.query_string.decode('utf-8', errors='ignore'),
                     str(e),
+                    exc_info=True,
                 )
                 return jsonify({'error': str(e)}), 500
         return wrapper

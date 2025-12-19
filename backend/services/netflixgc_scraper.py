@@ -1,7 +1,8 @@
 import json
+import base64
 import logging
 import re
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, unquote
 
 import execjs
 from bs4 import BeautifulSoup
@@ -16,6 +17,7 @@ class NetflixgcScraper(BaseVideoScraper):
         super().__init__("https://www.netflixgc.com", proxy_config)
         self.source_id = "netflixgc"
         self.source_name = "奈飞工厂"
+        self._list_api_url = self.base_url + "/index.php/ds_api/vod"
         self.headers.update(
             {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -56,6 +58,10 @@ class NetflixgcScraper(BaseVideoScraper):
         if _is_blank(category_id):
             return []
 
+        api_videos = self._get_videos_by_category_via_api(category_id, page, limit)
+        if api_videos is not None:
+            return api_videos
+
         url = self._build_category_url(str(category_id), page)
         resp = self._make_request(url)
         if not resp:
@@ -63,6 +69,93 @@ class NetflixgcScraper(BaseVideoScraper):
 
         soup = BeautifulSoup(resp.text, "html.parser")
         return _parse_video_list(soup, limit, self.source_id, self.base_url)
+
+    def _get_videos_by_category_via_api(self, category_id, page, limit):
+        type_id = _safe_int(category_id)
+        if not type_id:
+            return None
+
+        page_int = _safe_int(page) or 1
+        limit_int = _safe_int(limit) or 20
+
+        payload = {
+            "type": str(type_id),
+            "class": "",
+            "area": "",
+            "year": "",
+            "lang": "",
+            "version": "",
+            "state": "",
+            "letter": "",
+            "time": "",
+            "level": "0",
+            "weekday": "",
+            "by": "time",
+            "page": str(page_int),
+        }
+
+        referer = self._build_category_url(str(type_id), page_int)
+        headers = {
+            "User-Agent": self.headers.get("User-Agent"),
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": referer,
+        }
+
+        self._delay()
+        try:
+            resp = self.session.post(self._list_api_url, data=payload, headers=headers, timeout=10, verify=True)
+            resp.raise_for_status()
+            if resp.encoding is None or resp.encoding.lower() == "iso-8859-1":
+                resp.encoding = resp.apparent_encoding
+        except Exception as e:
+            logger.error("netflixgc 分类列表接口请求失败 category_id=%s page=%s url=%s err=%s", category_id, page, self._list_api_url, e)
+            return None
+
+        try:
+            data = resp.json()
+        except Exception as e:
+            logger.error("netflixgc 分类列表接口解析失败 category_id=%s page=%s url=%s err=%s", category_id, page, self._list_api_url, e)
+            return None
+
+        items = None
+        if isinstance(data, dict):
+            items = data.get("list")
+        if not isinstance(items, list):
+            return []
+
+        videos = []
+        for it in items:
+            if len(videos) >= limit_int:
+                break
+            if not isinstance(it, dict):
+                continue
+
+            vid = it.get("vod_id")
+            vid_str = str(vid).strip() if vid is not None else ""
+            if _is_blank(vid_str):
+                url_value = it.get("url")
+                if url_value is not None:
+                    m = re.search(r"/detail/(\d+)\.html", str(url_value))
+                    if m:
+                        vid_str = m.group(1)
+            if _is_blank(vid_str):
+                continue
+
+            title_value = it.get("vod_name")
+            title = str(title_value).strip() if title_value is not None else ""
+            if _is_blank(title):
+                continue
+
+            cover_value = it.get("vod_pic")
+            cover = str(cover_value).strip() if cover_value is not None else ""
+            if _is_blank(cover):
+                cover = f"https://via.placeholder.com/200x300?text={title}"
+
+            videos.append({"id": vid_str, "title": title, "cover": cover, "source": self.source_id})
+
+        return videos
 
     def get_video_detail(self, video_id):
         if _is_blank(video_id):
@@ -182,6 +275,7 @@ class NetflixgcScraper(BaseVideoScraper):
 
         ep_int = _safe_int(episode_num)
         url = f"{self.base_url}/play/{series_id}-{sid}-{episode_num}.html"
+        play_headers = _build_play_headers(series_id, sid, episode_num)
         headers = {
             "User-Agent": self.headers.get("User-Agent"),
             "Referer": f"{self.base_url}/detail/{series_id}.html",
@@ -211,9 +305,11 @@ class NetflixgcScraper(BaseVideoScraper):
                 "videoUrl": None,
                 "playUrl": url,
                 "source": self.source_id,
+                "videoHeaders": play_headers,
             }
 
         decrypted = self._parse_and_decrypt_video_url(encrypted_url, url)
+        decrypted = self._resolve_variant_m3u8_url(decrypted)
         title = _extract_episode_title(soup, ep_int)
 
         return {
@@ -224,7 +320,63 @@ class NetflixgcScraper(BaseVideoScraper):
             "videoUrl": decrypted,
             "playUrl": url,
             "source": self.source_id,
+            "videoHeaders": play_headers,
         }
+
+    def _resolve_variant_m3u8_url(self, url):
+        if _is_blank(url):
+            return None
+
+        text_url = str(url).strip()
+        if _is_blank(text_url):
+            return None
+
+        if '.m3u8' not in text_url.lower() and 'm3u8' not in text_url.lower():
+            return text_url
+
+        headers = {
+            'User-Agent': self.headers.get('User-Agent'),
+            'Accept': '*/*',
+        }
+
+        try:
+            resp = self.session.get(text_url, headers=headers, timeout=10, verify=True)
+            resp.raise_for_status()
+            if resp.encoding is None or resp.encoding.lower() == 'iso-8859-1':
+                resp.encoding = resp.apparent_encoding
+        except Exception as e:
+            logger.warning('netflixgc 获取 m3u8 失败 url=%s err=%s', text_url, e)
+            return text_url
+
+        body = resp.text or ''
+        if '#EXT-X-STREAM-INF' not in body:
+            return resp.url or text_url
+
+        best_bw = -1
+        best_uri = None
+        pending_bw = None
+        for raw_line in body.splitlines():
+            line = (raw_line or '').strip()
+            if not line:
+                continue
+            if line.startswith('#EXT-X-STREAM-INF'):
+                m = re.search(r'BANDWIDTH=(\d+)', line)
+                pending_bw = int(m.group(1)) if m else 0
+                continue
+            if line.startswith('#'):
+                continue
+            uri = line
+            bw = pending_bw if pending_bw is not None else 0
+            pending_bw = None
+            if bw > best_bw:
+                best_bw = bw
+                best_uri = uri
+
+        base_url = resp.url or text_url
+        if _is_blank(best_uri):
+            return base_url
+
+        return urljoin(base_url, best_uri)
 
     def _parse_and_decrypt_video_url(self, encrypted_url, referer_url):
         if _is_blank(encrypted_url):
@@ -336,18 +488,72 @@ def _extract_config_from_parser(html):
         return None
 
 
-def _normalize_video_url(url, base_url):
-    if _is_blank(url):
+def _build_play_headers(series_id, sid, episode_num):
+    if _is_blank(series_id):
+        return {}
+    referer_url = f"https://www.netflixgc.com/play/{series_id}-{sid}-{episode_num}.html"
+    return {
+        "Referer": referer_url,
+        "Origin": "https://www.netflixgc.com",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+
+def _normalize_video_url(video_url, base_prefix=None):
+    if _is_blank(video_url):
         return None
 
-    value = str(url).strip()
-    if value.startswith("//"):
-        return "https:" + value
-    if value.startswith("http://") or value.startswith("https://"):
-        return value
-    if value.startswith("/"):
-        return urljoin(base_url, value)
-    return value
+    raw = str(video_url).strip()
+    if _is_blank(raw):
+        return None
+
+    raw = raw.replace("\\/", "/").replace("&amp;", "&")
+
+    decoded = None
+    if re.fullmatch(r"[A-Za-z0-9_\-+/=]+", raw or "") and len(raw) >= 16:
+        padded = raw + ("=" * (-len(raw) % 4))
+        for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+            try:
+                candidate = decoder(padded)
+                text = candidate.decode("utf-8", errors="ignore").strip()
+                if not _is_blank(text):
+                    decoded = text
+                    break
+            except Exception:
+                continue
+
+    if decoded and not _is_blank(decoded):
+        raw = decoded.replace("\\/", "/").replace("&amp;", "&")
+
+    for _ in range(2):
+        if "%" not in raw:
+            break
+        try:
+            next_raw = unquote(raw)
+        except Exception:
+            break
+        if next_raw == raw:
+            break
+        raw = next_raw
+
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+
+    if raw.startswith("//"):
+        if isinstance(base_prefix, str) and base_prefix.startswith("http://"):
+            return "http:" + raw
+        return "https:" + raw
+
+    if isinstance(base_prefix, str) and not _is_blank(base_prefix):
+        return urljoin(base_prefix, raw)
+
+    return raw
 
 
 def _parse_video_list(soup, limit, source_id, base_url):

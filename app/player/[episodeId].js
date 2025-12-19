@@ -15,7 +15,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { getCurrentVideoSource, getEpisodeDetail, savePlaybackProgress } from '../../services/videoApi';
+import { getCurrentVideoSource, getEpisodeDetail, getEpisodes, savePlaybackProgress, setCurrentVideoSource } from '../../services/videoApi';
 import { getSettings, saveSettings } from '../../services/storage';
 import videoDownloadManager from '../../services/videoDownloadManager';
 import videoPlayerService from '../../services/videoPlayerService';
@@ -23,7 +23,7 @@ import FullScreenLoader from '../../components/FullScreenLoader';
 
 const PlayerScreen = () => {
   const router = useRouter();
-  const { episodeId } = useLocalSearchParams();
+  const { episodeId, source } = useLocalSearchParams();
   
   // 使用 useWindowDimensions 动态获取屏幕尺寸（支持横竖屏切换）
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -38,6 +38,9 @@ const PlayerScreen = () => {
   const [orientationMode, setOrientationMode] = useState('auto');
   const controlsTimeoutRef = useRef(null);
   const pinchScaleRef = useRef(1);
+  const playToEndHandledRef = useRef(false);
+  const lastSwitchEpisodeIdRef = useRef(null);
+  const lastSwitchAtRef = useRef(0);
 
   const getOrientationModeLabel = (mode) => {
     if (mode === 'portrait') return '竖屏';
@@ -70,6 +73,8 @@ const PlayerScreen = () => {
   // 使用 expo-video 的 useVideoPlayer hook
   // 注意：useVideoPlayer需要传入source URL，如果URL变化需要重新创建player
   const [videoSource, setVideoSource] = useState('');
+  const [seriesEpisodes, setSeriesEpisodes] = useState([]);
+  const [seriesId, setSeriesId] = useState(null);
   const player = useVideoPlayer(videoSource, (player) => {
     if (player) {
       console.log('=== 播放器初始化 ===');
@@ -90,6 +95,144 @@ const PlayerScreen = () => {
       console.log('播放器未初始化，视频源:', videoSource);
     }
   });
+
+  const extractEpisodeNumber = (title) => {
+    if (!title) return 0;
+    const match = String(title).match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  const sortedEpisodes = React.useMemo(() => {
+    if (!Array.isArray(seriesEpisodes)) return [];
+    return [...seriesEpisodes].sort((a, b) => {
+      const numA = extractEpisodeNumber(a?.title || '');
+      const numB = extractEpisodeNumber(b?.title || '');
+      return numA - numB;
+    });
+  }, [seriesEpisodes]);
+
+  const currentEpisodeIndex = React.useMemo(() => {
+    if (!episodeId) return -1;
+    return sortedEpisodes.findIndex(e => e?.id === episodeId);
+  }, [sortedEpisodes, episodeId]);
+
+  const hasPrevEpisode = currentEpisodeIndex > 0;
+  const hasNextEpisode = currentEpisodeIndex >= 0 && currentEpisodeIndex < sortedEpisodes.length - 1;
+
+  const canSkipIntro = React.useMemo(() => {
+    if (!player) return false;
+    return true;
+  }, [player]);
+
+  const loadSeriesEpisodes = async (sid) => {
+    if (!sid) {
+      setSeriesEpisodes([]);
+      return;
+    }
+    try {
+      const result = await getEpisodes(sid);
+      if (!result?.success) {
+        setSeriesEpisodes([]);
+        return;
+      }
+      setSeriesEpisodes(Array.isArray(result.data) ? result.data : []);
+    } catch (error) {
+      console.error('加载系列剧集列表失败', {
+        seriesId: sid,
+        episodeId,
+        error,
+      });
+      setSeriesEpisodes([]);
+    }
+  };
+
+  useEffect(() => {
+    loadSeriesEpisodes(seriesId);
+  }, [seriesId]);
+
+  const switchEpisodeByIndex = (index) => {
+    if (index < 0) return;
+    if (index >= sortedEpisodes.length) return;
+    const target = sortedEpisodes[index];
+    if (!target?.id) return;
+
+    const now = Date.now();
+    if (lastSwitchEpisodeIdRef.current === target.id && now - lastSwitchAtRef.current < 300) return;
+    lastSwitchEpisodeIdRef.current = target.id;
+    lastSwitchAtRef.current = now;
+
+    setVideoSource('');
+    router.replace(`/player/${target.id}`);
+  };
+
+  const handlePrevEpisode = () => {
+    if (!hasPrevEpisode) return;
+    switchEpisodeByIndex(currentEpisodeIndex - 1);
+  };
+
+  const handleNextEpisode = () => {
+    if (!hasNextEpisode) {
+      Alert.alert('提示', '已经是最后一集');
+      return;
+    }
+    switchEpisodeByIndex(currentEpisodeIndex + 1);
+  };
+
+  const handleSkipIntro = () => {
+    if (!player) return;
+    const targetSeconds = 90;
+    const safeCurrent = Number.isFinite(player.currentTime) ? player.currentTime : 0;
+    const safeDuration = Number.isFinite(player.duration) ? player.duration : 0;
+    const safeTarget = safeDuration > 0
+      ? Math.min(targetSeconds, Math.max(0, safeDuration - 1))
+      : targetSeconds;
+
+    const delta = safeTarget - safeCurrent;
+    if (delta <= 0.5) return;
+
+    try {
+      player.seekBy(delta);
+    } catch (error) {
+      console.error('跳过片头失败', {
+        seriesId,
+        episodeId,
+        safeTarget,
+        safeCurrent,
+        error,
+      });
+      try {
+        player.currentTime = safeTarget;
+      } catch (error2) {
+        console.error('跳过片头回退失败', {
+          seriesId,
+          episodeId,
+          safeTarget,
+          safeCurrent,
+          error: error2,
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!player) return;
+    if (!player.addListener) return;
+
+    const subscription = player.addListener('playToEnd', () => {
+      if (playToEndHandledRef.current) return;
+      playToEndHandledRef.current = true;
+      if (!hasNextEpisode) {
+        Alert.alert('提示', '已经是最后一集');
+        return;
+      }
+      switchEpisodeByIndex(currentEpisodeIndex + 1);
+    });
+
+    return () => {
+      if (!subscription?.remove) return;
+      subscription.remove();
+    };
+  }, [player, hasNextEpisode, currentEpisodeIndex, sortedEpisodes]);
   
   // 监听视频源变化
   useEffect(() => {
@@ -104,6 +247,16 @@ const PlayerScreen = () => {
 
   useEffect(() => {
     loadEpisode();
+  }, [episodeId]);
+
+  useEffect(() => {
+    const nextSource = typeof source === 'string' ? source.trim() : '';
+    if (!nextSource) return;
+    setCurrentVideoSource(nextSource);
+  }, [source]);
+
+  useEffect(() => {
+    playToEndHandledRef.current = false;
   }, [episodeId]);
 
   useEffect(() => {
@@ -166,11 +319,16 @@ const PlayerScreen = () => {
     try {
       console.log('=== 开始加载剧集 ===');
       console.log('剧集ID:', episodeId);
+
+      const routeSource = typeof source === 'string' ? source.trim() : '';
+      const sourceToUse = routeSource || getCurrentVideoSource() || 'thanju';
+      if (routeSource) {
+        setCurrentVideoSource(routeSource);
+      }
       
       // 1. 先获取配置并访问 cookie_url
       try {
-        const source = getCurrentVideoSource() || 'thanju';
-        const encodedSource = encodeURIComponent(source);
+        const encodedSource = encodeURIComponent(sourceToUse);
         const configResponse = await fetch(
           `${process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000/api'}/videos/episodes/${episodeId}/config?source=${encodedSource}`
         );
@@ -192,11 +350,13 @@ const PlayerScreen = () => {
       }
       
       // 2. 加载剧集详情
-      const result = await getEpisodeDetail(episodeId);
+      const result = await getEpisodeDetail(episodeId, sourceToUse);
       console.log('剧集详情响应:', result);
       
       if (result.success) {
         setEpisode(result.data);
+        const nextSeriesId = result.data?.seriesId || result.data?.series_id || null;
+        setSeriesId(nextSeriesId);
         console.log('=== 剧集加载成功 ===');
         console.log('剧集数据:', result.data);
         console.log('视频URL:', result.data.videoUrl);
@@ -209,11 +369,10 @@ const PlayerScreen = () => {
         
         // 使用统一的视频播放服务获取播放URL
         try {
-          const source = getCurrentVideoSource() || 'thanju';
           const playUrlInfo = await videoPlayerService.getPlayUrlFromEpisode(
             episodeId,
             result.data,
-            source
+            sourceToUse
           );
           
           console.log('=== 视频播放URL信息 ===');
@@ -420,6 +579,27 @@ const PlayerScreen = () => {
                   <Text style={styles.timeText}>{formatTime(player?.duration || 0)}</Text>
                 </View>
                 <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, !hasPrevEpisode && styles.actionBtnDisabled]}
+                    onPress={handlePrevEpisode}
+                    disabled={!hasPrevEpisode}
+                  >
+                    <Text style={styles.btnText}>上一集</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, !hasNextEpisode && styles.actionBtnDisabled]}
+                    onPress={handleNextEpisode}
+                    disabled={!hasNextEpisode}
+                  >
+                    <Text style={styles.btnText}>下一集</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, !canSkipIntro && styles.actionBtnDisabled]}
+                    onPress={handleSkipIntro}
+                    disabled={!canSkipIntro}
+                  >
+                    <Text style={styles.btnText}>跳过片头</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={handleVideoFitMode}>
                     <Text style={styles.btnText}>比例:{getVideoFitModeName()}</Text>
                   </TouchableOpacity>
@@ -521,6 +701,7 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
     gap: 10,
   },
   backBtn: {
@@ -552,6 +733,73 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 4,
+  },
+  actionBtnDisabled: {
+    opacity: 0.5,
+  },
+  episodePickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  episodePickerPanel: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  episodePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
+  },
+  episodePickerTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  episodePickerClose: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  episodePickerCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  episodePickerList: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  episodePickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  episodeChip: {
+    width: '18%',
+    margin: '1%',
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  episodeChipActive: {
+    backgroundColor: 'rgba(98, 0, 238, 0.9)',
+  },
+  episodeChipText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  episodeChipTextActive: {
+    fontWeight: '700',
   },
   btnText: {
     color: '#fff',

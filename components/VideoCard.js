@@ -22,7 +22,9 @@ const VideoCard = ({ video, darkMode = false, viewMode = 'card', onPress }) => {
       onPress(video);
       return;
     }
-    router.push(`/series/${video.id}`);
+    const source = typeof video.source === 'string' ? video.source.trim() : '';
+    const suffix = source ? `?source=${encodeURIComponent(source)}` : '';
+    router.push(`/series/${video.id}${suffix}`);
   };
 
   // 获取封面URL，如果为空或加载失败则使用占位图

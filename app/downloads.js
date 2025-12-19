@@ -456,7 +456,9 @@ const DownloadsScreen = () => {
       if (!item.parentId) {
         return;
       }
-      router.push(`/series/${item.parentId}`);
+      const source = typeof item.source === 'string' ? item.source.trim() : '';
+      const suffix = source ? `?source=${encodeURIComponent(source)}` : '';
+      router.push(`/series/${item.parentId}${suffix}`);
       return;
     }
 
