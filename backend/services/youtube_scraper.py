@@ -426,7 +426,7 @@ class YouTubeScraper(BaseVideoScraper):
             else:
                 logger.warning('youtube cookies file missing path=%s', cookies_path)
 
-            node_runtime = '/usr/bin/node'
+            node_runtime = '/usr/local/src/node/bin'
             if os.path.exists(node_runtime):
                 args.extend(['--js-runtimes', f'node:{node_runtime}'])
             else:
