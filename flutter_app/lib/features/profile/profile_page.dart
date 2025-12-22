@@ -21,21 +21,13 @@ class ProfilePage extends StatelessWidget {
                 context,
                 title: '我的收藏',
                 icon: Icons.favorite,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('收藏功能开发中')),
-                  );
-                },
+                onTap: () => context.push('/favorites'),
               ),
               _buildMenuItem(
                 context,
                 title: '阅读历史',
                 icon: Icons.history,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('历史功能开发中')),
-                  );
-                },
+                onTap: () => context.push('/history'),
               ),
               _buildMenuItem(
                 context,

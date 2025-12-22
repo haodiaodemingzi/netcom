@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage/app_storage.dart';
+import '../../core/storage/storage_providers.dart';
 import 'comics_provider.dart';
 import 'data/comics_remote_service.dart';
 import 'comics_models.dart';
@@ -44,17 +46,32 @@ class ComicReaderPage extends ConsumerStatefulWidget {
 
 class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   List<ComicPageImage> _images = <ComicPageImage>[];
+  SettingsModel _settings = SettingsModel();
   bool _loading = false;
   String? _error;
   late int _currentIndex;
+  int _currentPage = 1;
+
+  final PageController _horizontalController = PageController();
+  final ScrollController _verticalController = ScrollController();
+  final Map<int, double> _itemHeights = <int, double>{};
 
   @override
   void initState() {
     super.initState();
     _currentIndex = _resolveInitialIndex();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSettings();
       _loadImages();
     });
+    _verticalController.addListener(_handleVerticalScroll);
+  }
+
+  @override
+  void dispose() {
+    _horizontalController.dispose();
+    _verticalController.dispose();
+    super.dispose();
   }
 
   ComicChapter? get _currentChapter {
@@ -66,6 +83,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
 
   bool get _hasNext => _currentIndex + 1 < widget.args.chapters.length;
   bool get _hasPrev => _currentIndex - 1 >= 0;
+  bool get _isHorizontal => _settings.scrollMode == 'horizontal';
 
   int _resolveInitialIndex() {
     final chapters = widget.args.chapters;
@@ -78,6 +96,17 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       return index;
     }
     return 0;
+  }
+
+  Future<void> _loadSettings() async {
+    final repo = ref.read(settingsRepositoryProvider);
+    if (repo == null) {
+      return;
+    }
+    final next = repo.load();
+    setState(() {
+      _settings = next;
+    });
   }
 
   Future<void> _loadImages() async {
@@ -101,11 +130,19 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         chapterId: chapter.id,
         sourceId: widget.args.sourceId,
       );
+      final images = data.images;
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _images = data.images;
+        _images = images;
         _loading = false;
-        _error = data.images.isEmpty ? '暂无图片' : null;
+        _error = images.isEmpty ? '暂无图片' : null;
       });
+      if (images.isNotEmpty) {
+        _prefetchAround(0);
+        _saveHistory(page: 1);
+      }
     } catch (e, stack) {
       debugPrint('加载章节图片失败 ${chapter.id} ${e.toString()}');
       debugPrintStack(stackTrace: stack);
@@ -123,6 +160,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     setState(() {
       _currentIndex = nextIndex;
     });
+    _horizontalController.jumpToPage(0);
+    _verticalController.jumpTo(0);
+    _currentPage = 1;
     _loadImages();
   }
 
@@ -168,31 +208,47 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (_images.isEmpty) {
       return const Center(child: Text('暂无图片'));
     }
-    return Scrollbar(
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    if (_isHorizontal) {
+      return PageView.builder(
+        controller: _horizontalController,
         itemCount: _images.length,
+        onPageChanged: (index) {
+          final page = index + 1;
+          _currentPage = page;
+          _prefetchAround(index);
+          _saveHistory(page: page);
+          setState(() {});
+        },
         itemBuilder: (context, index) {
           final image = _images[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: AspectRatio(
-                aspectRatio: _calcAspectRatio(image),
-                child: Image.network(
-                  image.url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.broken_image),
-                  ),
-                ),
-              ),
-            ),
+          return Center(
+            child: _buildImageCard(image),
           );
         },
+      );
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        _handleScrollNotification(notification);
+        return false;
+      },
+      child: Scrollbar(
+        controller: _verticalController,
+        child: ListView.builder(
+          controller: _verticalController,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          itemCount: _images.length,
+          itemBuilder: (context, index) {
+            final image = _images[index];
+            return _MeasuredItem(
+              onHeight: (height) => _itemHeights[index] = height,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildImageCard(image),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -213,6 +269,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget _buildBottomBar() {
     final chapter = _currentChapter;
     final title = chapter?.title ?? '';
+    final total = _images.isEmpty ? 1 : _images.length;
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -244,12 +301,139 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               ),
             ),
             Text(
-              '${_currentIndex + 1}/${widget.args.chapters.length}',
+              '$_currentPage/$total',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildImageCard(ComicPageImage image) {
+    final fit = _settings.imageFitMode == 'height' ? BoxFit.fitHeight : BoxFit.contain;
+    final bg = _settings.backgroundColor == 'white' ? Colors.white : Colors.black;
+    return Container(
+      color: bg,
+      alignment: Alignment.center,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+          aspectRatio: _calcAspectRatio(image),
+          child: Image.network(
+            image.url,
+            fit: fit,
+            errorBuilder: (_, __, ___) => Container(
+              color: Colors.grey.shade200,
+              alignment: Alignment.center,
+              child: const Icon(Icons.broken_image),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _prefetchAround(int index) {
+    if (_images.isEmpty) {
+      return;
+    }
+    _prefetch(index);
+    if (index + 1 < _images.length) {
+      _prefetch(index + 1);
+    }
+    if (index + 2 < _images.length) {
+      _prefetch(index + 2);
+    }
+  }
+
+  void _prefetch(int index) {
+    if (index < 0 || index >= _images.length) {
+      return;
+    }
+    final image = _images[index];
+    if (image.url.isEmpty) {
+      return;
+    }
+    precacheImage(NetworkImage(image.url), context);
+  }
+
+  void _handleVerticalScroll() {
+    if (_images.isEmpty) {
+      return;
+    }
+    _updateCurrentPageFromOffset(_verticalController.offset);
+  }
+
+  void _handleScrollNotification(ScrollNotification notification) {
+    if (notification is! ScrollUpdateNotification) {
+      return;
+    }
+    _updateCurrentPageFromOffset(notification.metrics.pixels);
+  }
+
+  void _updateCurrentPageFromOffset(double offset) {
+    if (_itemHeights.isEmpty) {
+      return;
+    }
+    double consumed = 0;
+    for (int i = 0; i < _images.length; i++) {
+      final height = _itemHeights[i] ?? 0;
+      if (height <= 0) {
+        continue;
+      }
+      if (consumed + height > offset) {
+        final page = i + 1;
+        if (page != _currentPage) {
+          _currentPage = page;
+          _prefetchAround(i);
+          _saveHistory(page: page);
+          setState(() {});
+        }
+        return;
+      }
+      consumed += height;
+    }
+  }
+
+  Future<void> _saveHistory({required int page}) async {
+    final chapter = _currentChapter;
+    final title = widget.args.comicTitle;
+    final repo = ref.read(historyRepositoryProvider);
+    if (chapter == null || repo == null || widget.comicId.isEmpty) {
+      return;
+    }
+    await repo.addComic(
+      id: widget.comicId,
+      title: title,
+      chapterId: chapter.id,
+      page: page,
+      source: widget.args.sourceId,
+    );
+  }
+}
+
+class _MeasuredItem extends StatelessWidget {
+  const _MeasuredItem({
+    required this.child,
+    required this.onHeight,
+  });
+
+  final Widget child;
+  final ValueChanged<double> onHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final render = context.findRenderObject();
+          if (render is RenderBox) {
+            onHeight(render.size.height);
+          }
+        });
+        return child;
+      },
     );
   }
 }

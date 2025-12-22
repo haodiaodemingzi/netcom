@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../features/downloads/downloads_page.dart';
 import '../features/ebooks/ebooks_page.dart';
+import '../features/profile/history_page.dart';
 import '../features/profile/profile_page.dart';
+import '../features/profile/favorites_page.dart';
 import '../features/videos/videos_page.dart';
 import '../features/comics/comic_detail_page.dart';
 import '../features/comics/comic_reader_page.dart';
@@ -62,6 +64,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/downloads',
         name: 'downloads',
         builder: (context, state) => const DownloadsPage(),
+      ),
+      GoRoute(
+        path: '/favorites',
+        name: 'favorites',
+        builder: (context, state) => const FavoritesPage(),
+      ),
+      GoRoute(
+        path: '/history',
+        name: 'history',
+        builder: (context, state) => const HistoryPage(),
       ),
       GoRoute(
         path: '/settings',
