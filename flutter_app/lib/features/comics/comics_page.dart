@@ -353,12 +353,17 @@ class _CategoryBar extends ConsumerWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
-  static const double _collapsedHeight = 150;
+  static const double _chipHeight = 32;
+  static const double _rowSpacing = 8;
+  static const double _collapsedRows = 2;
+  static const double _collapsedHeight =
+      _chipHeight * _collapsedRows + _rowSpacing * (_collapsedRows - 1) + 4;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(comicsProvider);
     final notifier = ref.read(comicsProvider.notifier);
+    final double maxHeight = expanded ? MediaQuery.of(context).size.height * 0.8 : _collapsedHeight;
     final categories = state.categories;
     final chips = categories.map((category) {
       final selected = category.id == state.selectedCategory?.id;
@@ -377,7 +382,7 @@ class _CategoryBar extends ConsumerWidget {
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          constraints: expanded ? const BoxConstraints() : const BoxConstraints(maxHeight: _collapsedHeight),
+          constraints: BoxConstraints(maxHeight: maxHeight),
           child: ClipRect(
             child: Wrap(
               spacing: 8,

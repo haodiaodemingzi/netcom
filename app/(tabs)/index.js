@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   StatusBar,
   Modal,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -53,6 +55,7 @@ const HomeScreen = () => {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [contentReady, setContentReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [categoryLoading, setCategoryLoading] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -234,7 +237,7 @@ const HomeScreen = () => {
     setIsSearching(false);
   };
 
-const loadComics = async (isRefresh = false) => {
+  const loadComics = async (isRefresh = false) => {
     if (loading) return;
 
     setLoading(true);
@@ -264,6 +267,7 @@ const loadComics = async (isRefresh = false) => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setCategoryLoading(false);
     }
   };
 
@@ -280,6 +284,7 @@ const loadComics = async (isRefresh = false) => {
 
   const handleCategoryPress = (categoryId) => {
     if (categoryId === selectedCategory) return;
+    setCategoryLoading(true);
     setSelectedCategory(categoryId);
   };
 
@@ -357,42 +362,83 @@ const loadComics = async (isRefresh = false) => {
   );
 
   const renderCategories = () => {
-    const displayCategories = showAllCategories ? categories : categories.slice(0, 8);
     const hasMore = categories.length > 8;
+    const displayCategories = categories.slice(0, 8);
 
     return (
       <View style={styles.categoryBar}>
-        <View style={styles.categoryContent}>
-          {displayCategories.map((category, index) => (
-            <TouchableOpacity
-              key={`${category.id || ''}-${index}`}
-              style={[
-                styles.categoryChip,
-                selectedCategory === category.id && styles.categoryChipActive,
-              ]}
-              onPress={() => handleCategoryPress(category.id)}
-            >
-              <Text
+        {showAllCategories ? (
+          <View style={[styles.categoryContent, styles.categoryContentExpanded]}>
+            {categories.map((category, index) => (
+              <TouchableOpacity
+                key={`${category.id || ''}-${index}`}
                 style={[
-                  styles.categoryText,
-                  selectedCategory === category.id && styles.categoryTextActive,
+                  styles.categoryChip,
+                  selectedCategory === category.id && styles.categoryChipActive,
                 ]}
+                onPress={() => handleCategoryPress(category.id)}
               >
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          {hasMore && (
-            <TouchableOpacity
-              style={styles.moreButton}
-              onPress={() => setShowAllCategories(!showAllCategories)}
-            >
-              <Text style={styles.moreButtonText}>
-                {showAllCategories ? '收起' : '更多'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+                <Text
+                  style={[
+                    styles.categoryText,
+                    selectedCategory === category.id && styles.categoryTextActive,
+                  ]}
+                >
+                  {category.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {hasMore && (
+              <TouchableOpacity
+                style={styles.moreButton}
+                onPress={() => setShowAllCategories(false)}
+              >
+                <Text style={styles.moreButtonText}>收起</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryRow}
+          >
+            {displayCategories.map((category, index) => (
+              <TouchableOpacity
+                key={`${category.id || ''}-${index}`}
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === category.id && styles.categoryChipActive,
+                ]}
+                onPress={() => handleCategoryPress(category.id)}
+              >
+                <Text
+                  style={[
+                    styles.categoryText,
+                    selectedCategory === category.id && styles.categoryTextActive,
+                  ]}
+                >
+                  {category.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {hasMore && (
+              <TouchableOpacity
+                style={styles.moreButton}
+                onPress={() => setShowAllCategories(true)}
+              >
+                <Text style={styles.moreButtonText}>更多</Text>
+              </TouchableOpacity>
+            )}
+            {categoryLoading && (
+              <ActivityIndicator
+                style={styles.categorySpinner}
+                size="small"
+                color="#5a2fd6"
+              />
+            )}
+          </ScrollView>
+        )}
       </View>
     );
   };
@@ -678,6 +724,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  categoryContentExpanded: {
+    alignItems: 'center',
+  },
+  categoryRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   categoryChip: {
     paddingHorizontal: 12,
     height: 30,
@@ -710,6 +766,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     fontWeight: '500',
+  },
+  categorySpinner: {
+    marginLeft: 8,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
     paddingBottom: 24,
