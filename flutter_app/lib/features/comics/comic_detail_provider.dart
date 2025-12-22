@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/storage_providers.dart';
@@ -38,6 +40,9 @@ class ComicDetailState {
     this.selectedChapterIds = const <String>{},
     this.selectionMode = false,
     this.isFavorite = false,
+    this.segments = const <ChapterSegment>[],
+    this.currentSegmentIndex = 0,
+    this.segmentSize = 50,
   });
 
   final ComicDetail? detail;
@@ -48,6 +53,9 @@ class ComicDetailState {
   final Set<String> selectedChapterIds;
   final bool selectionMode;
   final bool isFavorite;
+   final List<ChapterSegment> segments;
+  final int currentSegmentIndex;
+  final int segmentSize;
 
   ComicDetailState copyWith({
     ComicDetail? detail,
@@ -58,6 +66,9 @@ class ComicDetailState {
     Set<String>? selectedChapterIds,
     bool? selectionMode,
     bool? isFavorite,
+    List<ChapterSegment>? segments,
+    int? currentSegmentIndex,
+    int? segmentSize,
   }) {
     return ComicDetailState(
       detail: detail ?? this.detail,
@@ -70,7 +81,29 @@ class ComicDetailState {
           : this.selectedChapterIds,
       selectionMode: selectionMode ?? this.selectionMode,
       isFavorite: isFavorite ?? this.isFavorite,
+      segments: segments ?? this.segments,
+      currentSegmentIndex: currentSegmentIndex ?? this.currentSegmentIndex,
+      segmentSize: segmentSize ?? this.segmentSize,
     );
+  }
+}
+
+class ChapterSegment {
+  const ChapterSegment({required this.start, required this.end});
+
+  final int start;
+  final int end;
+
+  String label() => '$start-$end';
+
+  bool contains(int value) {
+    if (value < start) {
+      return false;
+    }
+    if (value > end) {
+      return false;
+    }
+    return true;
   }
 }
 
@@ -113,6 +146,8 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
       final sourceId = _request.sourceId?.isNotEmpty == true ? _request.sourceId : _sourceRepository?.currentSource();
       final data = await _remoteService.fetchDetail(comicId: _request.id, sourceId: sourceId);
       final sorted = _sortChapters(data.chapters, descending: state.descending);
+      final segments = _buildSegments(sorted, size: state.segmentSize);
+      final defaultSegmentIndex = _pickDefaultSegmentIndex(segments, descending: state.descending);
       final isFavorite = _favoritesRepository?.isFavorite(_request.id) ?? false;
       state = state.copyWith(
         detail: data.detail,
@@ -122,6 +157,8 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
         isFavorite: isFavorite,
         selectedChapterIds: const <String>{},
         selectionMode: false,
+        segments: segments,
+        currentSegmentIndex: defaultSegmentIndex,
       );
     } catch (e) {
       state = state.copyWith(loading: false, error: '加载失败 ${e.toString()}');
@@ -173,8 +210,8 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
     );
   }
 
-  void selectAllChapters() {
-    final ids = state.chapters.map((chapter) => chapter.id).where((id) => id.isNotEmpty).toSet();
+  void selectAllVisibleChapters() {
+    final ids = visibleChapters().map((chapter) => chapter.id).where((id) => id.isNotEmpty).toSet();
     if (ids.isEmpty) {
       return;
     }
@@ -198,6 +235,31 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
     return state.chapters
         .where((chapter) => state.selectedChapterIds.contains(chapter.id))
         .toList(growable: false);
+  }
+
+  List<ComicChapter> visibleChapters() {
+    if (state.segments.isEmpty) {
+      return state.chapters;
+    }
+    if (state.currentSegmentIndex < 0 || state.currentSegmentIndex >= state.segments.length) {
+      return state.chapters;
+    }
+    final segment = state.segments[state.currentSegmentIndex];
+    return state.chapters.where((chapter) => segment.contains(chapter.index)).toList(growable: false);
+  }
+
+  void selectSegment(int index) {
+    if (state.segments.isEmpty) {
+      return;
+    }
+    if (index < 0 || index >= state.segments.length) {
+      return;
+    }
+    state = state.copyWith(
+      currentSegmentIndex: index,
+      selectedChapterIds: const <String>{},
+      selectionMode: false,
+    );
   }
 
   Future<void> toggleFavorite() async {
@@ -236,5 +298,35 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
       return list.reversed.toList(growable: false);
     }
     return list;
+  }
+
+  List<ChapterSegment> _buildSegments(List<ComicChapter> chapters, {required int size}) {
+    if (chapters.isEmpty) {
+      return const <ChapterSegment>[];
+    }
+    if (size <= 0) {
+      return const <ChapterSegment>[];
+    }
+    final indices = chapters.map((chapter) => chapter.index).toList(growable: false);
+    final minIndex = indices.reduce(min);
+    final maxIndex = indices.reduce(max);
+    final List<ChapterSegment> result = <ChapterSegment>[];
+    var start = minIndex;
+    while (start <= maxIndex) {
+      final end = start + size - 1;
+      result.add(ChapterSegment(start: start, end: end));
+      start = end + 1;
+    }
+    return result;
+  }
+
+  int _pickDefaultSegmentIndex(List<ChapterSegment> segments, {required bool descending}) {
+    if (segments.isEmpty) {
+      return 0;
+    }
+    if (descending) {
+      return segments.length - 1;
+    }
+    return 0;
   }
 }

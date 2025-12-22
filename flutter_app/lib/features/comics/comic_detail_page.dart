@@ -112,6 +112,27 @@ class ComicDetailPage extends ConsumerWidget {
             ),
           ),
         ),
+        if (state.segments.isNotEmpty)
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 48,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemBuilder: (context, index) {
+                  final segment = state.segments[index];
+                  final selected = index == state.currentSegmentIndex;
+                  return ChoiceChip(
+                    label: Text(segment.label()),
+                    selected: selected,
+                    onSelected: (_) => notifier.selectSegment(index),
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemCount: state.segments.length,
+              ),
+            ),
+          ),
         _buildChapterList(context, state, notifier, downloadNotifier),
       ],
     );
@@ -293,7 +314,7 @@ class ComicDetailPage extends ConsumerWidget {
                 Text('已选 $selectedCount 章'),
                 const Spacer(),
                 TextButton(
-                  onPressed: notifier.selectAllChapters,
+                  onPressed: notifier.selectAllVisibleChapters,
                   child: const Text('全选'),
                 ),
                 TextButton(
@@ -335,10 +356,12 @@ class ComicDetailPage extends ConsumerWidget {
       );
     }
 
+    final visible = notifier.visibleChapters();
+
     return SliverList.builder(
-      itemCount: state.chapters.length,
+      itemCount: visible.length,
       itemBuilder: (context, index) {
-        final chapter = state.chapters[index];
+        final chapter = visible[index];
         final isSelected = state.selectedChapterIds.contains(chapter.id);
         
         return _buildChapterItem(
