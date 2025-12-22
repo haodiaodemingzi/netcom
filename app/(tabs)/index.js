@@ -6,7 +6,6 @@ import {
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
-  ScrollView,
   StatusBar,
   Modal,
 } from 'react-native';
@@ -322,21 +321,21 @@ const loadComics = async (isRefresh = false) => {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      {/* 标题 - 搜索栏 - 数据源 - 下载 */}
+      {/* 标题 - 搜索栏 - 数据源 */}
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>漫画</Text>
         
         <SearchBar
-            value={searchQuery}
+          value={searchQuery}
           onChangeText={(text) => {
             setSearchQuery(text);
             if (!text.trim()) {
               clearSearch();
             }
           }}
-            onSubmitEditing={() => handleSearch(searchQuery)}
+          onSubmitEditing={() => handleSearch(searchQuery)}
           placeholder="搜索漫画..."
-          />
+        />
         
         <TouchableOpacity 
           style={styles.sourceButton}
@@ -525,6 +524,26 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  navBar: {
+    backgroundColor: '#fff',
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  navActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  navSearch: {
+    flex: 1,
+  },
+  headerSpacer: {
+    height: 110,
   },
   headerRow: {
     flexDirection: 'row',

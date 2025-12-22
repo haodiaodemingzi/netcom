@@ -1,7 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 import logging
 import os
+import requests
 
 # 统一日志配置
 logging.basicConfig(
@@ -18,7 +19,7 @@ from services.scraper_factory import ScraperFactory
 from services.ebook_scraper_factory import EbookScraperFactory
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # 注册蓝图
 app.register_blueprint(comic_bp, url_prefix='/api')
@@ -46,6 +47,28 @@ def get_sources():
         sources = ScraperFactory.get_available_sources()
         return jsonify(sources), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/proxy/image')
+def proxy_image():
+    url = request.args.get('url', '')
+    if not url:
+        return jsonify({'error': 'missing url'}), 400
+    if not url.startswith('http'):
+        return jsonify({'error': 'invalid url'}), 400
+    try:
+        resp = requests.get(url, timeout=10)
+        headers = {
+          'Content-Type': resp.headers.get('Content-Type', 'image/jpeg'),
+          'Access-Control-Allow-Origin': '*',
+        }
+        proxy_resp = make_response(resp.content, resp.status_code)
+        for k, v in headers.items():
+            proxy_resp.headers[k] = v
+        return proxy_resp
+    except Exception as e:
+        logging.exception('image proxy failed')
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
