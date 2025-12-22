@@ -1,8 +1,7 @@
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import logging
 import os
-import requests
 
 # 统一日志配置
 logging.basicConfig(
@@ -19,7 +18,29 @@ from services.scraper_factory import ScraperFactory
 from services.ebook_scraper_factory import EbookScraperFactory
 
 app = Flask(__name__)
+ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', '*')
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+
+def _resolve_origin(request_origin: str | None) -> str:
+    if not request_origin:
+        return '*'
+    allowed = ALLOWED_ORIGINS.strip()
+    if allowed == '*' or not allowed:
+        return request_origin
+    splitted = {item.strip() for item in allowed.split(',') if item.strip()}
+    return request_origin if request_origin in splitted else splitted.pop() if splitted else '*'
+
+
+@app.after_request
+def apply_cors_headers(response):
+    origin = request.headers.get('Origin')
+    response.headers['Access-Control-Allow-Origin'] = _resolve_origin(origin)
+    response.headers.setdefault('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.setdefault('Access-Control-Allow-Headers', 'Authorization,Content-Type')
+    response.headers.setdefault('Access-Control-Allow-Credentials', 'true')
+    response.headers['Vary'] = 'Origin'
+    return response
 
 # 注册蓝图
 app.register_blueprint(comic_bp, url_prefix='/api')
@@ -49,27 +70,6 @@ def get_sources():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/api/proxy/image')
-def proxy_image():
-    url = request.args.get('url', '')
-    if not url:
-        return jsonify({'error': 'missing url'}), 400
-    if not url.startswith('http'):
-        return jsonify({'error': 'invalid url'}), 400
-    try:
-        resp = requests.get(url, timeout=10)
-        headers = {
-          'Content-Type': resp.headers.get('Content-Type', 'image/jpeg'),
-          'Access-Control-Allow-Origin': '*',
-        }
-        proxy_resp = make_response(resp.content, resp.status_code)
-        for k, v in headers.items():
-            proxy_resp.headers[k] = v
-        return proxy_resp
-    except Exception as e:
-        logging.exception('image proxy failed')
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

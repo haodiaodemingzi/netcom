@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../comics/comics_models.dart';
+import '../comics/comics_provider.dart';
+import '../comics/data/comics_remote_service.dart';
+import 'comic_downloader.dart';
 import 'download_models.dart';
 import 'download_remote_service.dart';
 
@@ -40,25 +43,27 @@ class DownloadCenterState {
   }
 }
 
-final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, DownloadCenterState>(
-  (ref) {
-    final remote = ref.watch(downloadRemoteServiceProvider);
-    return DownloadCenterNotifier(remote);
-  },
-);
+final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, DownloadCenterState>((ref) {
+  final remote = ref.watch(downloadRemoteServiceProvider);
+  final comicsRemote = ref.watch(comicsRemoteServiceProvider);
+  final downloader = ref.watch(comicDownloaderProvider);
+  return DownloadCenterNotifier(remote, comicsRemote, downloader);
+});
 
 class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
-  DownloadCenterNotifier(this._remote)
+  DownloadCenterNotifier(this._remote, this._comicsRemote, this._downloader)
       : super(
           DownloadCenterState(
-            queue: _mockQueue(),
-            completed: _mockCompleted(),
+            queue: const <DownloadItem>[],
+            completed: const <DownloadItem>[],
             selectedQueue: <String>{},
             selectedCompleted: <String>{},
           ),
         );
 
   final DownloadRemoteService _remote;
+  final ComicsRemoteService _comicsRemote;
+  final ComicDownloader _downloader;
 
   void enqueueComicChapters({
     required ComicDetail detail,
@@ -102,6 +107,14 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       return;
     }
     state = state.copyWith(queue: [...state.queue, ...newItems]);
+    for (var i = 0; i < newItems.length; i++) {
+      final item = newItems[i];
+      final chapter = chapters.firstWhere((c) => c.id == item.resourceId, orElse: () => const ComicChapter(id: '', title: '', index: 0));
+      if (chapter.id.isEmpty) {
+        continue;
+      }
+      _runComicDownload(item, detail, chapter);
+    }
   }
 
   Future<void> refreshFromRemote() async {
@@ -226,72 +239,84 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     state = state.copyWith(completed: remaining, selectedCompleted: <String>{});
   }
 
-  static List<DownloadItem> _mockQueue() {
-    return <DownloadItem>[
-      DownloadItem(
-        id: 'q1',
-        type: DownloadType.video,
-        kind: 'task',
-        title: 'S01E01 开场',
-        parentTitle: '航海王',
-        status: DownloadStatus.downloading,
-        progress: 0.36,
-        source: '默认源',
-        parentId: 'anime-1',
-        resourceId: 'anime-1-ep1',
-      ),
-      DownloadItem(
-        id: 'q2',
-        type: DownloadType.comic,
-        kind: 'task',
-        title: '第12话',
-        parentTitle: '怪兽8号',
-        status: DownloadStatus.paused,
-        progress: 0.72,
-        source: '源A',
-        parentId: 'c1',
-        resourceId: 'c1-ch-12',
-      ),
-      DownloadItem(
-        id: 'q3',
-        type: DownloadType.ebook,
-        kind: 'task',
-        title: '第3章 城市夜行',
-        parentTitle: '赛博之心',
-        status: DownloadStatus.failed,
-        progress: 0.14,
-        source: '源B',
-        error: '网络中断',
-        parentId: 'ebook-1',
-        resourceId: 'ebook-1-ch3',
-      ),
-    ];
+  Future<void> _runComicDownload(DownloadItem item, ComicDetail detail, ComicChapter chapter) async {
+    try {
+      _updateQueueItem(item.id, status: DownloadStatus.downloading, progress: 0);
+      
+      final info = await _comicsRemote.fetchChapterDownloadInfo(
+        chapterId: chapter.id,
+        sourceId: detail.source,
+      );
+      
+      if (info.images.isEmpty) {
+        _updateQueueItem(item.id, status: DownloadStatus.failed, error: '无可下载图片');
+        return;
+      }
+      
+      await _downloader.downloadChapter(
+        detail: detail,
+        chapter: chapter,
+        downloadInfo: info,
+        onProgress: (completed, total) {
+          if (total <= 0) {
+            return;
+          }
+          final progress = (completed / total).clamp(0.0, 1.0);
+          _updateQueueItem(
+            item.id,
+            status: DownloadStatus.downloading,
+            progress: progress,
+          );
+        },
+      );
+      
+      _markAsCompleted(item.id);
+    } catch (e, stack) {
+      _updateQueueItem(item.id, status: DownloadStatus.failed, error: e.toString());
+    }
   }
 
-  static List<DownloadItem> _mockCompleted() {
-    return <DownloadItem>[
-      DownloadItem(
-        id: 'c1',
-        type: DownloadType.video,
-        kind: 'downloaded',
-        title: 'S01E10 团聚',
-        parentTitle: '航海王',
-        status: DownloadStatus.completed,
-        progress: 1,
-        source: '默认源',
-        downloadedAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      DownloadItem(
-        id: 'c2',
-        type: DownloadType.comic,
-        kind: 'downloaded',
-        title: '第11话',
-        parentTitle: '怪兽8号',
-        status: DownloadStatus.completed,
-        progress: 1,
-        source: '源A',
-        downloadedAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      ),
-    ];
+  void _updateQueueItem(
+    String id, {
+    DownloadStatus? status,
+    double? progress,
+    String? error,
+  }) {
+    final updated = state.queue.map((item) {
+      if (item.id != id) {
+        return item;
+      }
+      return item.copyWith(
+        status: status,
+        progress: progress,
+        error: error,
+      );
+    }).toList();
+    state = state.copyWith(queue: updated);
+  }
+
+  void _markAsCompleted(String id) {
+    DownloadItem? target;
+    final remaining = <DownloadItem>[];
+    for (final item in state.queue) {
+      if (item.id == id) {
+        target = item;
+      } else {
+        remaining.add(item);
+      }
+    }
+    if (target == null) {
+      return;
+    }
+    final completedItem = target.copyWith(
+      status: DownloadStatus.completed,
+      progress: 1,
+      downloadedAt: DateTime.now(),
+      error: null,
+    );
+    state = state.copyWith(
+      queue: remaining,
+      completed: [...state.completed, completedItem],
+    );
   }
 }

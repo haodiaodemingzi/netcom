@@ -183,6 +183,16 @@ class ComicChapterImages {
   final int? expectedTotal;
 }
 
+class ComicDownloadInfo {
+  const ComicDownloadInfo({
+    required this.images,
+    required this.downloadConfig,
+  });
+
+  final List<ComicPageImage> images;
+  final Map<String, dynamic> downloadConfig;
+}
+
 class ComicDetailData {
   const ComicDetailData({
     required this.detail,

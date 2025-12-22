@@ -7,7 +7,9 @@ import '../features/ebooks/ebooks_page.dart';
 import '../features/profile/profile_page.dart';
 import '../features/videos/videos_page.dart';
 import '../features/comics/comic_detail_page.dart';
+import '../features/comics/comic_reader_page.dart';
 import '../features/comics/comics_page.dart';
+import '../features/settings/settings_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -62,11 +64,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DownloadsPage(),
       ),
       GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
         path: '/comic/:id',
         name: 'comicDetail',
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
           return ComicDetailPage(comicId: id);
+        },
+      ),
+      GoRoute(
+        path: '/comic/:id/read',
+        name: 'comicReader',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final args = state.extra;
+          if (args is! ComicReaderArgs) {
+            return const ComicReaderPage.fallback();
+          }
+          return ComicReaderPage(
+            comicId: id,
+            args: args,
+          );
         },
       ),
     ],

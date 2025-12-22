@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../downloads/download_center_provider.dart';
+import '../downloads/download_models.dart';
+import 'comic_reader_page.dart';
 import 'comic_detail_provider.dart';
 import 'comics_models.dart';
 
@@ -339,6 +341,31 @@ class ComicDetailPage extends ConsumerWidget {
         final chapter = state.chapters[index];
         final isSelected = state.selectedChapterIds.contains(chapter.id);
         
+        return _buildChapterItem(
+          context,
+          state,
+          notifier,
+          downloadNotifier,
+          chapter,
+          isSelected,
+        );
+      },
+    );
+  }
+
+  Widget _buildChapterItem(
+    BuildContext context,
+    ComicDetailState state,
+    ComicDetailNotifier notifier,
+    DownloadCenterNotifier downloadNotifier,
+    ComicChapter chapter,
+    bool isSelected,
+  ) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final downloadState = ref.watch(downloadCenterProvider);
+        final downloadItem = _findDownloadItem(downloadState, chapter.id);
+        
         return ListTile(
           leading: state.selectionMode
               ? Checkbox(
@@ -356,26 +383,117 @@ class ComicDetailPage extends ConsumerWidget {
           subtitle: chapter.updateTime != null ? Text(chapter.updateTime!) : null,
           trailing: state.selectionMode
               ? null
-              : IconButton(
-                  icon: const Icon(Icons.download_outlined),
-                  onPressed: () => _handleDownloadChapter(
-                    context,
-                    state,
-                    chapter,
-                    downloadNotifier,
-                  ),
+              : _buildDownloadTrailing(
+                  context,
+                  state,
+                  chapter,
+                  downloadNotifier,
+                  downloadItem,
                 ),
           selected: isSelected,
           onTap: () {
             if (state.selectionMode) {
               notifier.toggleChapterSelection(chapter.id);
             } else {
-              _handleChapterTap(context, chapter);
+              _handleChapterTap(context, chapter, state);
             }
           },
           onLongPress: () => notifier.beginSelectionWith(chapter.id),
         );
       },
+    );
+  }
+
+  DownloadItem? _findDownloadItem(DownloadCenterState downloadState, String chapterId) {
+    for (final item in downloadState.queue) {
+      if (item.resourceId == chapterId) {
+        return item;
+      }
+    }
+    for (final item in downloadState.completed) {
+      if (item.resourceId == chapterId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildDownloadTrailing(
+    BuildContext context,
+    ComicDetailState state,
+    ComicChapter chapter,
+    DownloadCenterNotifier downloadNotifier,
+    DownloadItem? downloadItem,
+  ) {
+    if (downloadItem == null) {
+      return IconButton(
+        icon: const Icon(Icons.download_outlined),
+        onPressed: () => _handleDownloadChapter(
+          context,
+          state,
+          chapter,
+          downloadNotifier,
+        ),
+      );
+    }
+
+    if (downloadItem.status == DownloadStatus.completed) {
+      return const Chip(
+        label: Text('已下载', style: TextStyle(fontSize: 12)),
+        avatar: Icon(Icons.check_circle, size: 16),
+        padding: EdgeInsets.symmetric(horizontal: 4),
+      );
+    }
+
+    if (downloadItem.status == DownloadStatus.downloading) {
+      final percent = (downloadItem.progress * 100).toInt();
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Text(
+              '$percent%',
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              value: downloadItem.progress,
+              strokeWidth: 2,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (downloadItem.status == DownloadStatus.pending) {
+      return const Chip(
+        label: Text('排队中', style: TextStyle(fontSize: 12)),
+        padding: EdgeInsets.symmetric(horizontal: 4),
+      );
+    }
+
+    if (downloadItem.status == DownloadStatus.failed) {
+      return const Chip(
+        label: Text('失败', style: TextStyle(fontSize: 12)),
+        avatar: Icon(Icons.error_outline, size: 16),
+        padding: EdgeInsets.symmetric(horizontal: 4),
+      );
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.download_outlined),
+      onPressed: () => _handleDownloadChapter(
+        context,
+        state,
+        chapter,
+        downloadNotifier,
+      ),
     );
   }
 
@@ -387,12 +505,27 @@ class ComicDetailPage extends ConsumerWidget {
       return;
     }
     final chapter = state.descending ? state.chapters.last : state.chapters.first;
-    _handleChapterTap(context, chapter);
+    _handleChapterTap(context, chapter, state);
   }
 
-  void _handleChapterTap(BuildContext context, ComicChapter chapter) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('阅读器开发中: ${chapter.title}')),
+  void _handleChapterTap(BuildContext context, ComicChapter chapter, ComicDetailState state) {
+    final detail = state.detail;
+    if (detail == null || chapter.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('章节信息缺失')),
+      );
+      return;
+    }
+    final args = ComicReaderArgs(
+      chapters: state.chapters,
+      currentChapterId: chapter.id,
+      comicTitle: detail.title,
+      sourceId: detail.source,
+    );
+    context.pushNamed(
+      'comicReader',
+      pathParameters: {'id': detail.id},
+      extra: args,
     );
   }
 

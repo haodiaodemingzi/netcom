@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from services.scraper_factory import ScraperFactory
 from services.cache import cache_response
 from utils.decorators import (
@@ -7,6 +7,7 @@ from utils.decorators import (
 )
 from config import COMIC_SOURCES
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -202,3 +203,51 @@ def get_chapter_download_info(chapter_id):
                 'download_config': {}
             }
         }), 500
+
+@comic_bp.route('/proxy/image', methods=['GET'])
+def proxy_image():
+    """图片代理: 服务端代为拉取目标图片, 解决前端 CORS / Cookie 问题"""
+    target_url = request.args.get('url', '').strip()
+    source = request.args.get('source', None)
+    
+    if not target_url:
+        return jsonify({'error': '缺少 url 参数'}), 400
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        }
+        download_config = {}
+        if source:
+            source_config = COMIC_SOURCES.get(source, {})
+            download_config = source_config.get('download_config', {})
+            if isinstance(download_config, dict):
+                extra_headers = download_config.get('headers', {})
+                if isinstance(extra_headers, dict):
+                    headers.update({str(k): str(v) for k, v in extra_headers.items()})
+                if download_config.get('referer'):
+                    headers.setdefault('Referer', download_config.get('referer'))
+        session = requests.Session()
+        session.headers.update(headers)
+        
+        # 若配置了 cookie_url, 先访问以获取 Set-Cookie
+        cookie_url = ''
+        if isinstance(download_config, dict):
+            cookie_url = download_config.get('cookie_url') or ''
+        if cookie_url:
+            try:
+                session.get(cookie_url, timeout=8, allow_redirects=True)
+            except Exception as _:
+                pass
+        
+        resp = session.get(target_url, timeout=12, allow_redirects=True, stream=True)
+        if not resp.ok:
+            return jsonify({'error': f'拉取失败: {resp.status_code}'}), resp.status_code
+        
+        content_type = resp.headers.get('Content-Type', 'application/octet-stream')
+        return Response(resp.content, status=200, content_type=content_type)
+    except Exception as e:
+        logger.error(f"代理下载失败: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500

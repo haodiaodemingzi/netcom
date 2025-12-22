@@ -17,7 +17,7 @@ class AppRoot extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Netcom',
       theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      darkTheme: AppTheme.light,
       routerConfig: router,
     );
   }

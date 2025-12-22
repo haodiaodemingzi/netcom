@@ -128,8 +128,22 @@ class ComicsRemoteService {
     if (resolvedSource != null) {
       params['source'] = resolvedSource;
     }
-    final response = await _api.get<dynamic>('/comics/chapters/$chapterId/images', query: params);
+    // 后端真实路径是 /chapters/<id>/images (无 /comics 前缀)，此前会导致 404
+    final response = await _api.get<dynamic>('/chapters/$chapterId/images', query: params);
     return _parseChapterImages(_unwrap(response.data));
+  }
+
+  Future<ComicDownloadInfo> fetchChapterDownloadInfo({
+    required String chapterId,
+    required String? sourceId,
+  }) async {
+    final params = <String, dynamic>{};
+    final resolvedSource = _resolveSource(sourceId);
+    if (resolvedSource != null) {
+      params['source'] = resolvedSource;
+    }
+    final response = await _api.get<dynamic>('/chapters/$chapterId/download-info', query: params);
+    return _parseDownloadInfo(_unwrap(response.data));
   }
 
   List<ComicChapter> _parseChapters(dynamic data) {
@@ -204,6 +218,19 @@ class ComicsRemoteService {
       );
     }
     return const ComicChapterImages(images: <ComicPageImage>[], total: 0);
+  }
+
+  ComicDownloadInfo _parseDownloadInfo(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      final data = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
+      final images = _parseChapterImages(data).images;
+      final downloadConfig = (data['download_config'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+      return ComicDownloadInfo(
+        images: images,
+        downloadConfig: downloadConfig,
+      );
+    }
+    return const ComicDownloadInfo(images: <ComicPageImage>[], downloadConfig: <String, dynamic>{});
   }
 
   String? _resolveSource(String? sourceId) {
