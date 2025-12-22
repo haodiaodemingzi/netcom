@@ -34,6 +34,31 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
             tooltip: '刷新',
           ),
           IconButton(
+            icon: const Icon(Icons.play_circle_fill_rounded),
+            onPressed: state.queue.isEmpty ? null : notifier.resumeAll,
+            tooltip: '全部继续',
+          ),
+          IconButton(
+            icon: const Icon(Icons.pause_circle_filled_rounded),
+            onPressed: state.queue.isEmpty ? null : notifier.pauseAll,
+            tooltip: '全部暂停',
+          ),
+          IconButton(
+            icon: const Icon(Icons.restart_alt_rounded),
+            onPressed: state.queue.any((e) => e.status == DownloadStatus.failed) ? notifier.retryAllFailed : null,
+            tooltip: '重试全部失败',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_rounded),
+            onPressed: state.queue.isEmpty ? null : notifier.clearQueue,
+            tooltip: '清空队列',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_forever_rounded),
+            onPressed: state.completed.isEmpty ? null : notifier.clearCompleted,
+            tooltip: '清空已完成',
+          ),
+          IconButton(
             icon: const Icon(Icons.play_arrow_rounded),
             onPressed: state.selectedQueue.isEmpty ? null : notifier.resumeSelected,
             tooltip: '继续',

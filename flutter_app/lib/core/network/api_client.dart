@@ -9,6 +9,7 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? query,
     Options? options,
+    CancelToken? cancelToken,
   }) {
     if (path.isEmpty) {
       throw ArgumentError('path 不能为空');
@@ -17,6 +18,7 @@ class ApiClient {
       path,
       queryParameters: query,
       options: options,
+      cancelToken: cancelToken,
     );
   }
 
@@ -25,6 +27,7 @@ class ApiClient {
     Map<String, dynamic>? body,
     Map<String, dynamic>? query,
     Options? options,
+    CancelToken? cancelToken,
   }) {
     if (path.isEmpty) {
       throw ArgumentError('path 不能为空');
@@ -38,6 +41,7 @@ class ApiClient {
       data: body,
       queryParameters: query,
       options: mergedOptions,
+      cancelToken: cancelToken,
     );
   }
 
@@ -45,6 +49,7 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? query,
     Options? options,
+    CancelToken? cancelToken,
   }) {
     if (path.isEmpty) {
       throw ArgumentError('path 不能为空');
@@ -53,6 +58,7 @@ class ApiClient {
       path,
       queryParameters: query,
       options: options,
+      cancelToken: cancelToken,
     );
   }
 }

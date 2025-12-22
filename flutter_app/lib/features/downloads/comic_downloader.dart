@@ -25,6 +25,7 @@ class ComicDownloader {
     required ComicChapter chapter,
     required ComicDownloadInfo downloadInfo,
     ComicDownloadProgress? onProgress,
+    CancelToken? cancelToken,
   }) async {
     if (detail.id.isEmpty || chapter.id.isEmpty || downloadInfo.images.isEmpty) {
       throw ArgumentError('下载参数缺失');
@@ -34,6 +35,9 @@ class ComicDownloader {
     var completed = 0;
     
     for (final image in downloadInfo.images) {
+      if (cancelToken?.isCancelled == true) {
+        return;
+      }
       if (image.url.isEmpty) {
         continue;
       }
@@ -47,6 +51,7 @@ class ComicDownloader {
           options: Options(
             responseType: ResponseType.bytes,
           ),
+          cancelToken: cancelToken,
         );
         
         if (response.data != null && response.data!.isNotEmpty) {

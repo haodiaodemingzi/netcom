@@ -10,6 +10,8 @@ const _kCurrentSource = 'current_source';
 const _kInstalledSources = 'installed_sources';
 const _kActivationToken = 'activation_token';
 const _kVideoSource = 'video_current_source';
+const _kDownloadQueue = 'download_queue';
+const _kDownloadCompleted = 'download_completed';
 
 class SettingsModel {
   SettingsModel({
@@ -399,11 +401,45 @@ class AppStorage {
   }
 
   Future<bool> clearHistory() async {
-    return _prefs.setString(_kHistory, jsonEncode(<HistoryItem>[]));
+    return _prefs.remove(_kHistory);
   }
 
   Future<bool> clearFavorites() async {
     return _prefs.setString(_kFavorites, jsonEncode(<FavoriteItem>[]));
+  }
+
+  List<Map<String, dynamic>> getDownloadQueueRaw() {
+    final raw = _prefs.getString(_kDownloadQueue);
+    if (raw == null || raw.isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+    try {
+      final list = (jsonDecode(raw) as List?)?.whereType<Map<String, dynamic>>().toList() ?? <Map<String, dynamic>>[];
+      return list;
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<bool> saveDownloadQueueRaw(List<Map<String, dynamic>> items) async {
+    return _prefs.setString(_kDownloadQueue, jsonEncode(items));
+  }
+
+  List<Map<String, dynamic>> getDownloadCompletedRaw() {
+    final raw = _prefs.getString(_kDownloadCompleted);
+    if (raw == null || raw.isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+    try {
+      final list = (jsonDecode(raw) as List?)?.whereType<Map<String, dynamic>>().toList() ?? <Map<String, dynamic>>[];
+      return list;
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<bool> saveDownloadCompletedRaw(List<Map<String, dynamic>> items) async {
+    return _prefs.setString(_kDownloadCompleted, jsonEncode(items));
   }
 
   Future<bool> clearAllCache() async {

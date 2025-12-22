@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../comics_models.dart';
 
@@ -136,13 +138,18 @@ class ComicsRemoteService {
   Future<ComicDownloadInfo> fetchChapterDownloadInfo({
     required String chapterId,
     required String? sourceId,
+    CancelToken? cancelToken,
   }) async {
     final params = <String, dynamic>{};
     final resolvedSource = _resolveSource(sourceId);
     if (resolvedSource != null) {
       params['source'] = resolvedSource;
     }
-    final response = await _api.get<dynamic>('/chapters/$chapterId/download-info', query: params);
+    final response = await _api.get<dynamic>(
+      '/chapters/$chapterId/download-info',
+      query: params,
+      cancelToken: cancelToken,
+    );
     return _parseDownloadInfo(_unwrap(response.data));
   }
 
