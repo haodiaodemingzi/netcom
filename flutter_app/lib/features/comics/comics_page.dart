@@ -307,7 +307,7 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
       );
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       sliver: SliverGrid(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -328,9 +328,9 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
         ),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          childAspectRatio: 0.5,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          childAspectRatio: 0.58,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
         ),
       ),
     );
