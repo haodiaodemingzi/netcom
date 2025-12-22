@@ -353,6 +353,7 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
         loading: true,
         refreshing: true,
         error: null,
+        comics: const <ComicSummary>[],
       );
     } else {
       if (!state.hasMore || state.loadingMore) {
