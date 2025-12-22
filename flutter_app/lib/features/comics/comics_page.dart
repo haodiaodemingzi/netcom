@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../components/comic_card.dart';
 import 'comics_models.dart';
@@ -268,24 +269,37 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
           itemBuilder: (context, index) {
             final comic = items[index];
             return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minLeadingWidth: 80,
               onTap: () => _openComicDetail(comic.id),
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: AspectRatio(
-                  aspectRatio: 3 / 4,
-                  child: Image.network(
-                    comic.cover,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Theme.of(context).colorScheme.surfaceVariant,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.broken_image_outlined),
+              leading: SizedBox(
+                width: 80,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: AspectRatio(
+                    aspectRatio: 3 / 4,
+                    child: Image.network(
+                      comic.cover,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Theme.of(context).colorScheme.surfaceVariant,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.broken_image_outlined),
+                      ),
                     ),
                   ),
                 ),
               ),
-              title: Text(comic.title),
-              subtitle: Text(comic.latestChapter),
+              title: Text(
+                comic.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                comic.latestChapter,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               trailing: Wrap(
                 spacing: 4,
                 children: [
@@ -307,31 +321,26 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
       );
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      sliver: SliverGrid(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final comic = items[index];
-            return ComicCard(
-              title: comic.title,
-              coverUrl: comic.cover,
-              subtitle: comic.latestChapter,
-              source: comic.source,
-              isFavorite: state.favoriteIds.contains(comic.id),
-              onTap: () => _openComicDetail(comic.id),
-              onFavoriteTap: () => ref.read(comicsProvider.notifier).toggleFavorite(comic),
-              onDownloadTap: _openDownloads,
-              compact: true,
-            );
-          },
-          childCount: items.length,
-        ),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.58,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-        ),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      sliver: SliverMasonryGrid.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        itemBuilder: (context, index) {
+          final comic = items[index];
+          return ComicCard(
+            title: comic.title,
+            coverUrl: comic.cover,
+            subtitle: comic.latestChapter,
+            source: comic.source,
+            isFavorite: state.favoriteIds.contains(comic.id),
+            onTap: () => _openComicDetail(comic.id),
+            onFavoriteTap: () => ref.read(comicsProvider.notifier).toggleFavorite(comic),
+            onDownloadTap: _openDownloads,
+            compact: true,
+          );
+        },
+        childCount: items.length,
       ),
     );
   }
