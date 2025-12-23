@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+enum VideoFitMode { contain, cover, fill }
+
 class CustomVideoControls extends StatefulWidget {
   const CustomVideoControls({
     super.key,
@@ -21,7 +23,9 @@ class CustomVideoControls extends StatefulWidget {
 class _CustomVideoControlsState extends State<CustomVideoControls> {
   bool _showControls = true;
   bool _isPortrait = true;
+  bool _isFullscreen = false;
   double _currentSpeed = 1.0;
+  VideoFitMode _fitMode = VideoFitMode.contain;
   
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -68,6 +72,70 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     }
   }
 
+  void _toggleFullscreen() {
+    setState(() {
+      _isFullscreen = !_isFullscreen;
+    });
+    if (_isFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
+  void _showFitModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('屏幕比例'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<VideoFitMode>(
+              title: const Text('原比例'),
+              value: VideoFitMode.contain,
+              groupValue: _fitMode,
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _fitMode = value;
+                  });
+                  Navigator.pop(context);
+                }
+              },
+            ),
+            RadioListTile<VideoFitMode>(
+              title: const Text('填充'),
+              value: VideoFitMode.cover,
+              groupValue: _fitMode,
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _fitMode = value;
+                  });
+                  Navigator.pop(context);
+                }
+              },
+            ),
+            RadioListTile<VideoFitMode>(
+              title: const Text('拉伸'),
+              value: VideoFitMode.fill,
+              groupValue: _fitMode,
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _fitMode = value;
+                  });
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showSpeedDialog() {
     showDialog(
       context: context,
@@ -102,6 +170,33 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  Widget _buildPillButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 36,
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+            side: const BorderSide(color: Colors.white54),
+          ),
+          minimumSize: const Size(0, 36),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white, size: 16),
+        label: Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPlaying = widget.controller.value.isPlaying;
@@ -124,7 +219,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             Center(
               child: AspectRatio(
                 aspectRatio: widget.controller.value.aspectRatio,
-                child: VideoPlayer(widget.controller),
+                child: FittedBox(
+                  fit: _fitMode == VideoFitMode.fill
+                      ? BoxFit.fill
+                      : _fitMode == VideoFitMode.cover
+                          ? BoxFit.cover
+                          : BoxFit.contain,
+                  child: SizedBox(
+                    width: widget.controller.value.size.width == 0
+                        ? MediaQuery.of(context).size.width
+                        : widget.controller.value.size.width,
+                    height: widget.controller.value.size.height == 0
+                        ? MediaQuery.of(context).size.width / widget.controller.value.aspectRatio
+                        : widget.controller.value.size.height,
+                    child: VideoPlayer(widget.controller),
+                  ),
+                ),
               ),
             ),
             if (_showControls)
@@ -149,14 +259,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                                 style: const TextStyle(color: Colors.white, fontSize: 12),
                               ),
                               Expanded(
-                                child: Slider(
-                                  value: progress.clamp(0.0, 1.0),
-                                  onChanged: (value) {
-                                    final newPosition = duration * value;
-                                    widget.controller.seekTo(newPosition);
-                                  },
-                                  activeColor: Colors.white,
-                                  inactiveColor: Colors.white.withOpacity(0.3),
+                                child: SliderTheme(
+                                  data: SliderThemeData(
+                                    trackHeight: 12,
+                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                  ),
+                                  child: Slider(
+                                    value: progress.clamp(0.0, 1.0),
+                                    onChanged: (value) {
+                                      final newPosition = duration * value;
+                                      widget.controller.seekTo(newPosition);
+                                    },
+                                    activeColor: Colors.white,
+                                    inactiveColor: Colors.white.withOpacity(0.3),
+                                  ),
                                 ),
                               ),
                               Text(
@@ -166,65 +282,65 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                             ],
                           ),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              if (widget.onPrevious != null)
-                                IconButton(
-                                  icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
-                                  onPressed: widget.onPrevious,
-                                ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: Icon(
-                                  isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                                  color: Colors.white,
-                                  size: 48,
-                                ),
-                                onPressed: _togglePlayPause,
-                              ),
-                              const SizedBox(width: 8),
-                              if (widget.onNext != null)
-                                IconButton(
-                                  icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
-                                  onPressed: widget.onNext,
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              Expanded(
-                                child: TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(0, 36),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  ),
-                                  onPressed: _toggleOrientation,
-                                  icon: Icon(
-                                    _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  label: Text(
-                                    _isPortrait ? '横屏' : '竖屏',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  ),
+                              const SizedBox(width: 36),
+                              Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  spacing: 6,
+                                  children: [
+                                    if (widget.onPrevious != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.skip_previous, color: Colors.white, size: 28),
+                                        onPressed: widget.onPrevious,
+                                      ),
+                                    IconButton(
+                                      icon: Icon(
+                                        isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                                        color: Colors.white,
+                                        size: 40,
+                                      ),
+                                      onPressed: _togglePlayPause,
+                                    ),
+                                    if (widget.onNext != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.skip_next, color: Colors.white, size: 28),
+                                        onPressed: widget.onNext,
+                                      ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(0, 36),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  ),
-                                  onPressed: _showSpeedDialog,
-                                  icon: const Icon(Icons.speed, color: Colors.white, size: 20),
-                                  label: Text(
-                                    '${_currentSpeed}x',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  ),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  spacing: 8,
+                                  children: [
+                                    _buildPillButton(
+                                      icon: Icons.aspect_ratio,
+                                      label: _fitMode == VideoFitMode.contain
+                                          ? '原比'
+                                          : _fitMode == VideoFitMode.cover
+                                              ? '填充'
+                                              : '拉伸',
+                                      onPressed: _showFitModeDialog,
+                                    ),
+                                    _buildPillButton(
+                                      icon: _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
+                                      label: _isPortrait ? '横屏' : '竖屏',
+                                      onPressed: _toggleOrientation,
+                                    ),
+                                    _buildPillButton(
+                                      icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                                      label: _isFullscreen ? '退出' : '全屏',
+                                      onPressed: _toggleFullscreen,
+                                    ),
+                                    _buildPillButton(
+                                      icon: Icons.speed,
+                                      label: '${_currentSpeed}x',
+                                      onPressed: _showSpeedDialog,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
