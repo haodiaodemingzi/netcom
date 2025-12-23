@@ -9,6 +9,8 @@ import '../features/profile/profile_page.dart';
 import '../features/profile/favorites_page.dart';
 import '../features/videos/videos_page.dart';
 import '../features/videos/video_detail_page.dart';
+import '../features/videos/video_player_page.dart';
+import '../features/videos/video_models.dart';
 import '../features/comics/comic_detail_page.dart';
 import '../features/comics/comic_reader_page.dart';
 import '../features/comics/comics_page.dart';
@@ -112,6 +114,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final source = extra?['source'] as String?;
           return VideoDetailPage(videoId: id, source: source);
+        },
+      ),
+      GoRoute(
+        path: '/video-player',
+        name: 'videoPlayer',
+        parentNavigatorKey: navigatorKey,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final videoId = (extra?['videoId'] as String?) ?? '';
+          final episodeId = (extra?['episodeId'] as String?) ?? '';
+          final source = extra?['source'] as String?;
+          final episodes = (extra?['episodes'] as List<VideoEpisode>?) ?? const <VideoEpisode>[];
+          final coverUrl = extra?['coverUrl'] as String?;
+          return MaterialPage(
+            key: state.pageKey,
+            child: VideoPlayerPage(
+              videoId: videoId,
+              episodeId: episodeId,
+              episodes: episodes,
+              source: source,
+              coverUrl: coverUrl,
+            ),
+          );
         },
       ),
     ],

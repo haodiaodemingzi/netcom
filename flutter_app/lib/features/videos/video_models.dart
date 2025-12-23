@@ -229,3 +229,13 @@ class VideoDetailData {
   final VideoDetail detail;
   final List<VideoEpisode> episodes;
 }
+
+class VideoPlayConfig {
+  const VideoPlayConfig({
+    required this.headers,
+    required this.cookieUrl,
+  });
+
+  final Map<String, String> headers;
+  final String cookieUrl;
+}

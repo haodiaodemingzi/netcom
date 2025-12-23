@@ -599,6 +599,12 @@ class MjwuScraper(BaseVideoScraper):
                 if iframe:
                     video_url = iframe.get('src', '')
             
+            # 播放 headers：部分线路需要保留来源信息才能正常访问
+            play_headers = {
+                'User-Agent': self.headers.get('User-Agent', ''),
+                'Referer': 'https://www.mjwu.cc/',
+            }
+
             episode = {
                 'id': episode_id,
                 'seriesId': series_id,
@@ -607,6 +613,7 @@ class MjwuScraper(BaseVideoScraper):
                 'videoUrl': video_url,
                 'playUrl': play_page_url,
                 'source': self.source_id,
+                'headers': play_headers,
             }
             
             return episode

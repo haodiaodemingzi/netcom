@@ -148,6 +148,32 @@ class VideoRemoteService {
     }
   }
 
+  /// 获取剧集播放配置（headers / cookie_url）
+  Future<VideoPlayConfig?> fetchEpisodeConfig(String episodeId, String? sourceId) async {
+    if (isBlank(episodeId)) {
+      return null;
+    }
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) {
+      params['source'] = sourceId!.trim();
+    }
+    try {
+      final response = await _api.get<dynamic>('/videos/episodes/${episodeId.trim()}/config', query: params);
+      final data = _unwrap(response.data);
+      if (data is Map<String, dynamic>) {
+        final headersRaw = data['headers'];
+        final headers = headersRaw is Map<String, dynamic>
+            ? headersRaw.map((k, v) => MapEntry(k, v.toString()))
+            : <String, String>{};
+        final cookieUrl = (data['cookie_url'] as String?)?.trim() ?? '';
+        return VideoPlayConfig(headers: headers, cookieUrl: cookieUrl);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<VideoPlaySource?> fetchEpisodePlaySource(String episodeId, String? sourceId) async {
     if (isBlank(episodeId)) {
       return null;
@@ -157,23 +183,31 @@ class VideoRemoteService {
       params['source'] = sourceId!.trim();
     }
     try {
+      // 先获取播放配置（headers）
+      final config = await fetchEpisodeConfig(episodeId, sourceId);
+      final configHeaders = config?.headers ?? <String, String>{};
+
       final response = await _api.get<dynamic>('/videos/episodes/${episodeId.trim()}', query: params);
       final data = _unwrap(response.data);
       if (data is Map<String, dynamic>) {
-        // 兼容不同字段: playUrl / videoUrl / url
-        final playUrl = (data['playUrl'] as String?)?.trim() ??
-            (data['videoUrl'] as String?)?.trim() ??
+        // 优先使用 videoUrl (实际视频流地址), 其次 url, 最后 playUrl (可能是网页地址)
+        final videoUrl = (data['videoUrl'] as String?)?.trim() ??
             (data['url'] as String?)?.trim() ??
+            (data['playUrl'] as String?)?.trim() ??
             '';
         final quality = (data['quality'] as String?)?.trim() ?? 'default';
-        final headersRaw = data['headers'];
-        final headers = headersRaw is Map<String, dynamic>
-            ? headersRaw.map((k, v) => MapEntry(k, v.toString()))
-            : <String, String>{};
-        if (playUrl.isEmpty) {
+        if (videoUrl.isEmpty) {
           return null;
         }
-        return VideoPlaySource(url: playUrl, quality: quality, headers: headers);
+        
+        // 合并 API 返回的 headers 和 config headers
+        final apiHeaders = data['headers'];
+        final mergedHeaders = <String, String>{...configHeaders};
+        if (apiHeaders is Map<String, dynamic>) {
+          mergedHeaders.addAll(apiHeaders.map((k, v) => MapEntry(k, v.toString())));
+        }
+        
+        return VideoPlaySource(url: videoUrl, quality: quality, headers: mergedHeaders);
       }
       return null;
     } catch (e) {

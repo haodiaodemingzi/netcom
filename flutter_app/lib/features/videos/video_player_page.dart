@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 
 import 'video_models.dart';
 import 'video_detail_provider.dart';
@@ -28,25 +28,22 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
 }
 
 class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
-  late Player _player;
-  late VideoController _controller;
-  bool _showControls = true;
-  bool _isFullscreen = false;
-  double _playbackSpeed = 1.0;
+  late VideoPlayerController _videoPlayerController;
+  ChewieController? _chewieController;
   String? _currentEpisodeId;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _currentEpisodeId = widget.episodeId;
-    _player = Player();
-    _controller = VideoController(_player);
-    _loadEpisode(_currentEpisodeId!);
+    Future.microtask(() => _loadEpisode(_currentEpisodeId!));
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
@@ -59,31 +56,38 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     await ref.read(videoDetailProvider(args).notifier).selectEpisode(episode);
     final state = ref.read(videoDetailProvider(args));
     if (state.playSource != null && state.playSource!.url.isNotEmpty) {
-      await _player.open(Media(state.playSource!.url));
-      await _player.play();
+      await _initializePlayer(state.playSource!.url, state.playSource!.headers);
     }
   }
 
-  void _toggleFullscreen() {
-    setState(() {
-      _isFullscreen = !_isFullscreen;
-    });
-    if (_isFullscreen) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  Future<void> _initializePlayer(String url, Map<String, String> headers) async {
+    if (_isInitialized) {
+      await _videoPlayerController.dispose();
+      _chewieController?.dispose();
+    }
+
+    _videoPlayerController = VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      httpHeaders: headers,
+    );
+
+    await _videoPlayerController.initialize();
+
+    _chewieController = ChewieController(
+      videoPlayerController: _videoPlayerController,
+      autoPlay: true,
+      looping: false,
+      allowFullScreen: true,
+      allowPlaybackSpeedChanging: true,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
     }
   }
 
-  void _changeSpeed(double speed) {
-    setState(() {
-      _playbackSpeed = speed;
-    });
-    _player.setRate(speed);
-  }
 
   void _playNext() {
     if (_currentEpisodeId == null) {
@@ -119,186 +123,39 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   Widget build(BuildContext context) {
     final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
     final state = ref.watch(videoDetailProvider(args));
-    final currentEpisode = widget.episodes.firstWhere(
-      (e) => e.id == _currentEpisodeId,
-      orElse: () => const VideoEpisode(id: '', title: '', index: 0),
-    );
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if ((widget.coverUrl ?? '').isNotEmpty)
-                      Image.network(
-                        widget.coverUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(color: Colors.black),
-                      )
-                    else
-                      Container(color: Colors.black),
-                    if (state.loadingPlaySource)
-                      const Center(child: CircularProgressIndicator())
-                    else if (state.playSource == null || state.playSource!.url.isEmpty)
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.white70),
-                            const SizedBox(height: 8),
-                            const Text('无法获取播放地址', style: TextStyle(color: Colors.white70)),
-                            const SizedBox(height: 12),
-                            OutlinedButton(
-                              onPressed: () => _loadEpisode(_currentEpisodeId ?? widget.episodeId),
-                              child: const Text('重试', style: TextStyle(color: Colors.white)),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Video(
-                        controller: _controller,
-                        controls: NoVideoControls,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (_showControls)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showControls = !_showControls;
-                    });
-                  },
-                  child: Container(
-                    color: Colors.black.withOpacity(0.35),
-                    child: Column(
-                      children: [
-                        AppBar(
-                          backgroundColor: Colors.transparent,
-                          elevation: 0,
-                          title: Text(
-                            currentEpisode.title,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          iconTheme: const IconThemeData(color: Colors.white),
-                          actions: [
-                            PopupMenuButton<double>(
-                              icon: const Icon(Icons.speed, color: Colors.white),
-                              onSelected: _changeSpeed,
-                              itemBuilder: (ctx) => [
-                                const PopupMenuItem(value: 0.5, child: Text('0.5x')),
-                                const PopupMenuItem(value: 0.75, child: Text('0.75x')),
-                                const PopupMenuItem(value: 1.0, child: Text('1.0x')),
-                                const PopupMenuItem(value: 1.25, child: Text('1.25x')),
-                                const PopupMenuItem(value: 1.5, child: Text('1.5x')),
-                                const PopupMenuItem(value: 2.0, child: Text('2.0x')),
-                              ],
-                            ),
-                            IconButton(
-                              icon: Icon(_isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
-                              onPressed: _toggleFullscreen,
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        StreamBuilder<Duration>(
-                          stream: _player.stream.position,
-                          builder: (ctx, snapshot) {
-                            final position = snapshot.data ?? Duration.zero;
-                            final duration = _player.state.duration;
-                            return Column(
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        _formatDuration(position),
-                                        style: const TextStyle(color: Colors.white),
-                                      ),
-                                      Expanded(
-                                        child: Slider(
-                                          value: position.inMilliseconds.toDouble(),
-                                          max: duration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
-                                          onChanged: (value) {
-                                            _player.seek(Duration(milliseconds: value.toInt()));
-                                          },
-                                        ),
-                                      ),
-                                      Text(
-                                        _formatDuration(duration),
-                                        style: const TextStyle(color: Colors.white),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
-                                      onPressed: _playPrevious,
-                                    ),
-                                    const SizedBox(width: 16),
-                                    StreamBuilder<bool>(
-                                      stream: _player.stream.playing,
-                                      builder: (ctx, snapshot) {
-                                        final playing = snapshot.data ?? false;
-                                        return IconButton(
-                                          icon: Icon(
-                                            playing ? Icons.pause : Icons.play_arrow,
-                                            color: Colors.white,
-                                            size: 48,
-                                          ),
-                                          onPressed: () {
-                                            if (playing) {
-                                              _player.pause();
-                                            } else {
-                                              _player.play();
-                                            }
-                                          },
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(width: 16),
-                                    IconButton(
-                                      icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
-                                      onPressed: _playNext,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          widget.episodes.firstWhere(
+            (e) => e.id == _currentEpisodeId,
+            orElse: () => const VideoEpisode(id: '', title: '', index: 0),
+          ).title,
+          style: const TextStyle(color: Colors.white),
         ),
+        actions: [
+          if (widget.episodes.indexWhere((e) => e.id == _currentEpisodeId) > 0)
+            IconButton(
+              icon: const Icon(Icons.skip_previous),
+              onPressed: _playPrevious,
+            ),
+          if (widget.episodes.indexWhere((e) => e.id == _currentEpisodeId) < widget.episodes.length - 1)
+            IconButton(
+              icon: const Icon(Icons.skip_next),
+              onPressed: _playNext,
+            ),
+        ],
+      ),
+      body: Center(
+        child: state.loadingPlaySource
+            ? const CircularProgressIndicator()
+            : !_isInitialized || _chewieController == null
+                ? const CircularProgressIndicator()
+                : Chewie(controller: _chewieController!),
       ),
     );
-  }
-
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }

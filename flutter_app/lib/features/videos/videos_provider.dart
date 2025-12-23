@@ -142,6 +142,11 @@ class VideosNotifier extends StateNotifier<VideosState> {
   int _searchToken = 0;
   bool _initializing = false;
 
+  void _safeSetState(VideosState Function(VideosState) updater) {
+    if (!mounted) return;
+    state = updater(state);
+  }
+
   Future<void> _init() async {
     if (_initializing) {
       return;
@@ -166,20 +171,24 @@ class VideosNotifier extends StateNotifier<VideosState> {
   }
 
   Future<void> selectCategory(VideoCategory category) async {
+    if (!mounted) return;
     if (category.id == state.selectedCategory?.id) {
       return;
     }
-    state = state.copyWith(selectedCategory: category);
+    _safeSetState((s) => s.copyWith(selectedCategory: category));
     await _loadFeed(reset: true);
   }
 
   Future<void> changeSource(String sourceId) async {
+    if (!mounted) return;
     if (sourceId.isEmpty || sourceId == state.selectedSource) {
       return;
     }
-    state = state.copyWith(selectedSource: sourceId);
+    _safeSetState((s) => s.copyWith(selectedSource: sourceId));
     await _sourceRepository?.setCurrentSource(sourceId);
+    if (!mounted) return;
     await _loadCategories(sourceId);
+    if (!mounted) return;
     await _loadFeed(reset: true);
   }
 
@@ -190,11 +199,11 @@ class VideosNotifier extends StateNotifier<VideosState> {
       return;
     }
     final token = ++_searchToken;
-    state = state.copyWith(
+    _safeSetState((s) => s.copyWith(
       searchKeyword: trimmed,
       searching: true,
       error: null,
-    );
+    ));
     await _searchHistoryRepository?.add(trimmed);
     try {
       final result = await _remoteService.search(
@@ -203,41 +212,42 @@ class VideosNotifier extends StateNotifier<VideosState> {
         page: 1,
         limit: 50,
       );
-      if (token != _searchToken) {
+      if (token != _searchToken || !mounted) {
         return;
       }
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         searchResults: result.items,
         searching: false,
-      );
+      ));
     } catch (e) {
-      if (token != _searchToken) {
+      if (token != _searchToken || !mounted) {
         return;
       }
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         searching: false,
         error: e.toString(),
-      );
+      ));
     }
   }
 
   void clearSearch() {
-    state = state.copyWith(
+    _safeSetState((s) => s.copyWith(
       searchKeyword: '',
       searchResults: <VideoSummary>[],
       searching: false,
-    );
+    ));
   }
 
   Future<void> toggleFavorite(String videoId) async {
-    if (videoId.isEmpty) {
+    if (videoId.isEmpty || !mounted) {
       return;
     }
     final isFav = state.favoriteIds.contains(videoId);
     if (isFav) {
       await _favoritesRepository?.remove(videoId);
+      if (!mounted) return;
       final updated = Set<String>.from(state.favoriteIds)..remove(videoId);
-      state = state.copyWith(favoriteIds: updated);
+      _safeSetState((s) => s.copyWith(favoriteIds: updated));
     } else {
       final video = state.videos.firstWhere((v) => v.id == videoId, orElse: () => state.searchResults.firstWhere((v) => v.id == videoId, orElse: () => const VideoSummary(id: '', title: '', cover: '', source: '')));
       if (video.id.isEmpty) {
@@ -250,29 +260,32 @@ class VideosNotifier extends StateNotifier<VideosState> {
         type: 'video',
         source: video.source,
       ));
+      if (!mounted) return;
       final updated = Set<String>.from(state.favoriteIds)..add(videoId);
-      state = state.copyWith(favoriteIds: updated);
+      _safeSetState((s) => s.copyWith(favoriteIds: updated));
     }
   }
 
   Future<void> _loadSources() async {
-    state = state.copyWith(sourcesLoading: true);
+    _safeSetState((s) => s.copyWith(sourcesLoading: true));
     try {
       final sources = await _remoteService.fetchSources();
+      if (!mounted) return;
       final currentSource = _sourceRepository?.currentSource() ?? _defaultSource;
       final resolvedSource = sources.containsKey(currentSource) ? currentSource : (sources.keys.isNotEmpty ? sources.keys.first : _defaultSource);
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         sources: sources,
         selectedSource: resolvedSource,
         sourcesLoading: false,
-      );
+      ));
       await _sourceRepository?.setCurrentSource(resolvedSource);
+      if (!mounted) return;
       await _loadCategories(resolvedSource);
     } catch (e) {
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         sourcesLoading: false,
         error: e.toString(),
-      );
+      ));
     }
   }
 
@@ -282,17 +295,19 @@ class VideosNotifier extends StateNotifier<VideosState> {
     }
     try {
       final categories = await _remoteService.fetchCategories(sourceId);
+      if (!mounted) return;
       final firstCategory = categories.isNotEmpty ? categories.first : null;
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         categories: categories,
         selectedCategory: firstCategory,
-      );
+      ));
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      _safeSetState((s) => s.copyWith(error: e.toString()));
     }
   }
 
   Future<void> _loadFeed({required bool reset}) async {
+    if (!mounted) return;
     if (state.loading || state.loadingMore) {
       return;
     }
@@ -305,9 +320,9 @@ class VideosNotifier extends StateNotifier<VideosState> {
     }
     if (reset) {
       _nextPage = 1;
-      state = state.copyWith(loading: true, error: null);
+      _safeSetState((s) => s.copyWith(loading: true, error: null));
     } else {
-      state = state.copyWith(loadingMore: true);
+      _safeSetState((s) => s.copyWith(loadingMore: true));
     }
     try {
       final result = await _remoteService.fetchFeed(
@@ -316,22 +331,23 @@ class VideosNotifier extends StateNotifier<VideosState> {
         limit: _pageSize,
         sourceId: state.selectedSource,
       );
+      if (!mounted) return;
       final updated = reset ? result.items : [...state.videos, ...result.items];
       _nextPage++;
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         videos: updated,
         hasMore: result.hasMore,
         loading: false,
         loadingMore: false,
         refreshing: false,
-      );
+      ));
     } catch (e) {
-      state = state.copyWith(
+      _safeSetState((s) => s.copyWith(
         loading: false,
         loadingMore: false,
         refreshing: false,
         error: e.toString(),
-      );
+      ));
     }
   }
 
@@ -342,26 +358,27 @@ class VideosNotifier extends StateNotifier<VideosState> {
     }
     final mode = settings.viewMode;
     if (mode == 'list') {
-        state = state.copyWith(viewMode: VideosViewMode.list);
+        _safeSetState((s) => s.copyWith(viewMode: VideosViewMode.list));
     } else {
-      state = state.copyWith(viewMode: VideosViewMode.grid);
+      _safeSetState((s) => s.copyWith(viewMode: VideosViewMode.grid));
     }
   }
 
   void _hydrateFavorites() {
     final favorites = _favoritesRepository?.list() ?? <FavoriteItem>[];
     final videoFavorites = favorites.where((f) => f.type == 'video').map((f) => f.id).toSet();
-    state = state.copyWith(favoriteIds: videoFavorites);
+    _safeSetState((s) => s.copyWith(favoriteIds: videoFavorites));
   }
 
   void _hydrateSearchHistory() {
     final history = _searchHistoryRepository?.list() ?? <String>[];
-    state = state.copyWith(searchHistory: history);
+    _safeSetState((s) => s.copyWith(searchHistory: history));
   }
 
   Future<void> toggleViewMode() async {
+    if (!mounted) return;
     final next = state.viewMode == VideosViewMode.grid ? VideosViewMode.list : VideosViewMode.grid;
-    state = state.copyWith(viewMode: next);
+    _safeSetState((s) => s.copyWith(viewMode: next));
     await _settingsRepository?.update({'viewMode': next == VideosViewMode.list ? 'list' : 'card'});
   }
 }

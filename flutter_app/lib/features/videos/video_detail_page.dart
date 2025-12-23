@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import 'video_models.dart';
 import 'video_detail_provider.dart';
-import 'video_player_page.dart';
 
 class VideoDetailPage extends ConsumerStatefulWidget {
   const VideoDetailPage({
@@ -24,11 +23,42 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   bool _episodesReversed = false;
   bool _descExpanded = false;
 
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+
   void _toggleEpisodeOrder() {
     setState(() {
       _episodesReversed = !_episodesReversed;
     });
   }
+
+  Future<void> _playEpisode(VideoEpisode episode) async {
+    final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    final notifier = ref.read(videoDetailProvider(args).notifier);
+    await notifier.selectEpisode(episode);
+    final state = ref.read(videoDetailProvider(args));
+    
+    if (!mounted) return;
+    
+    context.push(
+      '/video-player',
+      extra: {
+        'videoId': widget.videoId,
+        'source': widget.source,
+        'episodeId': episode.id,
+        'episodes': state.episodes,
+      },
+    );
+  }
+
 
   List<Widget> _buildDescriptionSection(String? description) {
     final raw = description?.trim() ?? '';
@@ -119,24 +149,57 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: detail.cover.isNotEmpty
-                  ? Image.network(
-                      detail.cover,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: colorScheme.surfaceVariant),
-                    )
-                  : Container(color: colorScheme.surfaceVariant),
-            ),
-            actions: [
-              IconButton(
-                icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border),
-                onPressed: notifier.toggleFavorite,
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 220,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: detail.cover.isNotEmpty
+                        ? Image.network(
+                            detail.cover,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(color: Colors.black),
+                          )
+                        : Container(color: Colors.black),
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                      child: Center(
+                        child: IconButton(
+                          icon: const Icon(Icons.play_circle_filled, size: 64, color: Colors.white),
+                          onPressed: () {
+                            if (episodes.isNotEmpty) {
+                              _playEpisode(episodes.first);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => context.pop(),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      icon: Icon(
+                        state.isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: Colors.white,
+                      ),
+                      onPressed: notifier.toggleFavorite,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -236,19 +299,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                   (ctx, index) {
                     final episode = episodes[index];
                     return OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => VideoPlayerPage(
-                              videoId: widget.videoId,
-                              episodeId: episode.id,
-                              episodes: state.episodes,
-                              source: detail.source.isNotEmpty ? detail.source : widget.source,
-                              coverUrl: detail.cover,
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: () => _playEpisode(episode),
                       child: Text(
                         episode.title,
                         maxLines: 1,
@@ -265,4 +316,5 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       ),
     );
   }
+
 }
