@@ -141,6 +141,7 @@ class VideosNotifier extends StateNotifier<VideosState> {
   int _nextPage = 1;
   int _searchToken = 0;
   bool _initializing = false;
+  DateTime? _lastFeedAt;
 
   void _safeSetState(VideosState Function(VideosState) updater) {
     if (!mounted) return;
@@ -160,6 +161,21 @@ class VideosNotifier extends StateNotifier<VideosState> {
   }
 
   Future<void> refresh() async {
+    await _loadFeed(reset: true);
+  }
+
+  Future<void> ensureWarm() async {
+    if (state.loading || state.refreshing || state.searching) {
+      return;
+    }
+    if (state.categories.isEmpty) {
+      await _loadSources();
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastFeedAt != null && now.difference(_lastFeedAt!).inMinutes < 1 && state.videos.isNotEmpty) {
+      return;
+    }
     await _loadFeed(reset: true);
   }
 
@@ -325,28 +341,29 @@ class VideosNotifier extends StateNotifier<VideosState> {
       _safeSetState((s) => s.copyWith(loadingMore: true));
     }
     try {
-      final result = await _remoteService.fetchFeed(
+      final feed = await _remoteService.fetchFeed(
         categoryId: category.id,
         page: _nextPage,
         limit: _pageSize,
         sourceId: state.selectedSource,
       );
       if (!mounted) return;
-      final updated = reset ? result.items : [...state.videos, ...result.items];
-      _nextPage++;
+      final items = reset ? feed.items : <VideoSummary>[...state.videos, ...feed.items];
+      _nextPage = _nextPage + 1;
       _safeSetState((s) => s.copyWith(
-        videos: updated,
-        hasMore: result.hasMore,
+        videos: items,
         loading: false,
-        loadingMore: false,
         refreshing: false,
+        loadingMore: false,
+        hasMore: feed.hasMore,
       ));
+      _lastFeedAt = DateTime.now();
     } catch (e) {
       _safeSetState((s) => s.copyWith(
         loading: false,
-        loadingMore: false,
         refreshing: false,
-        error: e.toString(),
+        loadingMore: false,
+        error: '加载失败 ${e.toString()}',
       ));
     }
   }

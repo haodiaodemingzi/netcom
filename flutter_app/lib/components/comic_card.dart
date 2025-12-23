@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/network/image_proxy.dart';
+
 class ComicCard extends StatelessWidget {
   const ComicCard({
     super.key,
@@ -22,13 +24,11 @@ class ComicCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = coverUrl.trim().isEmpty
+    final rawUrl = coverUrl.trim();
+    final fallbackUrl = proxyImageUrl(rawUrl, useProxy: true);
+    final image = rawUrl.isEmpty
         ? const Icon(Icons.broken_image_outlined, size: 48)
-        : Image.network(
-            coverUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
-          );
+        : _buildCover(rawUrl, fallbackUrl);
     final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.white,
@@ -84,4 +84,21 @@ class ComicCard extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _buildCover(String url, String fallbackUrl) {
+  return Image.network(
+    url,
+    fit: BoxFit.cover,
+    errorBuilder: (context, error, stackTrace) {
+      if (url == fallbackUrl) {
+        return const Icon(Icons.broken_image_outlined, size: 48);
+      }
+      return Image.network(
+        fallbackUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
+      );
+    },
+  );
 }

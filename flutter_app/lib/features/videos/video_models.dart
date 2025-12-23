@@ -75,8 +75,7 @@ class VideoSummary {
     if (isBlank(id) || isBlank(title)) {
       return const VideoSummary(id: '', title: '', cover: '', source: '');
     }
-    final rawCover = (json['cover'] as String?)?.trim() ?? '';
-    final cover = proxyImageUrl(rawCover);
+    final cover = (json['cover'] as String?)?.trim() ?? '';
     final source = (json['source'] as String?)?.trim() ?? '';
     final episodes = (json['episodes'] as num?)?.toInt();
     final rating = (json['rating'] as num?)?.toDouble();
@@ -151,7 +150,7 @@ class VideoDetail {
     return VideoDetail(
       id: id,
       title: title,
-      cover: proxyImageUrl((json['cover'] as String?)?.trim() ?? ''),
+      cover: (json['cover'] as String?)?.trim() ?? '',
       source: (json['source'] as String?)?.trim() ?? '',
       description: (json['description'] as String?)?.trim(),
       actors: actors,

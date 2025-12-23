@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../components/comic_card.dart';
 import 'comics_models.dart';
@@ -179,46 +178,34 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
               ],
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 12 + padding.top * 0.2, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!state.inSearchMode && state.searchHistory.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _SearchHistory(
-                        history: state.searchHistory,
-                        onSelect: _onSearchSubmitted,
-                        onClear: notifier.clearSearchHistory,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _CategoryBar(
+                    expanded: _categoriesExpanded,
+                    onToggle: _toggleCategories,
+                  ),
+                  if (state.error != null && state.error!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              state.error ?? '',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.redAccent),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: notifier.refresh,
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 12),
-                    _CategoryBar(
-                      expanded: _categoriesExpanded,
-                      onToggle: _toggleCategories,
                     ),
-                    if (state.error != null && state.error!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                state.error ?? '',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.redAccent),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: notifier.refresh,
-                              icon: const Icon(Icons.refresh_rounded),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
             if (state.loading && items.isEmpty)

@@ -55,11 +55,10 @@ class ComicSummary {
       );
     }
     final tags = (json['tags'] as List?)?.whereType<String>().toList() ?? <String>[];
-    final rawCover = (json['cover'] as String?)?.trim() ?? '';
     return ComicSummary(
       id: (json['id'] as String?)?.trim() ?? '',
       title: (json['title'] as String?)?.trim() ?? '',
-      cover: proxyImageUrl(rawCover),
+      cover: (json['cover'] as String?)?.trim() ?? '',
       source: (json['source'] as String?)?.trim() ?? '',
       latestChapter: (json['latestChapter'] as String?)?.trim() ?? (json['latest'] as String?)?.trim() ?? '',
       categoryId: (json['category'] as String?)?.trim() ?? (json['categoryId'] as String?)?.trim() ?? '',
@@ -104,11 +103,10 @@ class ComicDetail {
       );
     }
     final tags = (json['tags'] as List?)?.whereType<String>().toList() ?? <String>[];
-    final rawCover = (json['cover'] as String?)?.trim() ?? '';
     return ComicDetail(
       id: (json['id'] as String?)?.trim() ?? '',
       title: (json['title'] as String?)?.trim() ?? '',
-      cover: proxyImageUrl(rawCover),
+      cover: (json['cover'] as String?)?.trim() ?? '',
       author: (json['author'] as String?)?.trim() ?? '',
       description: (json['description'] as String?)?.trim() ?? '',
       status: (json['status'] as String?)?.trim() ?? '',

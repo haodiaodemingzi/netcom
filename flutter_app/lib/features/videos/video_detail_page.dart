@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'video_models.dart';
-import 'video_detail_provider.dart';
+import '../../core/network/image_proxy.dart';
 import '../downloads/download_center_provider.dart';
+import 'video_detail_provider.dart';
+import 'video_models.dart';
 import '../downloads/download_models.dart';
 
 class VideoDetailPage extends ConsumerStatefulWidget {
@@ -187,11 +188,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                             child: Container(
                               color: Colors.grey.shade200,
                               child: detail.cover.isNotEmpty
-                                  ? Image.network(
-                                      detail.cover,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
-                                    )
+                                  ? _buildCover(detail.cover)
                                   : const Icon(Icons.broken_image_outlined, size: 48),
                             ),
                           ),
@@ -713,5 +710,27 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       return scheme.onSurfaceVariant;
     }
     return scheme.onSurfaceVariant;
+  }
+
+  Widget _buildCover(String url) {
+    final raw = url.trim();
+    if (raw.isEmpty) {
+      return const Icon(Icons.broken_image_outlined, size: 48);
+    }
+    final fallback = proxyImageUrl(raw, useProxy: true);
+    return Image.network(
+      raw,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        if (raw == fallback) {
+          return const Icon(Icons.broken_image_outlined, size: 48);
+        }
+        return Image.network(
+          fallback,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
+        );
+      },
+    );
   }
 }

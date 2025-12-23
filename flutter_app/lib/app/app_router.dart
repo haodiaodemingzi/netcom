@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/downloads/downloads_page.dart';
-import '../features/ebooks/ebooks_page.dart';
 import '../features/profile/history_page.dart';
 import '../features/profile/profile_page.dart';
 import '../features/profile/favorites_page.dart';
@@ -11,9 +10,11 @@ import '../features/videos/videos_page.dart';
 import '../features/videos/video_detail_page.dart';
 import '../features/videos/video_player_page.dart';
 import '../features/videos/video_models.dart';
+import '../features/videos/videos_provider.dart';
 import '../features/comics/comic_detail_page.dart';
 import '../features/comics/comic_reader_page.dart';
 import '../features/comics/comics_page.dart';
+import '../features/comics/comics_provider.dart';
 import '../features/settings/settings_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -31,15 +32,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/tabs/comics',
                 name: 'comics',
                 builder: (context, state) => const ComicsPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/tabs/ebooks',
-                name: 'ebooks',
-                builder: (context, state) => const EbooksPage(),
               ),
             ],
           ),
@@ -145,25 +137,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
 
-  void _onTap(int index) {
+  Future<void> _onTap(WidgetRef ref, int index) async {
+    if (index == shell.currentIndex) {
+      return;
+    }
+    if (index == 0) {
+      await ref.read(comicsProvider.notifier).ensureWarm();
+    } else if (index == 1) {
+      await ref.read(videosProvider.notifier).ensureWarm();
+    }
     shell.goBranch(index, initialLocation: index == shell.currentIndex);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: shell,
       bottomNavigationBar: NavigationBar(
+        height: 56,
         selectedIndex: shell.currentIndex,
-        onDestinationSelected: _onTap,
+        onDestinationSelected: (index) => _onTap(ref, index),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: '漫画'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: '电子书'),
           NavigationDestination(icon: Icon(Icons.movie_outlined), selectedIcon: Icon(Icons.movie), label: '视频'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '我的'),
         ],

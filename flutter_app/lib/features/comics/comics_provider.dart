@@ -145,6 +145,7 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
   int _nextPage = 1;
   int _searchToken = 0;
   bool _initializing = false;
+  DateTime? _lastFeedAt;
 
   Future<void> _init() async {
     if (_initializing) {
@@ -159,6 +160,21 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
   }
 
   Future<void> refresh() async {
+    await _loadFeed(reset: true);
+  }
+
+  Future<void> ensureWarm() async {
+    if (state.loading || state.refreshing || state.searching) {
+      return;
+    }
+    if (state.categories.isEmpty) {
+      await _loadSources();
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastFeedAt != null && now.difference(_lastFeedAt!).inMinutes < 1 && state.comics.isNotEmpty) {
+      return;
+    }
     await _loadFeed(reset: true);
   }
 
@@ -381,6 +397,7 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
         loadingMore: false,
         hasMore: feed.hasMore,
       );
+      _lastFeedAt = DateTime.now();
     } catch (e) {
       if (!mounted) {
         return;
