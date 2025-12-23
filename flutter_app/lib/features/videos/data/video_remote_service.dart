@@ -131,7 +131,7 @@ class VideoRemoteService {
       params['source'] = sourceId!.trim();
     }
     try {
-      final response = await _api.get<dynamic>('/videos/episodes/${videoId.trim()}', query: params);
+      final response = await _api.get<dynamic>('/videos/series/${videoId.trim()}/episodes', query: params);
       final data = _unwrap(response.data);
       if (data is List) {
         return data.indexed.map((e) => VideoEpisode.fromJson(e.$2 as Map<String, dynamic>?, index: e.$1)).where((ep) => isNotBlank(ep.id)).toList();
@@ -157,10 +157,23 @@ class VideoRemoteService {
       params['source'] = sourceId!.trim();
     }
     try {
-      final response = await _api.get<dynamic>('/videos/episodes/${episodeId.trim()}/play', query: params);
+      final response = await _api.get<dynamic>('/videos/episodes/${episodeId.trim()}', query: params);
       final data = _unwrap(response.data);
       if (data is Map<String, dynamic>) {
-        return VideoPlaySource.fromJson(data);
+        // 兼容不同字段: playUrl / videoUrl / url
+        final playUrl = (data['playUrl'] as String?)?.trim() ??
+            (data['videoUrl'] as String?)?.trim() ??
+            (data['url'] as String?)?.trim() ??
+            '';
+        final quality = (data['quality'] as String?)?.trim() ?? 'default';
+        final headersRaw = data['headers'];
+        final headers = headersRaw is Map<String, dynamic>
+            ? headersRaw.map((k, v) => MapEntry(k, v.toString()))
+            : <String, String>{};
+        if (playUrl.isEmpty) {
+          return null;
+        }
+        return VideoPlaySource(url: playUrl, quality: quality, headers: headers);
       }
       return null;
     } catch (e) {

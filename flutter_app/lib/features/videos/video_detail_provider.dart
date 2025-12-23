@@ -8,11 +8,30 @@ import 'video_models.dart';
 import 'data/video_remote_service.dart';
 import 'videos_provider.dart';
 
-final videoDetailProvider = StateNotifierProvider.family<VideoDetailNotifier, VideoDetailState, String>((ref, videoId) {
+class VideoDetailRequest {
+  const VideoDetailRequest({required this.videoId, this.source});
+
+  final String videoId;
+  final String? source;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is VideoDetailRequest && other.videoId == videoId && other.source == source;
+  }
+
+  @override
+  int get hashCode => Object.hash(videoId, source);
+}
+
+final videoDetailProvider = StateNotifierProvider.family<VideoDetailNotifier, VideoDetailState, VideoDetailRequest>((ref, args) {
   final remote = ref.watch(videosRemoteServiceProvider);
   final favoritesRepository = ref.watch(favoritesRepositoryProvider);
   return VideoDetailNotifier(
-    videoId: videoId,
+    videoId: args.videoId,
+    sourceId: args.source,
     remoteService: remote,
     favoritesRepository: favoritesRepository,
   );
@@ -65,9 +84,11 @@ class VideoDetailState {
 class VideoDetailNotifier extends StateNotifier<VideoDetailState> {
   VideoDetailNotifier({
     required String videoId,
+    required String? sourceId,
     required VideoRemoteService remoteService,
     required FavoritesRepository? favoritesRepository,
   })  : _videoId = videoId,
+        _sourceId = sourceId,
         _remoteService = remoteService,
         _favoritesRepository = favoritesRepository,
         super(const VideoDetailState()) {
@@ -75,6 +96,7 @@ class VideoDetailNotifier extends StateNotifier<VideoDetailState> {
   }
 
   final String _videoId;
+  final String? _sourceId;
   final VideoRemoteService _remoteService;
   final FavoritesRepository? _favoritesRepository;
 
@@ -90,12 +112,12 @@ class VideoDetailNotifier extends StateNotifier<VideoDetailState> {
     }
     state = state.copyWith(loading: true, error: null);
     try {
-      final detail = await _remoteService.fetchDetail(_videoId, null);
+      final detail = await _remoteService.fetchDetail(_videoId, _sourceId);
       if (detail == null || detail.id.isEmpty) {
         state = state.copyWith(loading: false, error: '视频不存在');
         return;
       }
-      final episodes = await _remoteService.fetchEpisodes(_videoId, detail.source);
+      final episodes = await _remoteService.fetchEpisodes(_videoId, detail.source.isNotEmpty ? detail.source : _sourceId);
       state = state.copyWith(
         detail: detail,
         episodes: episodes,
@@ -147,7 +169,7 @@ class VideoDetailNotifier extends StateNotifier<VideoDetailState> {
       playSource: null,
     );
     try {
-      final source = await _remoteService.fetchEpisodePlaySource(episode.id, state.detail?.source);
+      final source = await _remoteService.fetchEpisodePlaySource(episode.id, state.detail?.source.isNotEmpty == true ? state.detail?.source : _sourceId);
       if (source == null || source.url.isEmpty) {
         state = state.copyWith(
           loadingPlaySource: false,

@@ -22,11 +22,62 @@ class VideoDetailPage extends ConsumerStatefulWidget {
 
 class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   bool _episodesReversed = false;
+  bool _descExpanded = false;
+
+  void _toggleEpisodeOrder() {
+    setState(() {
+      _episodesReversed = !_episodesReversed;
+    });
+  }
+
+  List<Widget> _buildDescriptionSection(String? description) {
+    final raw = description?.trim() ?? '';
+    if (raw.isEmpty) {
+      return const <Widget>[];
+    }
+    if (!_descExpanded) {
+      return [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () {
+              setState(() {
+                _descExpanded = true;
+              });
+            },
+            child: const Text('展开简介'),
+          ),
+        ),
+      ];
+    }
+    final sanitized = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return [
+      Text('简介', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      Text(
+        sanitized,
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: () {
+            setState(() {
+              _descExpanded = false;
+            });
+          },
+          child: const Text('收起'),
+        ),
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(videoDetailProvider(widget.videoId));
-    final notifier = ref.read(videoDetailProvider(widget.videoId).notifier);
+    final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    final state = ref.watch(videoDetailProvider(args));
+    final notifier = ref.read(videoDetailProvider(args).notifier);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (state.loading) {
@@ -141,12 +192,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                     Text(detail.actors.join(', '), style: Theme.of(context).textTheme.bodyMedium),
                     const SizedBox(height: 12),
                   ],
-                  if (detail.description != null && detail.description!.isNotEmpty) ...[
-                    Text('简介', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(detail.description!, style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 16),
-                  ],
+                  ..._buildDescriptionSection(detail.description),
                 ],
               ),
             ),
@@ -163,11 +209,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                   const Spacer(),
                   IconButton(
                     icon: Icon(_episodesReversed ? Icons.arrow_upward : Icons.arrow_downward),
-                    onPressed: () {
-                      setState(() {
-                        _episodesReversed = !_episodesReversed;
-                      });
-                    },
+                    onPressed: _toggleEpisodeOrder,
                   ),
                 ],
               ),
@@ -201,6 +243,8 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                               videoId: widget.videoId,
                               episodeId: episode.id,
                               episodes: state.episodes,
+                              source: detail.source.isNotEmpty ? detail.source : widget.source,
+                              coverUrl: detail.cover,
                             ),
                           ),
                         );

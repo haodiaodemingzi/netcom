@@ -13,11 +13,15 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
     required this.videoId,
     required this.episodeId,
     required this.episodes,
+    this.source,
+    this.coverUrl,
   });
 
   final String videoId;
   final String episodeId;
   final List<VideoEpisode> episodes;
+  final String? source;
+  final String? coverUrl;
 
   @override
   ConsumerState<VideoPlayerPage> createState() => _VideoPlayerPageState();
@@ -38,14 +42,11 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     _player = Player();
     _controller = VideoController(_player);
     _loadEpisode(_currentEpisodeId!);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
   void dispose() {
     _player.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
@@ -54,8 +55,9 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     if (episode.id.isEmpty) {
       return;
     }
-    await ref.read(videoDetailProvider(widget.videoId).notifier).selectEpisode(episode);
-    final state = ref.read(videoDetailProvider(widget.videoId));
+    final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    await ref.read(videoDetailProvider(args).notifier).selectEpisode(episode);
+    final state = ref.read(videoDetailProvider(args));
     if (state.playSource != null && state.playSource!.url.isNotEmpty) {
       await _player.open(Media(state.playSource!.url));
       await _player.play();
@@ -115,7 +117,8 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(videoDetailProvider(widget.videoId));
+    final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    final state = ref.watch(videoDetailProvider(args));
     final currentEpisode = widget.episodes.firstWhere(
       (e) => e.id == _currentEpisodeId,
       orElse: () => const VideoEpisode(id: '', title: '', index: 0),
@@ -129,12 +132,42 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
             Center(
               child: AspectRatio(
                 aspectRatio: 16 / 9,
-                child: state.loadingPlaySource
-                    ? const Center(child: CircularProgressIndicator())
-                    : Video(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if ((widget.coverUrl ?? '').isNotEmpty)
+                      Image.network(
+                        widget.coverUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: Colors.black),
+                      )
+                    else
+                      Container(color: Colors.black),
+                    if (state.loadingPlaySource)
+                      const Center(child: CircularProgressIndicator())
+                    else if (state.playSource == null || state.playSource!.url.isEmpty)
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.white70),
+                            const SizedBox(height: 8),
+                            const Text('无法获取播放地址', style: TextStyle(color: Colors.white70)),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: () => _loadEpisode(_currentEpisodeId ?? widget.episodeId),
+                              child: const Text('重试', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Video(
                         controller: _controller,
                         controls: NoVideoControls,
                       ),
+                  ],
+                ),
               ),
             ),
             if (_showControls)
@@ -146,7 +179,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
                     });
                   },
                   child: Container(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withOpacity(0.35),
                     child: Column(
                       children: [
                         AppBar(
