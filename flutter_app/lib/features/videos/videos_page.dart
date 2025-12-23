@@ -1,29 +1,371 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
-class VideosPage extends StatelessWidget {
+import '../../components/video_card.dart';
+import 'video_models.dart';
+import 'videos_provider.dart';
+
+class VideosPage extends ConsumerStatefulWidget {
   const VideosPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const _PlaceholderPage(title: '视频');
-  }
+  ConsumerState<VideosPage> createState() => _VideosPageState();
 }
 
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title});
+class _VideosPageState extends ConsumerState<VideosPage> {
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _categoriesExpanded = false;
 
-  final String title;
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final current = _scrollController.position.pixels;
+    if (current + 200 >= maxScroll) {
+      ref.read(videosProvider.notifier).loadMore();
+    }
+  }
+
+  void _onSearchSubmitted(String keyword) {
+    ref.read(videosProvider.notifier).search(keyword);
+  }
+
+  void _clearSearch() {
+    ref.read(videosProvider.notifier).clearSearch();
+  }
+
+  void _openSearchSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, top: 24, bottom: viewInsets + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('搜索视频', style: Theme.of(ctx).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _SearchBar(
+                controller: _searchController,
+                onSubmitted: (value) {
+                  _onSearchSubmitted(value);
+                  Navigator.of(ctx).pop();
+                },
+                onClear: () {
+                  _clearSearch();
+                  Navigator.of(ctx).pop();
+                },
+                searching: ref.watch(videosProvider).searching,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _toggleCategories() {
+    setState(() {
+      _categoriesExpanded = !_categoriesExpanded;
+    });
+  }
+
+  void _openDownloads() {
+    context.push('/downloads');
+  }
+
+  void _openSourceSelector(Map<String, VideoSourceInfo> sources, String? selectedSource) {
+    if (sources.isEmpty) {
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: sources.entries.map((entry) {
+              final selected = entry.key == selectedSource;
+              return ListTile(
+                title: Text(entry.value.name),
+                trailing: selected ? const Icon(Icons.check_rounded) : null,
+                onTap: () {
+                  ref.read(videosProvider.notifier).changeSource(entry.key);
+                  Navigator.of(ctx).pop();
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(videosProvider);
+    final notifier = ref.read(videosProvider.notifier);
+    if (_searchController.text != state.searchKeyword) {
+      _searchController.text = state.searchKeyword;
+      _searchController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _searchController.text.length),
+      );
+    }
+    final items = state.inSearchMode ? state.searchResults : state.videos;
+    final padding = MediaQuery.of(context).padding;
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          '$title 页面开发中',
-          style: Theme.of(context).textTheme.titleMedium,
+      body: RefreshIndicator(
+        onRefresh: notifier.refresh,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              floating: true,
+              snap: true,
+              title: const Text('视频'),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(0),
+                child: Container(),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  onPressed: _openSearchSheet,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  onPressed: () => _openSourceSelector(state.sources, state.selectedSource),
+                ),
+                IconButton(
+                  icon: Icon(state.viewMode == VideosViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded),
+                  onPressed: notifier.toggleViewMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download_rounded),
+                  onPressed: _openDownloads,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: state.loading ? null : notifier.refresh,
+                ),
+              ],
+            ),
+            if (state.inSearchMode)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '搜索: ${state.searchKeyword}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _clearSearch,
+                        child: const Text('清除'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SliverToBoxAdapter(
+                child: _CategoryBar(
+                  categories: state.categories,
+                  selectedCategory: state.selectedCategory,
+                  expanded: _categoriesExpanded,
+                  onToggle: _toggleCategories,
+                  onSelect: (category) {
+                    ref.read(videosProvider.notifier).selectCategory(category);
+                  },
+                ),
+              ),
+            if (state.loading && items.isEmpty)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (items.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Text(
+                    state.inSearchMode ? '未找到相关视频' : '暂无视频',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, padding.bottom + 16),
+                sliver: state.viewMode == VideosViewMode.grid
+                    ? SliverMasonryGrid.count(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childCount: items.length,
+                        itemBuilder: (ctx, index) {
+                          final video = items[index];
+                          return VideoCard(
+                            title: video.title,
+                            coverUrl: video.cover,
+                            subtitle: video.status ?? '',
+                            source: video.source,
+                            rating: video.rating,
+                            onTap: () {
+                              context.push('/videos/${video.id}', extra: {'source': video.source});
+                            },
+                          );
+                        },
+                      )
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, index) {
+                            final video = items[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: VideoCard(
+                                title: video.title,
+                                coverUrl: video.cover,
+                                subtitle: video.status ?? '',
+                                source: video.source,
+                                rating: video.rating,
+                                compact: true,
+                                onTap: () {
+                                  context.push('/videos/${video.id}', extra: {'source': video.source});
+                                },
+                              ),
+                            );
+                          },
+                          childCount: items.length,
+                        ),
+                      ),
+              ),
+            if (state.loadingMore)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _CategoryBar extends StatelessWidget {
+  const _CategoryBar({
+    required this.categories,
+    required this.selectedCategory,
+    required this.expanded,
+    required this.onToggle,
+    required this.onSelect,
+  });
+
+  final List<VideoCategory> categories;
+  final VideoCategory? selectedCategory;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final ValueChanged<VideoCategory> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (categories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final displayCategories = expanded ? categories : categories.take(8).toList();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          ...displayCategories.map((category) {
+            final selected = category.id == selectedCategory?.id;
+            return FilterChip(
+              label: Text(category.name),
+              selected: selected,
+              onSelected: (_) => onSelect(category),
+            );
+          }),
+          if (categories.length > 8)
+            ActionChip(
+              label: Text(expanded ? '收起' : '更多'),
+              onPressed: onToggle,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({
+    required this.controller,
+    required this.onSubmitted,
+    required this.onClear,
+    required this.searching,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onClear;
+  final bool searching;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      autofocus: true,
+      decoration: InputDecoration(
+        hintText: '搜索视频',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: searching
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : controller.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: () {
+                      controller.clear();
+                      onClear();
+                    },
+                  )
+                : null,
+        border: const OutlineInputBorder(),
+      ),
+      onSubmitted: onSubmitted,
     );
   }
 }

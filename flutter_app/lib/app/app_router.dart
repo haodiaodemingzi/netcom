@@ -8,6 +8,7 @@ import '../features/profile/history_page.dart';
 import '../features/profile/profile_page.dart';
 import '../features/profile/favorites_page.dart';
 import '../features/videos/videos_page.dart';
+import '../features/videos/video_detail_page.dart';
 import '../features/comics/comic_detail_page.dart';
 import '../features/comics/comic_reader_page.dart';
 import '../features/comics/comics_page.dart';
@@ -101,6 +102,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             comicId: id,
             args: args,
           );
+        },
+      ),
+      GoRoute(
+        path: '/videos/:id',
+        name: 'videoDetail',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          final source = extra?['source'] as String?;
+          return VideoDetailPage(videoId: id, source: source);
         },
       ),
     ],

@@ -102,6 +102,72 @@ class VideoRemoteService {
     return VideoFeed(items: items, hasMore: hasMore);
   }
 
+  Future<VideoDetail?> fetchDetail(String videoId, String? sourceId) async {
+    if (isBlank(videoId)) {
+      return null;
+    }
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) {
+      params['source'] = sourceId!.trim();
+    }
+    try {
+      final response = await _api.get<dynamic>('/videos/series/${videoId.trim()}', query: params);
+      final data = _unwrap(response.data);
+      if (data is Map<String, dynamic>) {
+        return VideoDetail.fromJson(data);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<VideoEpisode>> fetchEpisodes(String videoId, String? sourceId) async {
+    if (isBlank(videoId)) {
+      return <VideoEpisode>[];
+    }
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) {
+      params['source'] = sourceId!.trim();
+    }
+    try {
+      final response = await _api.get<dynamic>('/videos/episodes/${videoId.trim()}', query: params);
+      final data = _unwrap(response.data);
+      if (data is List) {
+        return data.indexed.map((e) => VideoEpisode.fromJson(e.$2 as Map<String, dynamic>?, index: e.$1)).where((ep) => isNotBlank(ep.id)).toList();
+      }
+      if (data is Map<String, dynamic>) {
+        final episodes = data['episodes'];
+        if (episodes is List) {
+          return episodes.indexed.map((e) => VideoEpisode.fromJson(e.$2 as Map<String, dynamic>?, index: e.$1)).where((ep) => isNotBlank(ep.id)).toList();
+        }
+      }
+      return <VideoEpisode>[];
+    } catch (e) {
+      return <VideoEpisode>[];
+    }
+  }
+
+  Future<VideoPlaySource?> fetchEpisodePlaySource(String episodeId, String? sourceId) async {
+    if (isBlank(episodeId)) {
+      return null;
+    }
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) {
+      params['source'] = sourceId!.trim();
+    }
+    try {
+      final response = await _api.get<dynamic>('/videos/episodes/${episodeId.trim()}/play', query: params);
+      final data = _unwrap(response.data);
+      if (data is Map<String, dynamic>) {
+        return VideoPlaySource.fromJson(data);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   dynamic _unwrap(dynamic raw) {
     if (raw is Map<String, dynamic>) {
       if (raw.containsKey('data')) {
