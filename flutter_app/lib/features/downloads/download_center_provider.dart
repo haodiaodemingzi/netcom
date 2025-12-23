@@ -114,7 +114,22 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
   final AppStorage? _storage;
   final SettingsRepository? _settingsRepo;
   final Map<String, CancelToken> _taskTokens = <String, CancelToken>{};
-  late final int _maxConcurrent = _settingsRepo?.load().maxConcurrentDownloads ?? 5;
+  late int _maxConcurrent = _resolveInitialConcurrent();
+
+  int _resolveInitialConcurrent() {
+    final repo = _settingsRepo;
+    if (repo == null) {
+      return 5;
+    }
+    final value = repo.load().maxConcurrentDownloads;
+    return value < 1 ? 1 : value;
+  }
+
+  void updateMaxConcurrent(int value) {
+    final safeValue = value < 1 ? 1 : value;
+    _maxConcurrent = safeValue;
+    _processQueue();
+  }
 
   void enqueueComicChapters({
     required ComicDetail detail,
@@ -614,6 +629,47 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     }
     state = state.copyWith(queue: updated, selectedQueue: <String>{});
     _processQueue();
+    _persistQueues();
+  }
+
+  /// 按资源ID暂停视频下载
+  void pauseVideosByResourceIds(Set<String> resourceIds) {
+    if (resourceIds.isEmpty) {
+      return;
+    }
+    final updated = <DownloadItem>[];
+    for (final item in state.queue) {
+      final shouldHandle = resourceIds.contains(item.resourceId) && item.type == DownloadType.video;
+      if (!shouldHandle) {
+        updated.add(item);
+        continue;
+      }
+      if (item.status == DownloadStatus.completed || item.status == DownloadStatus.paused) {
+        updated.add(item);
+        continue;
+      }
+      _cancelTask(item.id, reason: 'paused_by_resource');
+      updated.add(item.copyWith(status: DownloadStatus.paused));
+    }
+    state = state.copyWith(queue: updated);
+    _persistQueues();
+  }
+
+  /// 按资源ID取消视频下载
+  void cancelVideosByResourceIds(Set<String> resourceIds) {
+    if (resourceIds.isEmpty) {
+      return;
+    }
+    final remaining = <DownloadItem>[];
+    for (final item in state.queue) {
+      final shouldHandle = resourceIds.contains(item.resourceId) && item.type == DownloadType.video;
+      if (!shouldHandle) {
+        remaining.add(item);
+        continue;
+      }
+      _cancelTask(item.id, reason: 'cancelled_by_resource');
+    }
+    state = state.copyWith(queue: remaining);
     _persistQueues();
   }
 

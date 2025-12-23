@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
 import '../../core/storage/storage_repository.dart';
+import '../downloads/download_center_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -15,12 +16,15 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  SettingsModel _settings = SettingsModel();
+  bool _loadingSettings = false;
   String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
+    _loadSettings();
   }
 
   Future<void> _loadAppVersion() async {
@@ -30,11 +34,56 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
+  Future<void> _loadSettings() async {
+    if (_loadingSettings) {
+      return;
+    }
+    _loadingSettings = true;
+    final repo = ref.read(settingsRepositoryProvider);
+    if (repo != null) {
+      final next = repo.load();
+      if (mounted) {
+        setState(() {
+          _settings = next;
+        });
+      }
+    }
+    _loadingSettings = false;
+  }
+
+  Future<void> _applySettingsPatch(
+    BuildContext context, {
+    required Map<String, dynamic> patch,
+    required SettingsModel Function(SettingsModel current) resolveNext,
+  }) async {
+    final repo = ref.read(settingsRepositoryProvider);
+    if (repo == null) {
+      return;
+    }
+    final nextSettings = resolveNext(_settings);
+    setState(() {
+      _settings = nextSettings;
+    });
+    final success = await repo.update(patch);
+    if (!mounted) {
+      return;
+    }
+    if (patch.containsKey('maxConcurrentDownloads')) {
+      final concurrent = patch['maxConcurrentDownloads'] as int? ?? _settings.maxConcurrentDownloads;
+      ref.read(downloadCenterProvider.notifier).updateMaxConcurrent(concurrent);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(success ? '设置已保存' : '保存失败')),
+    );
+    if (!success) {
+      setState(() {
+        _settings = repo.load();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final settingsRepo = ref.watch(settingsRepositoryProvider);
-    final settings = settingsRepo?.load();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('设置'),
@@ -47,7 +96,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 16),
           _buildNetworkSection(context),
           const SizedBox(height: 16),
-          _buildSettingsSection(context, settings, settingsRepo),
+          _buildSettingsSection(context),
           const SizedBox(height: 16),
           _buildOtherSection(context),
           const SizedBox(height: 32),
@@ -133,13 +182,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Widget _buildSettingsSection(
     BuildContext context,
-    SettingsModel? settings,
-    SettingsRepository? repo,
   ) {
-    if (settings == null || repo == null) {
-      return const SizedBox.shrink();
-    }
-
     return _buildSection(
       context,
       title: '设置',
@@ -147,59 +190,83 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _buildRadioSetting(
           context,
           title: '显示模式',
-          value: settings.viewMode,
+          value: _settings.viewMode,
           options: const [
             RadioOption(label: '卡片', value: 'card'),
             RadioOption(label: '列表', value: 'list'),
           ],
           onChanged: (value) {
-            repo.update({'viewMode': value});
+            _applySettingsPatch(
+              context,
+              patch: {'viewMode': value},
+              resolveNext: (current) => current.copyWith(viewMode: value),
+            );
           },
         ),
         _buildRadioSetting(
           context,
           title: '阅读模式',
-          value: settings.scrollMode,
+          value: _settings.scrollMode,
           options: const [
             RadioOption(label: '左右滑动', value: 'horizontal'),
             RadioOption(label: '上下滑动', value: 'vertical'),
           ],
           onChanged: (value) {
-            repo.update({'scrollMode': value});
+            _applySettingsPatch(
+              context,
+              patch: {'scrollMode': value},
+              resolveNext: (current) => current.copyWith(scrollMode: value),
+            );
           },
         ),
         _buildSwitchSetting(
           context,
           title: '夜间模式',
-          value: settings.darkMode,
+          value: _settings.darkMode,
           onChanged: (value) {
-            repo.update({'darkMode': value});
+            _applySettingsPatch(
+              context,
+              patch: {'darkMode': value},
+              resolveNext: (current) => current.copyWith(darkMode: value),
+            );
           },
         ),
         _buildSwitchSetting(
           context,
           title: 'WiFi下自动加载高清图',
-          value: settings.autoLoadHD,
+          value: _settings.autoLoadHD,
           onChanged: (value) {
-            repo.update({'autoLoadHD': value});
+            _applySettingsPatch(
+              context,
+              patch: {'autoLoadHD': value},
+              resolveNext: (current) => current.copyWith(autoLoadHD: value),
+            );
           },
         ),
         _buildSwitchSetting(
           context,
           title: '阅读时保持屏幕常亮',
-          value: settings.keepScreenOn,
+          value: _settings.keepScreenOn,
           onChanged: (value) {
-            repo.update({'keepScreenOn': value});
+            _applySettingsPatch(
+              context,
+              patch: {'keepScreenOn': value},
+              resolveNext: (current) => current.copyWith(keepScreenOn: value),
+            );
           },
         ),
         _buildNumberSetting(
           context,
           title: '下载并发数',
-          value: settings.maxConcurrentDownloads,
+          value: _settings.maxConcurrentDownloads,
           min: 1,
           max: 20,
           onChanged: (value) {
-            repo.update({'maxConcurrentDownloads': value});
+            _applySettingsPatch(
+              context,
+              patch: {'maxConcurrentDownloads': value},
+              resolveNext: (current) => current.copyWith(maxConcurrentDownloads: value),
+            );
           },
         ),
       ],

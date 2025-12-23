@@ -26,6 +26,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   bool _descExpanded = false;
   int _groupIndex = 0;
   final Set<String> _selectedEpisodeIds = <String>{};
+  bool _isBulkMode = false;
 
   @override
   void initState() {
@@ -291,24 +292,32 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
-                      if (_selectedEpisodeIds.isNotEmpty)
-                        TextButton.icon(
+                      if (_isBulkMode && _selectedEpisodeIds.isNotEmpty) ...[
+                        TextButton(
                           onPressed: () => _downloadSelected(detail, currentGroup, downloadNotifier),
-                          icon: const Icon(Icons.download),
-                          label: Text('下载 (${_selectedEpisodeIds.length})'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: colorScheme.primary,
-                          ),
-                        )
-                      else
-                        TextButton.icon(
-                          onPressed: () => _downloadAll(detail, state.episodes, downloadNotifier),
-                          icon: const Icon(Icons.download),
-                          label: const Text('批量下载'),
+                          child: Text('下载 ${_selectedEpisodeIds.length}'),
                         ),
-                      IconButton(
-                        icon: Icon(_episodesReversed ? Icons.arrow_upward : Icons.arrow_downward),
+                        TextButton(
+                          onPressed: () => _pauseSelected(currentGroup, downloadNotifier),
+                          child: const Text('暂停已选'),
+                        ),
+                        TextButton(
+                          onPressed: () => _cancelSelected(currentGroup, downloadNotifier),
+                          child: const Text('取消已选'),
+                        ),
+                      ] else if (_isBulkMode) ...[
+                        TextButton(
+                          onPressed: _exitBulkMode,
+                          child: const Text('退出批量'),
+                        ),
+                      ] else
+                        TextButton(
+                          onPressed: _enterBulkMode,
+                          child: const Text('批量选择'),
+                        ),
+                      TextButton(
                         onPressed: _toggleEpisodeOrder,
+                        child: Text(_episodesReversed ? '倒序' : '正序'),
                       ),
                     ],
                   ),
@@ -421,22 +430,27 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           child: Row(
                             children: [
-                              if (selected)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: Icon(
-                                    Icons.check_circle,
-                                    color: colorScheme.primary,
-                                    size: 24,
-                                  ),
+                              if (_isBulkMode)
+                                Checkbox(
+                                  value: selected,
+                                  onChanged: (_) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedEpisodeIds.remove(episode.id);
+                                      } else {
+                                        _selectedEpisodeIds.add(episode.id);
+                                      }
+                                    });
+                                  },
                                 )
                               else
-                                IconButton(
-                                  icon: const Icon(Icons.play_circle_fill),
-                                  color: colorScheme.primary,
-                                  onPressed: () => _playEpisode(episode),
-                                ),
-                              const SizedBox(width: 8),
+                                const SizedBox(width: 0),
+                              IconButton(
+                                icon: const Icon(Icons.play_circle_fill),
+                                color: colorScheme.primary,
+                                onPressed: () => _playEpisode(episode),
+                              ),
+                              const SizedBox(width: 4),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,6 +541,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     notifier.enqueueVideoEpisodes(detail: detail, episodes: episodes);
     setState(() {
       _selectedEpisodeIds.clear();
+      _isBulkMode = false;
     });
   }
 
@@ -550,6 +565,51 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       return;
     }
     notifier.enqueueVideoEpisodes(detail: detail, episodes: [episode]);
+  }
+
+  void _pauseSelected(
+    List<VideoEpisode> currentGroup,
+    DownloadCenterNotifier notifier,
+  ) {
+    if (_selectedEpisodeIds.isEmpty) {
+      return;
+    }
+    final ids = currentGroup.where((e) => _selectedEpisodeIds.contains(e.id)).map((e) => e.id).toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    notifier.pauseVideosByResourceIds(ids);
+  }
+
+  void _cancelSelected(
+    List<VideoEpisode> currentGroup,
+    DownloadCenterNotifier notifier,
+  ) {
+    if (_selectedEpisodeIds.isEmpty) {
+      return;
+    }
+    final ids = currentGroup.where((e) => _selectedEpisodeIds.contains(e.id)).map((e) => e.id).toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    notifier.cancelVideosByResourceIds(ids);
+    setState(() {
+      _selectedEpisodeIds.removeWhere(ids.contains);
+    });
+  }
+
+  void _enterBulkMode() {
+    setState(() {
+      _isBulkMode = true;
+      _selectedEpisodeIds.clear();
+    });
+  }
+
+  void _exitBulkMode() {
+    setState(() {
+      _isBulkMode = false;
+      _selectedEpisodeIds.clear();
+    });
   }
 
   String _resolveDownloadStatus(VideoEpisode episode, DownloadCenterState downloadState) {
