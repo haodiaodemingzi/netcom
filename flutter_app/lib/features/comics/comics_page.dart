@@ -208,6 +208,10 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
                 ],
               ),
             ),
+            if (state.loading && items.isNotEmpty)
+              const SliverToBoxAdapter(
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
             if (state.loading && items.isEmpty)
               const SliverFillRemaining(
                 child: Center(child: CircularProgressIndicator()),
