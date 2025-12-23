@@ -4,8 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../comics/comics_models.dart';
 import '../comics/comics_provider.dart';
 import '../comics/data/comics_remote_service.dart';
+import '../videos/video_models.dart';
+import '../videos/data/video_remote_service.dart';
+import '../videos/video_detail_provider.dart';
+import '../videos/videos_provider.dart' show videosRemoteServiceProvider;
+import 'video_downloader.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
+import '../../core/storage/storage_repository.dart';
 import 'comic_downloader.dart';
 import 'download_models.dart';
 
@@ -47,13 +53,30 @@ class DownloadCenterState {
 
 final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, DownloadCenterState>((ref) {
   final comicsRemote = ref.watch(comicsRemoteServiceProvider);
-  final downloader = ref.watch(comicDownloaderProvider);
+  final videosRemote = ref.watch(videosRemoteServiceProvider);
+  final comicDownloader = ref.watch(comicDownloaderProvider);
+  final videoDownloader = ref.watch(videoDownloaderProvider);
   final storage = ref.watch(appStorageProvider).maybeWhen(data: (value) => value, orElse: () => null);
-  return DownloadCenterNotifier(comicsRemote, downloader, storage);
+  final settingsRepo = ref.watch(settingsRepositoryProvider);
+  return DownloadCenterNotifier(
+    comicsRemote,
+    videosRemote,
+    comicDownloader,
+    videoDownloader,
+    storage,
+    settingsRepo,
+  );
 });
 
 class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
-  DownloadCenterNotifier(this._comicsRemote, this._downloader, this._storage)
+  DownloadCenterNotifier(
+    this._comicsRemote,
+    this._videosRemote,
+    this._comicDownloader,
+    this._videoDownloader,
+    this._storage,
+    this._settingsRepo,
+  )
       : super(
           DownloadCenterState(
             queue: const <DownloadItem>[],
@@ -85,10 +108,13 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
   }
 
   final ComicsRemoteService _comicsRemote;
-  final ComicDownloader _downloader;
+  final VideoRemoteService _videosRemote;
+  final ComicDownloader _comicDownloader;
+  final VideoDownloader _videoDownloader;
   final AppStorage? _storage;
+  final SettingsRepository? _settingsRepo;
   final Map<String, CancelToken> _taskTokens = <String, CancelToken>{};
-  final int _maxConcurrent = 3;
+  late final int _maxConcurrent = _settingsRepo?.load().maxConcurrentDownloads ?? 5;
 
   void enqueueComicChapters({
     required ComicDetail detail,
@@ -132,7 +158,53 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       return;
     }
     state = state.copyWith(queue: [...state.queue, ...newItems]);
-    _processQueue(detail, chapters);
+    _processQueue(detail: detail, chapters: chapters);
+    _persistQueues();
+  }
+
+  void enqueueVideoEpisodes({
+    required VideoDetail detail,
+    required List<VideoEpisode> episodes,
+  }) {
+    if (episodes.isEmpty || detail.id.isEmpty) {
+      return;
+    }
+    final exists = <String>{
+      ...state.queue.map((e) => e.resourceId).whereType<String>(),
+      ...state.completed.map((e) => e.resourceId).whereType<String>(),
+    };
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final newItems = <DownloadItem>[];
+    var offset = 0;
+    for (final episode in episodes) {
+      if (episode.id.isEmpty || exists.contains(episode.id)) {
+        continue;
+      }
+      newItems.add(
+        DownloadItem(
+          id: 'dl-${detail.id}-${episode.id}-${now + offset}',
+          type: DownloadType.video,
+          kind: 'task',
+          title: episode.title,
+          parentTitle: detail.title,
+          status: DownloadStatus.pending,
+          progress: 0,
+          source: detail.source,
+          parentId: detail.id,
+          resourceId: episode.id,
+          metadata: <String, dynamic>{
+            'episodeIndex': episode.index,
+            'episodeTitle': episode.title,
+          },
+        ),
+      );
+      offset += 1;
+    }
+    if (newItems.isEmpty) {
+      return;
+    }
+    state = state.copyWith(queue: [...state.queue, ...newItems]);
+    _processQueue(detail: null, chapters: const <ComicChapter>[], videoDetail: detail, videoEpisodes: episodes);
     _persistQueues();
   }
 
@@ -292,7 +364,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
         return;
       }
       
-      await _downloader.downloadChapter(
+      await _comicDownloader.downloadChapter(
         detail: detail,
         chapter: chapter,
         downloadInfo: info,
@@ -319,6 +391,63 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     _processQueue();
   }
 
+  Future<void> _runVideoDownload(DownloadItem item, VideoDetail detail, VideoEpisode episode) async {
+    try {
+      final token = CancelToken();
+      _taskTokens[item.id] = token;
+      _updateQueueItem(item.id, status: DownloadStatus.downloading, progress: 0, error: null);
+
+      final playSource = await _videosRemote.fetchEpisodePlaySource(
+        episode.id,
+        detail.source.isNotEmpty ? detail.source : item.source,
+      );
+      if (playSource == null || playSource.url.isEmpty) {
+        _updateQueueItem(item.id, status: DownloadStatus.failed, error: '无法获取播放地址');
+        _taskTokens.remove(item.id);
+        _processQueue();
+        return;
+      }
+
+      var lastProgress = 0.0;
+      final path = await _videoDownloader.downloadEpisode(
+        detail: detail,
+        episode: episode,
+        source: playSource,
+        cancelToken: token,
+        onProgress: (received, total) {
+          if (total <= 0) {
+            return;
+          }
+          final progress = (received / total).clamp(0.0, 1.0);
+          if ((progress - lastProgress).abs() < 0.01) {
+            return;
+          }
+          lastProgress = progress;
+          _updateQueueItem(
+            item.id,
+            status: DownloadStatus.downloading,
+            progress: progress,
+          );
+        },
+      );
+
+      _markAsCompleted(
+        item.id,
+        extraMetadata: {
+          ...(item.metadata ?? <String, dynamic>{}),
+          'localPath': path,
+          'episodeIndex': episode.index,
+          'episodeTitle': episode.title,
+        },
+      );
+      _taskTokens.remove(item.id);
+    } catch (e) {
+      _taskTokens.remove(item.id);
+      _updateQueueItem(item.id, status: DownloadStatus.failed, error: e.toString());
+    }
+    _processQueue();
+  }
+
   void _updateQueueItem(
     String id, {
     DownloadStatus? status,
@@ -338,7 +467,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     state = state.copyWith(queue: updated);
   }
 
-  void _markAsCompleted(String id) {
+  void _markAsCompleted(String id, {Map<String, dynamic>? extraMetadata}) {
     DownloadItem? target;
     final remaining = <DownloadItem>[];
     for (final item in state.queue) {
@@ -356,6 +485,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       progress: 1,
       downloadedAt: DateTime.now(),
       error: null,
+      metadata: extraMetadata ?? target.metadata,
     );
     state = state.copyWith(
       queue: remaining,
@@ -364,7 +494,12 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     _persistQueues();
   }
 
-  void _processQueue([ComicDetail? detail, List<ComicChapter> chapters = const <ComicChapter>[]]) {
+  void _processQueue({
+    ComicDetail? detail,
+    List<ComicChapter> chapters = const <ComicChapter>[],
+    VideoDetail? videoDetail,
+    List<VideoEpisode> videoEpisodes = const <VideoEpisode>[],
+  }) {
     final runningCount = state.queue.where((item) => item.status == DownloadStatus.downloading).length;
     if (runningCount >= _maxConcurrent) {
       return;
@@ -378,18 +513,65 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       if (available <= 0) {
         return;
       }
-      if (item.type != DownloadType.comic) {
+      if (item.type == DownloadType.comic) {
+        final resolvedDetail = _resolveDetail(item, detail);
+        final resolvedChapter = _resolveChapter(item, chapters);
+        if (resolvedDetail == null || resolvedChapter == null) {
+          _updateQueueItem(item.id, status: DownloadStatus.failed, error: '缺少下载参数');
+          continue;
+        }
+        available -= 1;
+        _runComicDownload(item, resolvedDetail, resolvedChapter);
         continue;
       }
-      final resolvedDetail = _resolveDetail(item, detail);
-      final resolvedChapter = _resolveChapter(item, chapters);
-      if (resolvedDetail == null || resolvedChapter == null) {
-        _updateQueueItem(item.id, status: DownloadStatus.failed, error: '缺少下载参数');
+      if (item.type == DownloadType.video) {
+        final resolvedDetail = _resolveVideoDetail(item, videoDetail);
+        final resolvedEpisode = _resolveVideoEpisode(item, videoEpisodes);
+        if (resolvedDetail == null || resolvedEpisode == null) {
+          _updateQueueItem(item.id, status: DownloadStatus.failed, error: '缺少下载参数');
+          continue;
+        }
+        available -= 1;
+        _runVideoDownload(item, resolvedDetail, resolvedEpisode);
         continue;
       }
-      available -= 1;
-      _runComicDownload(item, resolvedDetail, resolvedChapter);
     }
+  }
+
+  VideoDetail? _resolveVideoDetail(DownloadItem item, VideoDetail? prefer) {
+    if (prefer != null && prefer.id.isNotEmpty && prefer.title.isNotEmpty) {
+      return prefer;
+    }
+    if (item.parentId == null || item.parentId!.isEmpty || item.parentTitle.isEmpty || (item.source ?? '').isEmpty) {
+      return null;
+    }
+    return VideoDetail(
+      id: item.parentId!,
+      title: item.parentTitle,
+      cover: '',
+      source: item.source ?? '',
+    );
+  }
+
+  VideoEpisode? _resolveVideoEpisode(DownloadItem item, List<VideoEpisode> episodes) {
+    if (item.resourceId == null || item.resourceId!.isEmpty) {
+      return null;
+    }
+    final matched = episodes.firstWhere(
+      (e) => e.id == item.resourceId,
+      orElse: () => const VideoEpisode(id: '', title: '', index: 0),
+    );
+    if (matched.id.isNotEmpty) {
+      return matched;
+    }
+    final meta = item.metadata ?? <String, dynamic>{};
+    final index = (meta['episodeIndex'] as num?)?.toInt() ?? 0;
+    final title = (meta['episodeTitle'] as String?) ?? item.title;
+    return VideoEpisode(
+      id: item.resourceId ?? '',
+      title: title,
+      index: index,
+    );
   }
 
   void _cancelTask(String id, {required String reason}) {

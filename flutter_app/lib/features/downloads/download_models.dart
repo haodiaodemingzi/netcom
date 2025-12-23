@@ -48,6 +48,7 @@ class DownloadItem {
     double? progress,
     String? error,
     DateTime? downloadedAt,
+    Map<String, dynamic>? metadata,
   }) {
     return DownloadItem(
       id: id,
@@ -62,7 +63,7 @@ class DownloadItem {
       downloadedAt: downloadedAt ?? this.downloadedAt,
       parentId: parentId,
       resourceId: resourceId,
-      metadata: metadata,
+      metadata: metadata ?? this.metadata,
     );
   }
 

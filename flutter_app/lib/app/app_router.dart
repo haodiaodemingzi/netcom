@@ -127,6 +127,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final source = extra?['source'] as String?;
           final episodes = (extra?['episodes'] as List<VideoEpisode>?) ?? const <VideoEpisode>[];
           final coverUrl = extra?['coverUrl'] as String?;
+          final localPaths = (extra?['localPaths'] as Map<String, String>?) ?? const <String, String>{};
           return MaterialPage(
             key: state.pageKey,
             child: VideoPlayerPage(
@@ -135,6 +136,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               episodes: episodes,
               source: source,
               coverUrl: coverUrl,
+              localPaths: localPaths,
             ),
           );
         },

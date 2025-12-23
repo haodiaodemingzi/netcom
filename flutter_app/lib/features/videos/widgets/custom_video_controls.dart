@@ -170,30 +170,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildPillButton({
+  Widget _buildIconButton({
     required IconData icon,
-    required String label,
     required VoidCallback onPressed,
   }) {
-    return SizedBox(
-      height: 36,
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-            side: const BorderSide(color: Colors.white54),
-          ),
-          minimumSize: const Size(0, 36),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        onPressed: onPressed,
-        icon: Icon(icon, color: Colors.white, size: 16),
-        label: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-        ),
+    return IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, color: Colors.white),
+      style: IconButton.styleFrom(
+        padding: const EdgeInsets.all(10),
+        shape: const CircleBorder(side: BorderSide(color: Colors.white54)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
+      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -314,30 +303,26 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: Row(
-                                  spacing: 8,
+                                  spacing: 4,
                                   children: [
-                                    _buildPillButton(
-                                      icon: Icons.aspect_ratio,
-                                      label: _fitMode == VideoFitMode.contain
-                                          ? '原比'
+                                    _buildIconButton(
+                                      icon: _fitMode == VideoFitMode.contain
+                                          ? Icons.fit_screen
                                           : _fitMode == VideoFitMode.cover
-                                              ? '填充'
-                                              : '拉伸',
+                                              ? Icons.photo_size_select_large
+                                              : Icons.crop_16_9,
                                       onPressed: _showFitModeDialog,
                                     ),
-                                    _buildPillButton(
+                                    _buildIconButton(
                                       icon: _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
-                                      label: _isPortrait ? '横屏' : '竖屏',
                                       onPressed: _toggleOrientation,
                                     ),
-                                    _buildPillButton(
+                                    _buildIconButton(
                                       icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                                      label: _isFullscreen ? '退出' : '全屏',
                                       onPressed: _toggleFullscreen,
                                     ),
-                                    _buildPillButton(
+                                    _buildIconButton(
                                       icon: Icons.speed,
-                                      label: '${_currentSpeed}x',
                                       onPressed: _showSpeedDialog,
                                     ),
                                   ],

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,7 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
     required this.episodes,
     this.source,
     this.coverUrl,
+    this.localPaths,
   });
 
   final String videoId;
@@ -22,6 +25,7 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
   final List<VideoEpisode> episodes;
   final String? source;
   final String? coverUrl;
+  final Map<String, String>? localPaths;
 
   @override
   ConsumerState<VideoPlayerPage> createState() => _VideoPlayerPageState();
@@ -58,23 +62,33 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     if (episode.id.isEmpty) {
       return;
     }
+    final local = widget.localPaths?[episodeId];
+    if (local != null && local.isNotEmpty) {
+      await _initializePlayer(filePath: local);
+      return;
+    }
     final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
     await ref.read(videoDetailProvider(args).notifier).selectEpisode(episode);
     final state = ref.read(videoDetailProvider(args));
     if (state.playSource != null && state.playSource!.url.isNotEmpty) {
-      await _initializePlayer(state.playSource!.url, state.playSource!.headers);
+      await _initializePlayer(url: state.playSource!.url, headers: state.playSource!.headers);
     }
   }
 
-  Future<void> _initializePlayer(String url, Map<String, String> headers) async {
+  Future<void> _initializePlayer({String? url, Map<String, String>? headers, String? filePath}) async {
     if (_isInitialized) {
       await _videoPlayerController?.dispose();
     }
-
-    _videoPlayerController = VideoPlayerController.networkUrl(
-      Uri.parse(url),
-      httpHeaders: headers,
-    );
+    if (filePath != null && filePath.isNotEmpty) {
+      _videoPlayerController = VideoPlayerController.file(File(filePath));
+    } else if (url != null && url.isNotEmpty) {
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: headers ?? const <String, String>{},
+      );
+    } else {
+      return;
+    }
 
     await _videoPlayerController!.initialize();
     await _videoPlayerController!.play();
