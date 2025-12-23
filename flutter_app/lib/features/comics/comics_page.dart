@@ -289,22 +289,27 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
     }
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, paddingBottom),
-      sliver: SliverMasonryGrid.count(
-        crossAxisCount: 3,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 12,
-        childCount: items.length,
-        itemBuilder: (context, index) {
-          final comic = items[index];
-          return ComicCard(
-            title: comic.title,
-            coverUrl: comic.cover,
-            subtitle: comic.latestChapter,
-            source: comic.source,
-            extra: comic.author?.isNotEmpty == true ? comic.author : null,
-            onTap: () => _openComicDetail(comic.id),
-          );
-        },
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.58,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final comic = items[index];
+            return ComicCard(
+              title: comic.title,
+              coverUrl: comic.cover,
+              subtitle: comic.latestChapter,
+              source: comic.source,
+              extra: comic.author?.isNotEmpty == true ? comic.author : null,
+              onTap: () => _openComicDetail(comic.id),
+            );
+          },
+          childCount: items.length,
+        ),
       ),
     );
   }

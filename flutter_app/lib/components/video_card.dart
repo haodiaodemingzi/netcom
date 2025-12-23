@@ -58,31 +58,33 @@ class VideoCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 3 / 4,
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        color: colorScheme.surfaceVariant,
-                        child: image,
-                      ),
-                    ),
-                    if (badge != null)
-                      Positioned(
-                        top: 6,
-                        left: 6,
+              Expanded(
+                child: AspectRatio(
+                  aspectRatio: 3 / 4,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: badge,
+                          color: colorScheme.surfaceVariant,
+                          child: image,
                         ),
                       ),
-                  ],
+                      if (badge != null)
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: badge,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -92,7 +94,7 @@ class VideoCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 subtitle.isEmpty ? source : subtitle,
                 maxLines: 1,
@@ -100,7 +102,7 @@ class VideoCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.72)),
               ),
               if (extra != null && extra!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   extra!,
                   maxLines: 1,

@@ -43,13 +43,15 @@ class ComicCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 3 / 4,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    color: colorScheme.surfaceVariant,
-                    child: image,
+              Expanded(
+                child: AspectRatio(
+                  aspectRatio: 3 / 4,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      color: colorScheme.surfaceVariant,
+                      child: image,
+                    ),
                   ),
                 ),
               ),
@@ -60,7 +62,7 @@ class ComicCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 subtitle.isEmpty ? source : subtitle,
                 maxLines: 1,
@@ -68,7 +70,7 @@ class ComicCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.72)),
               ),
               if (extra != null && extra!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   extra!,
                   maxLines: 1,

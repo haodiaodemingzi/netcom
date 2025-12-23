@@ -223,25 +223,30 @@ class _VideosPageState extends ConsumerState<VideosPage> {
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, padding.bottom + 16),
                 sliver: state.viewMode == VideosViewMode.grid
-                    ? SliverMasonryGrid.count(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 12,
-                        childCount: items.length,
-                        itemBuilder: (ctx, index) {
-                          final video = items[index];
-                          return VideoCard(
-                            title: video.title,
-                            coverUrl: video.cover,
-                            subtitle: video.status ?? '',
-                            source: video.source,
-                            rating: video.rating,
-                            extra: video.episodes != null && video.episodes! > 0 ? '${video.episodes} 集' : null,
-                            onTap: () {
-                              context.push('/videos/${video.id}', extra: {'source': video.source});
-                            },
-                          );
-                        },
+                    ? SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.58,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, index) {
+                            final video = items[index];
+                            return VideoCard(
+                              title: video.title,
+                              coverUrl: video.cover,
+                              subtitle: video.status ?? '',
+                              source: video.source,
+                              rating: video.rating,
+                              extra: video.episodes != null && video.episodes! > 0 ? '${video.episodes} 集' : null,
+                              onTap: () {
+                                context.push('/videos/${video.id}', extra: {'source': video.source});
+                              },
+                            );
+                          },
+                          childCount: items.length,
+                        ),
                       )
                     : SliverList(
                         delegate: SliverChildBuilderDelegate(

@@ -178,19 +178,22 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: 3 / 4,
-                          child: Container(
-                            color: Colors.grey.shade200,
-                            child: detail.cover.isNotEmpty
-                                ? Image.network(
-                                    detail.cover,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
-                                  )
-                                : const Icon(Icons.broken_image_outlined, size: 48),
+                      SizedBox(
+                        width: 100,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: AspectRatio(
+                            aspectRatio: 3 / 4,
+                            child: Container(
+                              color: Colors.grey.shade200,
+                              child: detail.cover.isNotEmpty
+                                  ? Image.network(
+                                      detail.cover,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
+                                    )
+                                  : const Icon(Icons.broken_image_outlined, size: 48),
+                            ),
                           ),
                         ),
                       ),
