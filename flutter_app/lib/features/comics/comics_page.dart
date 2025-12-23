@@ -134,6 +134,7 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
     }
     final items = state.inSearchMode ? state.searchResults : state.comics;
     final padding = MediaQuery.of(context).padding;
+    final titleText = state.selectedCategory?.name.isNotEmpty == true ? state.selectedCategory!.name : '漫画';
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: notifier.refresh,
@@ -145,37 +146,37 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
               pinned: true,
               floating: true,
               snap: true,
-              title: const Text('漫画'),
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(0),
-                child: const SizedBox.shrink(),
+              title: Text(titleText, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(0),
+                child: SizedBox.shrink(),
               ),
               actions: [
-            IconButton(
-              icon: const Icon(Icons.search_rounded),
-              onPressed: _openSearchSheet,
-              tooltip: '搜索漫画',
-            ),
-            IconButton(
-              icon: const Icon(Icons.swap_horiz_rounded),
-              onPressed: () => _openSourceSelector(state.sources, state.selectedSource),
-              tooltip: '切换数据源',
-            ),
-            IconButton(
-              icon: Icon(state.viewMode == ComicsViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded),
-              onPressed: notifier.toggleViewMode,
-              tooltip: '切换视图',
-            ),
-            IconButton(
-              icon: const Icon(Icons.download_rounded),
-              onPressed: _openDownloads,
-              tooltip: '下载',
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: state.loading ? null : notifier.refresh,
-            ),
-          ],
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  onPressed: _openSearchSheet,
+                  tooltip: '搜索漫画',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  onPressed: () => _openSourceSelector(state.sources, state.selectedSource),
+                  tooltip: '切换数据源',
+                ),
+                IconButton(
+                  icon: Icon(state.viewMode == ComicsViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded),
+                  onPressed: notifier.toggleViewMode,
+                  tooltip: '切换视图',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download_rounded),
+                  onPressed: _openDownloads,
+                  tooltip: '下载',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: state.loading ? null : notifier.refresh,
+                ),
+              ],
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -276,6 +277,7 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
                   subtitle: comic.latestChapter,
                   source: comic.source,
                   compact: true,
+                  extra: comic.author?.isNotEmpty == true ? comic.author : null,
                   onTap: () => _openComicDetail(comic.id),
                 ),
               );
@@ -289,7 +291,7 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
       padding: EdgeInsets.fromLTRB(16, 8, 16, paddingBottom),
       sliver: SliverMasonryGrid.count(
         crossAxisCount: 3,
-        mainAxisSpacing: 12,
+        mainAxisSpacing: 16,
         crossAxisSpacing: 12,
         childCount: items.length,
         itemBuilder: (context, index) {
@@ -299,6 +301,7 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
             coverUrl: comic.cover,
             subtitle: comic.latestChapter,
             source: comic.source,
+            extra: comic.author?.isNotEmpty == true ? comic.author : null,
             onTap: () => _openComicDetail(comic.id),
           );
         },
@@ -323,51 +326,85 @@ class _CategoryBar extends ConsumerWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
-  static const double _chipHeight = 32;
-  static const double _rowSpacing = 8;
-  static const double _collapsedRows = 2;
-  static const double _collapsedHeight =
-      _chipHeight * _collapsedRows + _rowSpacing * (_collapsedRows - 1) + 4;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(comicsProvider);
     final notifier = ref.read(comicsProvider.notifier);
-    final double maxHeight = expanded ? MediaQuery.of(context).size.height * 0.8 : _collapsedHeight;
     final categories = state.categories;
-    final chips = categories.map((category) {
-      final selected = category.id == state.selectedCategory?.id;
-      return ChoiceChip(
-        label: Text(category.name),
-        selected: selected,
-        onSelected: (_) => notifier.selectCategory(category),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      );
-    }).toList();
-    final showToggle = categories.length > 9;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: ClipRect(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: chips,
+    
+    if (categories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                final selected = category.id == state.selectedCategory?.id;
+                return InkWell(
+                  onTap: () => notifier.selectCategory(category),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: selected
+                          ? Border(
+                              bottom: BorderSide(
+                                color: colorScheme.primary,
+                                width: 2,
+                              ),
+                            )
+                          : null,
+                    ),
+                    child: Text(
+                      category.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-        ),
-        if (showToggle)
-          TextButton.icon(
-            onPressed: onToggle,
-            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-            label: Text(expanded ? '收起分类' : '展开更多'),
+          Container(
+            padding: const EdgeInsets.only(left: 8, right: 16),
+            child: InkWell(
+              onTap: onToggle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '更多',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.chevron_right,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }

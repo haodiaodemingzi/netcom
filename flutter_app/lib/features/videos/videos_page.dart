@@ -134,6 +134,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
     }
     final items = state.inSearchMode ? state.searchResults : state.videos;
     final padding = MediaQuery.of(context).padding;
+    final titleText = state.selectedCategory?.name.isNotEmpty == true ? state.selectedCategory!.name : '视频';
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: notifier.refresh,
@@ -145,7 +146,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
               pinned: true,
               floating: true,
               snap: true,
-              title: const Text('视频'),
+              title: Text(titleText, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
               bottom: PreferredSize(
                 preferredSize: const Size.fromHeight(0),
                 child: Container(),
@@ -224,7 +225,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
                 sliver: state.viewMode == VideosViewMode.grid
                     ? SliverMasonryGrid.count(
                         crossAxisCount: 3,
-                        mainAxisSpacing: 12,
+                        mainAxisSpacing: 16,
                         crossAxisSpacing: 12,
                         childCount: items.length,
                         itemBuilder: (ctx, index) {
@@ -235,6 +236,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
                             subtitle: video.status ?? '',
                             source: video.source,
                             rating: video.rating,
+                            extra: video.episodes != null && video.episodes! > 0 ? '${video.episodes} 集' : null,
                             onTap: () {
                               context.push('/videos/${video.id}', extra: {'source': video.source});
                             },
@@ -298,57 +300,73 @@ class _CategoryBar extends StatelessWidget {
     if (categories.isEmpty) {
       return const SizedBox.shrink();
     }
-    final displayCategories = expanded ? categories : categories.take(8).toList();
     final colorScheme = Theme.of(context).colorScheme;
-    final baseLabelColor = colorScheme.onSurface;
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      alignment: Alignment.center,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
+      height: 44,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
         children: [
-          ...displayCategories.map((category) {
-            final selected = category.id == selectedCategory?.id;
-            final borderColor = selected ? colorScheme.primary : colorScheme.primary.withOpacity(0.28);
-            return FilterChip(
-              label: Text(
-                category.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: selected ? Colors.white : baseLabelColor,
-                ),
-              ),
-              selected: selected,
-              backgroundColor: Colors.white,
-              selectedColor: colorScheme.primary,
-              checkmarkColor: Colors.white,
-              side: BorderSide(color: borderColor),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              onSelected: (_) => onSelect(category),
-            );
-          }),
-          if (categories.length > 8)
-            ActionChip(
-              label: Text(
-                expanded ? '收起' : '更多',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: colorScheme.primary,
-                ),
-              ),
-              backgroundColor: Colors.white,
-              side: BorderSide(color: colorScheme.primary.withOpacity(0.35)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              onPressed: onToggle,
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                final selected = category.id == selectedCategory?.id;
+                return InkWell(
+                  onTap: () => onSelect(category),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: selected
+                          ? Border(
+                              bottom: BorderSide(
+                                color: colorScheme.primary,
+                                width: 2,
+                              ),
+                            )
+                          : null,
+                    ),
+                    child: Text(
+                      category.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
+          ),
+          Container(
+            padding: const EdgeInsets.only(left: 8, right: 16),
+            child: InkWell(
+              onTap: onToggle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '更多',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.chevron_right,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

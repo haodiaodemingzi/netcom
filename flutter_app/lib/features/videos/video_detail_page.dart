@@ -150,117 +150,123 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     final grouped = _groupEpisodes(episodes, size: 50);
     final currentGroup = grouped.isEmpty ? <VideoEpisode>[] : grouped[_groupIndex.clamp(0, grouped.length - 1)];
 
+    final topActions = Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+        const Spacer(),
+        IconButton(
+          icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border),
+          onPressed: notifier.toggleFavorite,
+        ),
+      ],
+    );
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: 220,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: detail.cover.isNotEmpty
-                        ? Image.network(
-                            detail.cover,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(color: Colors.black),
-                          )
-                        : Container(color: Colors.black),
-                  ),
-                  Positioned.fill(
-                    child: Container(
-                      color: Colors.black.withOpacity(0.3),
-                      child: Center(
-                        child: IconButton(
-                          icon: const Icon(Icons.play_circle_filled, size: 64, color: Colors.white),
-                          onPressed: () {
-                            if (episodes.isNotEmpty) {
-                              _playEpisode(episodes.first);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => context.pop(),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IconButton(
-                      icon: Icon(
-                        state.isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: Colors.white,
-                      ),
-                      onPressed: notifier.toggleFavorite,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 20),
+              color: Theme.of(context).colorScheme.surface,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    detail.title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.rating != null)
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 20),
-                        const SizedBox(width: 4),
-                        Text(
-                          detail.rating!.toStringAsFixed(1),
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                  topActions,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: AspectRatio(
+                          aspectRatio: 3 / 4,
+                          child: Container(
+                            color: Colors.grey.shade200,
+                            child: detail.cover.isNotEmpty
+                                ? Image.network(
+                                    detail.cover,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
+                                  )
+                                : const Icon(Icons.broken_image_outlined, size: 48),
+                          ),
                         ),
-                      ],
-                    ),
-                  const SizedBox(height: 8),
-                  if (detail.status != null && detail.status!.isNotEmpty)
-                    Text(
-                      detail.status!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  const SizedBox(height: 8),
-                  if (detail.area != null || detail.year != null)
-                    Text(
-                      [detail.area, detail.year].where((e) => e != null && e.isNotEmpty).join(' · '),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  const SizedBox(height: 12),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              detail.title,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.star, color: Colors.amber, size: 18),
+                                const SizedBox(width: 4),
+                                Text(
+                                  detail.rating?.toStringAsFixed(1) ?? '暂无评分',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(width: 12),
+                                if (detail.status != null && detail.status!.isNotEmpty)
+                                  Text(
+                                    detail.status!,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              [detail.area, detail.year].where((e) => e != null && e.isNotEmpty).join(' · '),
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.play_circle_outline),
+                                  label: const Text('试看'),
+                                  onPressed: () {
+                                    if (episodes.isNotEmpty) {
+                                      _playEpisode(episodes.first);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 12),
+                                FilledButton(
+                                  onPressed: () {
+                                    if (episodes.isNotEmpty) {
+                                      _playEpisode(episodes.first);
+                                    }
+                                  },
+                                  child: const Text('播放第1集'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
                   if (detail.tags.isNotEmpty)
                     Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: detail.tags.map((tag) {
-                        final colorScheme = Theme.of(context).colorScheme;
                         return Chip(
-                          label: Text(
-                            tag,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          backgroundColor: Colors.white,
-                          side: BorderSide(color: colorScheme.primary.withOpacity(0.2)),
+                          label: Text(tag),
+                          backgroundColor: colorScheme.surfaceVariant,
+                          side: BorderSide(color: colorScheme.outlineVariant),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -271,7 +277,10 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                   if (detail.actors.isNotEmpty) ...[
                     Text('主演', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(detail.actors.join(', '), style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      detail.actors.join(', '),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     const SizedBox(height: 12),
                   ],
                   ..._buildDescriptionSection(detail.description),
