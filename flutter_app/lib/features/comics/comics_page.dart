@@ -260,72 +260,38 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
     List<ComicSummary> items,
   ) {
     final padding = MediaQuery.of(context).padding;
+    final paddingBottom = padding.bottom + 16;
     if (state.viewMode == ComicsViewMode.list) {
       return SliverPadding(
-        padding: EdgeInsets.only(bottom: 8 + padding.bottom),
-        sliver: SliverList.separated(
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) {
-            final comic = items[index];
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minLeadingWidth: 80,
-              onTap: () => _openComicDetail(comic.id),
-              leading: SizedBox(
-                width: 80,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: AspectRatio(
-                    aspectRatio: 3 / 4,
-                    child: Image.network(
-                      comic.cover,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Theme.of(context).colorScheme.surfaceVariant,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.broken_image_outlined),
-                      ),
-                    ),
-                  ),
+        padding: EdgeInsets.fromLTRB(16, 8, 16, paddingBottom),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final comic = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ComicCard(
+                  title: comic.title,
+                  coverUrl: comic.cover,
+                  subtitle: comic.latestChapter,
+                  source: comic.source,
+                  compact: true,
+                  onTap: () => _openComicDetail(comic.id),
                 ),
-              ),
-              title: Text(
-                comic.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                comic.latestChapter,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Wrap(
-                spacing: 4,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      state.favoriteIds.contains(comic.id) ? Icons.favorite : Icons.favorite_border,
-                    ),
-                    onPressed: () => ref.read(comicsProvider.notifier).toggleFavorite(comic),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.download_rounded),
-                    onPressed: () => _openDownloads(),
-                  ),
-                ],
-              ),
-            );
-          },
+              );
+            },
+            childCount: items.length,
+          ),
         ),
       );
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, paddingBottom),
       sliver: SliverMasonryGrid.count(
-        crossAxisCount: 2,
+        crossAxisCount: 3,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
+        childCount: items.length,
         itemBuilder: (context, index) {
           final comic = items[index];
           return ComicCard(
@@ -333,14 +299,9 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
             coverUrl: comic.cover,
             subtitle: comic.latestChapter,
             source: comic.source,
-            isFavorite: state.favoriteIds.contains(comic.id),
             onTap: () => _openComicDetail(comic.id),
-            onFavoriteTap: () => ref.read(comicsProvider.notifier).toggleFavorite(comic),
-            onDownloadTap: _openDownloads,
-            compact: true,
           );
         },
-        childCount: items.length,
       ),
     );
   }

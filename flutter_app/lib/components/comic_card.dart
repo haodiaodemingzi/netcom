@@ -8,9 +8,6 @@ class ComicCard extends StatelessWidget {
     required this.subtitle,
     required this.source,
     this.onTap,
-    this.onFavoriteTap,
-    this.onDownloadTap,
-    this.isFavorite = false,
     this.compact = false,
   });
 
@@ -19,9 +16,6 @@ class ComicCard extends StatelessWidget {
   final String subtitle;
   final String source;
   final VoidCallback? onTap;
-  final VoidCallback? onFavoriteTap;
-  final VoidCallback? onDownloadTap;
-  final bool isFavorite;
   final bool compact;
 
   @override
@@ -66,31 +60,6 @@ class ComicCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  IconButton(
-                    iconSize: 20,
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite ? colorScheme.primary : colorScheme.outline,
-                    ),
-                    onPressed: onFavoriteTap,
-                  ),
-                  IconButton(
-                    iconSize: 20,
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.download_rounded,
-                      color: colorScheme.outline,
-                    ),
-                    onPressed: onDownloadTap,
-                  ),
-                ],
               ),
             ] else ...[
               const SizedBox(height: 2),
