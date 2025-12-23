@@ -291,11 +291,21 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
-                      TextButton.icon(
-                        onPressed: () => _downloadSelected(detail, currentGroup, downloadNotifier),
-                        icon: const Icon(Icons.download),
-                        label: const Text('下载已选'),
-                      ),
+                      if (_selectedEpisodeIds.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => _downloadSelected(detail, currentGroup, downloadNotifier),
+                          icon: const Icon(Icons.download),
+                          label: Text('下载 (${_selectedEpisodeIds.length})'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: colorScheme.primary,
+                          ),
+                        )
+                      else
+                        TextButton.icon(
+                          onPressed: () => _downloadAll(detail, state.episodes, downloadNotifier),
+                          icon: const Icon(Icons.download),
+                          label: const Text('批量下载'),
+                        ),
                       IconButton(
                         icon: Icon(_episodesReversed ? Icons.arrow_upward : Icons.arrow_downward),
                         onPressed: _toggleEpisodeOrder,
@@ -347,11 +357,24 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                             },
                             child: const Text('清空本组'),
                           ),
+                          if (_selectedEpisodeIds.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedEpisodeIds.clear();
+                                });
+                              },
+                              child: const Text('清空所有'),
+                            ),
                           const Spacer(),
-                          Text(
-                            '已选 ${_selectedEpisodeIds.length}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          if (_selectedEpisodeIds.isNotEmpty)
+                            Text(
+                              '已选 ${_selectedEpisodeIds.length}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -369,74 +392,102 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 2,
-                ),
+              sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (ctx, index) {
                     final episode = currentGroup[index];
                     final selected = _selectedEpisodeIds.contains(episode.id);
                     final status = _resolveDownloadStatus(episode, downloadState);
                     final localPath = _resolveLocalPath(episode, downloadState);
-                    return OutlinedButton(
-                      style: OutlinedButton.styleFrom(
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      shape: RoundedRectangleBorder(
                         side: BorderSide(color: selected ? colorScheme.primary : colorScheme.outlineVariant),
-                        backgroundColor: selected ? colorScheme.primary.withOpacity(0.08) : null,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      onPressed: () => _playEpisode(episode),
-                      onLongPress: () {
-                        setState(() {
-                          if (selected) {
-                            _selectedEpisodeIds.remove(episode.id);
-                          } else {
-                            _selectedEpisodeIds.add(episode.id);
-                          }
-                        });
-                      },
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            episode.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(height: 4),
-                          if (status.isNotEmpty)
-                            Text(
-                              status,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: _statusColor(status, colorScheme),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          if (localPath != null && localPath.isNotEmpty)
-                            const Text(
-                              '离线可播',
-                              style: TextStyle(fontSize: 11, color: Colors.green),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => _playEpisode(episode),
+                        onLongPress: () {
+                          setState(() {
+                            if (selected) {
+                              _selectedEpisodeIds.remove(episode.id);
+                            } else {
+                              _selectedEpisodeIds.add(episode.id);
+                            }
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.download, size: 18),
-                                color: colorScheme.primary,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                onPressed: () => _downloadSingle(detail, episode, downloadNotifier),
+                              if (selected)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Icon(
+                                    Icons.check_circle,
+                                    color: colorScheme.primary,
+                                    size: 24,
+                                  ),
+                                )
+                              else
+                                IconButton(
+                                  icon: const Icon(Icons.play_circle_fill),
+                                  color: colorScheme.primary,
+                                  onPressed: () => _playEpisode(episode),
+                                ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      episode.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: selected ? colorScheme.primary : null,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        if (status.isNotEmpty)
+                                          Text(
+                                            status,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: _statusColor(status, colorScheme),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        if (localPath != null && localPath.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          const Icon(Icons.offline_pin, size: 14, color: Colors.green),
+                                          const SizedBox(width: 2),
+                                          const Text(
+                                            '离线',
+                                            style: TextStyle(fontSize: 12, color: Colors.green),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
+                              if (!selected)
+                                IconButton(
+                                  icon: const Icon(Icons.download_rounded),
+                                  color: colorScheme.primary,
+                                  onPressed: () => _downloadSingle(detail, episode, downloadNotifier),
+                                ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -466,12 +517,28 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     List<VideoEpisode> currentGroup,
     DownloadCenterNotifier notifier,
   ) {
-    final ids = _selectedEpisodeIds.isEmpty ? currentGroup.map((e) => e.id).toSet() : _selectedEpisodeIds;
-    final episodes = currentGroup.where((e) => ids.contains(e.id)).toList();
+    if (_selectedEpisodeIds.isEmpty) {
+      return;
+    }
+    final episodes = currentGroup.where((e) => _selectedEpisodeIds.contains(e.id)).toList();
     if (episodes.isEmpty) {
       return;
     }
     notifier.enqueueVideoEpisodes(detail: detail, episodes: episodes);
+    setState(() {
+      _selectedEpisodeIds.clear();
+    });
+  }
+
+  void _downloadAll(
+    VideoDetail detail,
+    List<VideoEpisode> allEpisodes,
+    DownloadCenterNotifier notifier,
+  ) {
+    if (allEpisodes.isEmpty) {
+      return;
+    }
+    notifier.enqueueVideoEpisodes(detail: detail, episodes: allEpisodes);
   }
 
   void _downloadSingle(
