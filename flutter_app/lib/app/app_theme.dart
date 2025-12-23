@@ -104,10 +104,17 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: scheme.surfaceVariant,
-        selectedColor: _tweetBlue.withOpacity(0.12),
-        labelStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        backgroundColor: Colors.white,
+        selectedColor: _tweetBlue,
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.1,
+          color: _tweetNavy,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: BorderSide(color: _tweetBlue.withOpacity(0.25)),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
       inputDecorationTheme: InputDecorationTheme(

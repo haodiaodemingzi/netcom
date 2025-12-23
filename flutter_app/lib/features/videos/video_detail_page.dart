@@ -65,40 +65,34 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     if (raw.isEmpty) {
       return const <Widget>[];
     }
-    if (!_descExpanded) {
-      return [
+    const maxLines = 1;
+    final painter = TextPainter(
+      text: TextSpan(text: raw, style: Theme.of(context).textTheme.bodyMedium),
+      textDirection: TextDirection.ltr,
+      maxLines: maxLines,
+    )..layout(maxWidth: MediaQuery.of(context).size.width - 32);
+    final exceeds = painter.didExceedMaxLines;
+    return [
+      Text('简介', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 2),
+      Text(
+        raw,
+        style: Theme.of(context).textTheme.bodyMedium,
+        maxLines: _descExpanded ? null : maxLines,
+        overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+      ),
+      if (exceeds)
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(
             onPressed: () {
               setState(() {
-                _descExpanded = true;
+                _descExpanded = !_descExpanded;
               });
             },
-            child: const Text('展开简介'),
+            child: Text(_descExpanded ? '收起' : '展开简介'),
           ),
         ),
-      ];
-    }
-    final sanitized = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return [
-      Text('简介', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-      const SizedBox(height: 4),
-      Text(
-        sanitized,
-        style: Theme.of(context).textTheme.bodyMedium,
-      ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-          onPressed: () {
-            setState(() {
-              _descExpanded = false;
-            });
-          },
-          child: const Text('收起'),
-        ),
-      ),
       const SizedBox(height: 8),
     ];
   }
@@ -228,23 +222,38 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                     Text(
                       detail.status!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 8),
                   if (detail.area != null || detail.year != null)
                     Text(
                       [detail.area, detail.year].where((e) => e != null && e.isNotEmpty).join(' · '),
                       style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 12),
                   if (detail.tags.isNotEmpty)
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: detail.tags.map((tag) {
+                        final colorScheme = Theme.of(context).colorScheme;
                         return Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 12)),
-                          padding: EdgeInsets.zero,
+                          label: Text(
+                            tag,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(color: colorScheme.primary.withOpacity(0.2)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         );
                       }).toList(),
                     ),

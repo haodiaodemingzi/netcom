@@ -299,23 +299,54 @@ class _CategoryBar extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final displayCategories = expanded ? categories : categories.take(8).toList();
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseLabelColor = colorScheme.onSurface;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      alignment: Alignment.center,
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
+        alignment: WrapAlignment.center,
         children: [
           ...displayCategories.map((category) {
             final selected = category.id == selectedCategory?.id;
+            final borderColor = selected ? colorScheme.primary : colorScheme.primary.withOpacity(0.28);
             return FilterChip(
-              label: Text(category.name),
+              label: Text(
+                category.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: selected ? Colors.white : baseLabelColor,
+                ),
+              ),
               selected: selected,
+              backgroundColor: Colors.white,
+              selectedColor: colorScheme.primary,
+              checkmarkColor: Colors.white,
+              side: BorderSide(color: borderColor),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onSelected: (_) => onSelect(category),
             );
           }),
           if (categories.length > 8)
             ActionChip(
-              label: Text(expanded ? '收起' : '更多'),
+              label: Text(
+                expanded ? '收起' : '更多',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                ),
+              ),
+              backgroundColor: Colors.white,
+              side: BorderSide(color: colorScheme.primary.withOpacity(0.35)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onPressed: onToggle,
             ),
         ],

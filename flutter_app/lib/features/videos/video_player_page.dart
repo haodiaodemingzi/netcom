@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 
 import 'video_models.dart';
 import 'video_detail_provider.dart';
+import 'widgets/custom_video_controls.dart';
 
 class VideoPlayerPage extends ConsumerStatefulWidget {
   const VideoPlayerPage({
@@ -28,8 +28,7 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
 }
 
 class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
-  late VideoPlayerController _videoPlayerController;
-  ChewieController? _chewieController;
+  VideoPlayerController? _videoPlayerController;
   String? _currentEpisodeId;
   bool _isInitialized = false;
 
@@ -37,13 +36,20 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   void initState() {
     super.initState();
     _currentEpisodeId = widget.episodeId;
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     Future.microtask(() => _loadEpisode(_currentEpisodeId!));
   }
 
   @override
   void dispose() {
-    _videoPlayerController.dispose();
-    _chewieController?.dispose();
+    _videoPlayerController?.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     super.dispose();
   }
 
@@ -62,8 +68,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
 
   Future<void> _initializePlayer(String url, Map<String, String> headers) async {
     if (_isInitialized) {
-      await _videoPlayerController.dispose();
-      _chewieController?.dispose();
+      await _videoPlayerController?.dispose();
     }
 
     _videoPlayerController = VideoPlayerController.networkUrl(
@@ -71,15 +76,8 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
       httpHeaders: headers,
     );
 
-    await _videoPlayerController.initialize();
-
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController,
-      autoPlay: true,
-      looping: false,
-      allowFullScreen: true,
-      allowPlaybackSpeedChanging: true,
-    );
+    await _videoPlayerController!.initialize();
+    await _videoPlayerController!.play();
 
     if (mounted) {
       setState(() {
@@ -123,38 +121,20 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   Widget build(BuildContext context) {
     final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
     final state = ref.watch(videoDetailProvider(args));
+    final currentIndex = widget.episodes.indexWhere((e) => e.id == _currentEpisodeId);
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(
-          widget.episodes.firstWhere(
-            (e) => e.id == _currentEpisodeId,
-            orElse: () => const VideoEpisode(id: '', title: '', index: 0),
-          ).title,
-          style: const TextStyle(color: Colors.white),
-        ),
-        actions: [
-          if (widget.episodes.indexWhere((e) => e.id == _currentEpisodeId) > 0)
-            IconButton(
-              icon: const Icon(Icons.skip_previous),
-              onPressed: _playPrevious,
-            ),
-          if (widget.episodes.indexWhere((e) => e.id == _currentEpisodeId) < widget.episodes.length - 1)
-            IconButton(
-              icon: const Icon(Icons.skip_next),
-              onPressed: _playNext,
-            ),
-        ],
-      ),
       body: Center(
         child: state.loadingPlaySource
             ? const CircularProgressIndicator()
-            : !_isInitialized || _chewieController == null
+            : !_isInitialized || _videoPlayerController == null
                 ? const CircularProgressIndicator()
-                : Chewie(controller: _chewieController!),
+                : CustomVideoControls(
+                    controller: _videoPlayerController!,
+                    onNext: currentIndex < widget.episodes.length - 1 ? _playNext : null,
+                    onPrevious: currentIndex > 0 ? _playPrevious : null,
+                  ),
       ),
     );
   }
