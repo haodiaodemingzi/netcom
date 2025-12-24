@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -98,6 +99,7 @@ class VideoDownloader {
         onProgress?.call(count, total);
       },
     );
+    await _scanMedia(filePath);
     if (kDebugMode) {
       debugPrint('视频下载完成: $filePath');
     }
@@ -370,12 +372,39 @@ class VideoDownloader {
   }
 
   Future<Directory> _ensureVideoDir(String videoId) async {
-    final base = await getApplicationDocumentsDirectory();
+    Directory? base;
+    // Android 优先外部存储 Download/Movies 目录，便于用户访问
+    try {
+      base = await getExternalStorageDirectory();
+      if (base != null) {
+        final moviesDir = Directory(p.join(base.path, 'Movies'));
+        if (await moviesDir.exists() == false) {
+          await moviesDir.create(recursive: true);
+        }
+        base = moviesDir;
+      }
+    } catch (_) {
+      base = null;
+    }
+
+    // 兜底使用应用文档目录
+    base ??= await getApplicationDocumentsDirectory();
+
     final dir = Directory(p.join(base.path, 'video', videoId));
     if (!(await dir.exists())) {
       await dir.create(recursive: true);
     }
     return dir;
+  }
+
+  Future<void> _scanMedia(String filePath) async {
+    if (!Platform.isAndroid) return;
+    const channel = MethodChannel('flutter_app/media_scanner');
+    try {
+      await channel.invokeMethod<void>('scanFile', {'path': filePath});
+    } catch (_) {
+      // 忽略扫描失败以避免阻断下载流程
+    }
   }
 
   String _safeId(String raw) {

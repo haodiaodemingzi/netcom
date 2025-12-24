@@ -18,6 +18,8 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
     this.source,
     this.coverUrl,
     this.localPaths,
+    this.fullscreen = false,
+    this.initialController,
   });
 
   final String videoId;
@@ -26,6 +28,8 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
   final String? source;
   final String? coverUrl;
   final Map<String, String>? localPaths;
+  final bool fullscreen;
+  final VideoPlayerController? initialController;
 
   @override
   ConsumerState<VideoPlayerPage> createState() => _VideoPlayerPageState();
@@ -35,18 +39,32 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   VideoPlayerController? _videoPlayerController;
   String? _currentEpisodeId;
   bool _isInitialized = false;
+  bool _ownsController = true;
 
   @override
   void initState() {
     super.initState();
     _currentEpisodeId = widget.episodeId;
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    Future.microtask(() => _loadEpisode(_currentEpisodeId!));
+    if (widget.fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+    if (widget.initialController != null) {
+      _videoPlayerController = widget.initialController;
+      _ownsController = false;
+      _isInitialized = widget.initialController!.value.isInitialized;
+      if (!widget.initialController!.value.isPlaying) {
+        widget.initialController!.play();
+      }
+    } else {
+      Future.microtask(() => _loadEpisode(_currentEpisodeId!));
+    }
   }
 
   @override
   void dispose() {
-    _videoPlayerController?.dispose();
+    if (_ownsController) {
+      _videoPlayerController?.dispose();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -76,7 +94,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   }
 
   Future<void> _initializePlayer({String? url, Map<String, String>? headers, String? filePath}) async {
-    if (_isInitialized) {
+    if (_isInitialized && _ownsController) {
       await _videoPlayerController?.dispose();
     }
     if (filePath != null && filePath.isNotEmpty) {
@@ -146,6 +164,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
                 ? const CircularProgressIndicator()
                 : CustomVideoControls(
                     controller: _videoPlayerController!,
+                    coverUrl: state.detail?.cover,
                     onNext: currentIndex < widget.episodes.length - 1 ? _playNext : null,
                     onPrevious: currentIndex > 0 ? _playPrevious : null,
                   ),

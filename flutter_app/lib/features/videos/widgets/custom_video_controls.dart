@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+import '../../../core/network/image_proxy.dart';
 
 enum VideoFitMode { contain, cover, fill }
 
@@ -10,44 +14,113 @@ class CustomVideoControls extends StatefulWidget {
     required this.controller,
     this.onNext,
     this.onPrevious,
+    this.coverUrl,
+    this.heroTag,
+    this.onFullscreenPressed,
   });
 
   final VideoPlayerController controller;
   final VoidCallback? onNext;
   final VoidCallback? onPrevious;
+  final String? coverUrl;
+  final String? heroTag;
+  final VoidCallback? onFullscreenPressed;
 
   @override
   State<CustomVideoControls> createState() => _CustomVideoControlsState();
 }
 
-class _CustomVideoControlsState extends State<CustomVideoControls> {
+class _CustomVideoControlsState extends State<CustomVideoControls> with TickerProviderStateMixin {
   bool _showControls = true;
   bool _isPortrait = true;
   bool _isFullscreen = false;
   double _currentSpeed = 1.0;
   VideoFitMode _fitMode = VideoFitMode.contain;
+  bool _wasPlaying = false;
   
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+  
+  late AnimationController _coverAnimationController;
+  late Animation<double> _coverFadeAnimation;
+  
+  Timer? _hideControlsTimer;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_updateState);
+    _wasPlaying = widget.controller.value.isPlaying;
+    
+    // 初始化封面动画控制器
+    _coverAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _coverFadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _coverAnimationController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // 监听视频初始化状态，初始化完成后淡出封面
+    if (widget.controller.value.isInitialized) {
+      _coverAnimationController.forward();
+    }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_updateState);
+    _coverAnimationController.dispose();
+    _cancelHideControlsTimer();
     super.dispose();
   }
 
   void _updateState() {
-    if (mounted) {
-      setState(() {});
+    if (!mounted) {
+      return;
+    }
+    final isPlaying = widget.controller.value.isPlaying;
+    if (isPlaying && !_wasPlaying) {
+      if (_showControls) {
+        _startHideControlsTimer();
+      }
+    } else if (!isPlaying) {
+      _cancelHideControlsTimer();
+    }
+    _wasPlaying = isPlaying;
+    setState(() {});
+
+    // 视频初始化完成后淡出封面
+    if (widget.controller.value.isInitialized &&
+        !_coverAnimationController.isCompleted) {
+      _coverAnimationController.forward();
     }
   }
 
+  void _startHideControlsTimer() {
+    _cancelHideControlsTimer();
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && widget.controller.value.isPlaying) {
+        setState(() {
+          _showControls = false;
+        });
+      }
+    });
+  }
+
+  void _cancelHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = null;
+  }
+
   void _togglePlayPause() {
+    setState(() {
+      _showControls = true;
+    });
     if (widget.controller.value.isPlaying) {
       widget.controller.pause();
     } else {
@@ -73,6 +146,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   void _toggleFullscreen() {
+    if (widget.onFullscreenPressed != null) {
+      widget.onFullscreenPressed!.call();
+      return;
+    }
     setState(() {
       _isFullscreen = !_isFullscreen;
     });
@@ -194,39 +271,110 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final progress = duration.inMilliseconds > 0 
         ? position.inMilliseconds / duration.inMilliseconds 
         : 0.0;
+    final isInitialized = widget.controller.value.isInitialized;
+    final isBuffering = widget.controller.value.isBuffering;
 
-    return GestureDetector(
+    Widget content = GestureDetector(
       onTap: () {
         setState(() {
-          _showControls = !_showControls;
+          _showControls = true;
         });
+        if (widget.controller.value.isPlaying) {
+          _startHideControlsTimer();
+        }
       },
       child: Container(
         color: Colors.transparent,
         child: Stack(
           children: [
-            Center(
-              child: AspectRatio(
-                aspectRatio: widget.controller.value.aspectRatio,
-                child: FittedBox(
-                  fit: _fitMode == VideoFitMode.fill
-                      ? BoxFit.fill
-                      : _fitMode == VideoFitMode.cover
-                          ? BoxFit.cover
-                          : BoxFit.contain,
-                  child: SizedBox(
-                    width: widget.controller.value.size.width == 0
-                        ? MediaQuery.of(context).size.width
-                        : widget.controller.value.size.width,
-                    height: widget.controller.value.size.height == 0
-                        ? MediaQuery.of(context).size.width / widget.controller.value.aspectRatio
-                        : widget.controller.value.size.height,
-                    child: VideoPlayer(widget.controller),
+            // 封面层
+            if (widget.coverUrl != null && widget.coverUrl!.isNotEmpty)
+              Positioned.fill(
+                child: FadeTransition(
+                  opacity: _coverFadeAnimation,
+                  child: CachedNetworkImage(
+                    imageUrl: proxyImageUrl(widget.coverUrl!),
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey.shade900,
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white54),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey.shade900,
+                      child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (_showControls)
+            
+            // 视频播放器层
+            if (isInitialized)
+              Center(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final videoWidth = widget.controller.value.size.width;
+                    final videoHeight = widget.controller.value.size.height;
+                    final videoAspect = widget.controller.value.aspectRatio;
+
+                    BoxFit fit;
+                    Alignment alignment;
+                    switch (_fitMode) {
+                      case VideoFitMode.contain:
+                        fit = BoxFit.contain;
+                        alignment = Alignment.center;
+                        break;
+                      case VideoFitMode.cover:
+                        fit = BoxFit.cover;
+                        alignment = Alignment.center;
+                        break;
+                      case VideoFitMode.fill:
+                        fit = BoxFit.fill;
+                        alignment = Alignment.center;
+                        break;
+                    }
+
+                    return Container(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: FittedBox(
+                        fit: fit,
+                        alignment: alignment,
+                        child: SizedBox(
+                          width: videoWidth > 0 ? videoWidth : constraints.maxWidth,
+                          height: videoHeight > 0 ? videoHeight : constraints.maxWidth / videoAspect,
+                          child: VideoPlayer(widget.controller),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            
+            // 加载指示器层
+            if (!isInitialized || isBuffering)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.3),
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Colors.white),
+                        SizedBox(height: 16),
+                        Text(
+                          '缓冲中...',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            
+            // 控制层
+            if (_showControls && isInitialized)
               Container(
                 color: Colors.black.withOpacity(0.3),
                 child: Column(
@@ -235,6 +383,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                       backgroundColor: Colors.transparent,
                       elevation: 0,
                       iconTheme: const IconThemeData(color: Colors.white),
+                      leading: _isFullscreen
+                          ? IconButton(
+                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                              onPressed: () {
+                                if (_isFullscreen) {
+                                  setState(() {
+                                    _isFullscreen = false;
+                                  });
+                                  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                                }
+                              },
+                            )
+                          : null,
+                      title: _isFullscreen ? const Text('全屏播放', style: TextStyle(color: Colors.white)) : null,
                     ),
                     const Spacer(),
                     Padding(
@@ -248,19 +410,33 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                                 style: const TextStyle(color: Colors.white, fontSize: 12),
                               ),
                               Expanded(
-                                child: SliderTheme(
-                                  data: SliderThemeData(
-                                    trackHeight: 12,
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-                                  ),
-                                  child: Slider(
-                                    value: progress.clamp(0.0, 1.0),
-                                    onChanged: (value) {
-                                      final newPosition = duration * value;
-                                      widget.controller.seekTo(newPosition);
-                                    },
-                                    activeColor: Colors.white,
-                                    inactiveColor: Colors.white.withOpacity(0.3),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: Colors.red,
+                                      inactiveTrackColor: Colors.white24,
+                                      thumbColor: Colors.white,
+                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                      trackHeight: 4,
+                                    ),
+                                    child: Slider(
+                                      value: progress.clamp(0.0, 1.0),
+                                      onChangeStart: (value) {
+                                        _cancelHideControlsTimer();
+                                      },
+                                      onChangeEnd: (value) {
+                                        if (widget.controller.value.isPlaying) {
+                                          _startHideControlsTimer();
+                                        }
+                                      },
+                                      onChanged: (value) {
+                                        final newPosition = Duration(
+                                          milliseconds: (value * duration.inMilliseconds).round(),
+                                        );
+                                        widget.controller.seekTo(newPosition);
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
@@ -270,67 +446,40 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 8),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const SizedBox(width: 36),
-                              Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  spacing: 6,
-                                  children: [
-                                    if (widget.onPrevious != null)
-                                      IconButton(
-                                        icon: const Icon(Icons.skip_previous, color: Colors.white, size: 28),
-                                        onPressed: widget.onPrevious,
-                                      ),
-                                    IconButton(
-                                      icon: Icon(
-                                        isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                                        color: Colors.white,
-                                        size: 40,
-                                      ),
-                                      onPressed: _togglePlayPause,
-                                    ),
-                                    if (widget.onNext != null)
-                                      IconButton(
-                                        icon: const Icon(Icons.skip_next, color: Colors.white, size: 28),
-                                        onPressed: widget.onNext,
-                                      ),
-                                  ],
-                                ),
+                              _buildIconButton(
+                                icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                                onPressed: _togglePlayPause,
                               ),
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  spacing: 4,
-                                  children: [
-                                    _buildIconButton(
-                                      icon: _fitMode == VideoFitMode.contain
-                                          ? Icons.fit_screen
-                                          : _fitMode == VideoFitMode.cover
-                                              ? Icons.photo_size_select_large
-                                              : Icons.crop_16_9,
-                                      onPressed: _showFitModeDialog,
-                                    ),
-                                    _buildIconButton(
-                                      icon: _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
-                                      onPressed: _toggleOrientation,
-                                    ),
-                                    _buildIconButton(
-                                      icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                                      onPressed: _toggleFullscreen,
-                                    ),
-                                    _buildIconButton(
-                                      icon: Icons.speed,
-                                      onPressed: _showSpeedDialog,
-                                    ),
-                                  ],
-                                ),
+                              const SizedBox(width: 16),
+                              _buildIconButton(
+                                icon: _fitMode == VideoFitMode.contain
+                                    ? Icons.fit_screen
+                                    : _fitMode == VideoFitMode.cover
+                                        ? Icons.photo_size_select_large
+                                        : Icons.crop_16_9,
+                                onPressed: _showFitModeDialog,
+                              ),
+                              const SizedBox(width: 8),
+                              _buildIconButton(
+                                icon: _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
+                                onPressed: _toggleOrientation,
+                              ),
+                              const SizedBox(width: 8),
+                              _buildIconButton(
+                                icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                                onPressed: _toggleFullscreen,
+                              ),
+                              const SizedBox(width: 8),
+                              _buildIconButton(
+                                icon: Icons.speed,
+                                onPressed: _showSpeedDialog,
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
                         ],
                       ),
                     ),
@@ -341,5 +490,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         ),
       ),
     );
+
+    return content;
   }
 }

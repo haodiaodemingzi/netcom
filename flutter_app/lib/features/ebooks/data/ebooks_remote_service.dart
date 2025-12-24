@@ -5,11 +5,13 @@ import 'package:flutter_app/features/ebooks/ebooks_models.dart';
 /// 电子书远程服务
 class EbooksRemoteService {
   final Dio _dio;
+  final ApiConfig _config = ApiConfig.fromEnv();
 
   EbooksRemoteService({Dio? dio}) : _dio = dio ?? Dio() {
-    _dio.options.baseUrl = ApiConfig.baseUrl;
-    _dio.options.connectTimeout = const Duration(seconds: 30);
-    _dio.options.receiveTimeout = const Duration(seconds: 30);
+    _dio.options.baseUrl = _config.baseUrl;
+    _dio.options.connectTimeout = _config.connectTimeout;
+    _dio.options.receiveTimeout = _config.receiveTimeout;
+    _dio.options.sendTimeout = _config.sendTimeout;
   }
 
   /// 获取电子书分类

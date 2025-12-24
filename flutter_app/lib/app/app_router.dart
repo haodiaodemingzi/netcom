@@ -10,6 +10,7 @@ import '../features/videos/videos_page.dart';
 import '../features/videos/video_detail_page.dart';
 import '../features/videos/video_player_page.dart';
 import '../features/videos/video_models.dart';
+import 'package:video_player/video_player.dart';
 import '../features/videos/videos_provider.dart';
 import '../features/comics/comic_detail_page.dart';
 import '../features/comics/comic_reader_page.dart';
@@ -133,8 +134,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final episodes = (extra?['episodes'] as List<VideoEpisode>?) ?? const <VideoEpisode>[];
           final coverUrl = extra?['coverUrl'] as String?;
           final localPaths = (extra?['localPaths'] as Map<String, String>?) ?? const <String, String>{};
-          return MaterialPage(
+          final fullscreen = extra?['fullscreen'] as bool? ?? false;
+          final controller = extra?['controller'] as VideoPlayerController?;
+          return CustomTransitionPage(
             key: state.pageKey,
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(0.0, 1.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOut;
+              final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              final offsetAnimation = animation.drive(tween);
+              return SlideTransition(
+                position: offsetAnimation,
+                child: child,
+              );
+            },
             child: VideoPlayerPage(
               videoId: videoId,
               episodeId: episodeId,
@@ -142,6 +156,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               source: source,
               coverUrl: coverUrl,
               localPaths: localPaths,
+              fullscreen: fullscreen,
+              initialController: controller,
             ),
           );
         },

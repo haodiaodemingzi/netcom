@@ -397,5 +397,16 @@ class ApiResponse<T> {
     T Function(Map<String, dynamic>) fromJsonT,
   ) {
     if (json['code'] == 200) {
+      final dataMap = (json['data'] as Map<String, dynamic>?) ?? <String, dynamic>{};
       return ApiResponse.success(
-        fromJsonT(json['data'] ?? {}),
+        fromJsonT(dataMap),
+        message: json['message'] as String?,
+      );
+    }
+    final errorMsg = json['error'] as String? ?? json['message'] as String? ?? '请求失败';
+    return ApiResponse.error(
+      errorMsg,
+      message: json['message'] as String?,
+    );
+  }
+}

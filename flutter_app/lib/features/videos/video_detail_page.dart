@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/network/image_proxy.dart';
 import '../downloads/download_center_provider.dart';
 import 'video_detail_provider.dart';
 import 'video_models.dart';
 import '../downloads/download_models.dart';
+import 'widgets/custom_video_controls.dart';
 
 class VideoDetailPage extends ConsumerStatefulWidget {
   const VideoDetailPage({
@@ -28,6 +31,10 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   int _groupIndex = 0;
   final Set<String> _selectedEpisodeIds = <String>{};
   bool _isBulkMode = false;
+  
+  // 内嵌播放器状态
+  VideoPlayerController? _inlineController;
+  String? _currentEpisodeId;
 
   @override
   void initState() {
@@ -36,6 +43,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
 
   @override
   void dispose() {
+    _inlineController?.dispose();
     super.dispose();
   }
 
@@ -46,8 +54,58 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     });
   }
 
+  Future<void> _playInline(VideoEpisode episode) async {
+    final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    final notifier = ref.read(videoDetailProvider(args).notifier);
+    await notifier.selectEpisode(episode);
+    final state = ref.read(videoDetailProvider(args));
+    
+    if (!mounted) return;
+    
+    // 清理之前的控制器
+    await _inlineController?.dispose();
+    
+    if (state.playSource != null && state.playSource!.url.isNotEmpty) {
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(state.playSource!.url),
+        httpHeaders: state.playSource!.headers,
+      );
+      
+      await controller.initialize();
+      if (mounted) {
+        setState(() {
+          _inlineController = controller;
+          _currentEpisodeId = episode.id;
+        });
+        await controller.play();
+      }
+    }
+  }
+
   Future<void> _playEpisode(VideoEpisode episode) async {
     final args = VideoDetailRequest(videoId: widget.videoId, source: widget.source);
+    final currentState = ref.read(videoDetailProvider(args));
+    final canReuseInline = _inlineController != null &&
+        _inlineController!.value.isInitialized &&
+        _currentEpisodeId == episode.id;
+
+    if (canReuseInline) {
+      context.push(
+        '/video-player',
+        extra: {
+          'videoId': widget.videoId,
+          'source': widget.source,
+          'episodeId': episode.id,
+          'episodes': currentState.episodes,
+          'localPaths': _buildLocalPathMap(),
+          'fullscreen': true,
+          'controller': _inlineController,
+          'coverUrl': currentState.detail?.cover,
+        },
+      );
+      return;
+    }
+
     final notifier = ref.read(videoDetailProvider(args).notifier);
     await notifier.selectEpisode(episode);
     final state = ref.read(videoDetailProvider(args));
@@ -62,10 +120,12 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
         'episodeId': episode.id,
         'episodes': state.episodes,
         'localPaths': _buildLocalPathMap(),
+        'fullscreen': true,
+        'controller': _inlineController,
+        'coverUrl': state.detail?.cover,
       },
     );
   }
-
 
   List<Widget> _buildDescriptionSection(String? description) {
     final raw = description?.trim() ?? '';
@@ -168,92 +228,134 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
+          SliverAppBar(
+            expandedHeight: MediaQuery.of(context).size.width * 9 / 16,
+            pinned: false,
+            floating: false,
+            backgroundColor: Colors.black,
+            flexibleSpace: FlexibleSpaceBar(
+              background: _inlineController != null
+                  ? CustomVideoControls(
+                      controller: _inlineController!,
+                      coverUrl: detail.cover,
+                      onFullscreenPressed: () {
+                        if (episodes.isEmpty) {
+                          return;
+                        }
+                        final target = _currentEpisodeId == null
+                            ? episodes.first
+                            : episodes.firstWhere(
+                                (e) => e.id == _currentEpisodeId,
+                                orElse: () => episodes.first,
+                              );
+                        _playEpisode(target);
+                      },
+                    )
+                  : Container(
+                      color: Colors.black,
+                      child: Stack(
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: proxyImageUrl(detail.cover),
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey.shade900,
+                              child: const Center(
+                                child: CircularProgressIndicator(color: Colors.white54),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey.shade900,
+                              child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  if (episodes.isNotEmpty) {
+                                    _playInline(episodes.first);
+                                  }
+                                },
+                                child: const Center(
+                                  child: Icon(Icons.play_circle_filled, color: Colors.white70, size: 64),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => context.pop(),
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border, color: Colors.white),
+                onPressed: notifier.toggleFavorite,
+              ),
+            ],
+          ),
           SliverToBoxAdapter(
             child: Container(
-              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 20),
+              padding: const EdgeInsets.all(16),
               color: Theme.of(context).colorScheme.surface,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  topActions,
+                  Text(
+                    detail.title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 100,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: AspectRatio(
-                            aspectRatio: 3 / 4,
-                            child: Container(
-                              color: Colors.grey.shade200,
-                              child: detail.cover.isNotEmpty
-                                  ? _buildCover(detail.cover)
-                                  : const Icon(Icons.broken_image_outlined, size: 48),
-                            ),
-                          ),
-                        ),
+                      const Icon(Icons.star, color: Colors.amber, size: 18),
+                      const SizedBox(width: 4),
+                      Text(
+                        detail.rating?.toStringAsFixed(1) ?? '暂无评分',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              detail.title,
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.star, color: Colors.amber, size: 18),
-                                const SizedBox(width: 4),
-                                Text(
-                                  detail.rating?.toStringAsFixed(1) ?? '暂无评分',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(width: 12),
-                                if (detail.status != null && detail.status!.isNotEmpty)
-                                  Text(
-                                    detail.status!,
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              [detail.area, detail.year].where((e) => e != null && e.isNotEmpty).join(' · '),
-                              style: Theme.of(context).textTheme.bodySmall,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.play_circle_outline),
-                                  label: const Text('试看'),
-                                  onPressed: () {
-                                    if (episodes.isNotEmpty) {
-                                      _playEpisode(episodes.first);
-                                    }
-                                  },
-                                ),
-                                const SizedBox(width: 12),
-                                FilledButton(
-                                  onPressed: () {
-                                    if (episodes.isNotEmpty) {
-                                      _playEpisode(episodes.first);
-                                    }
-                                  },
-                                  child: const Text('播放第1集'),
-                                ),
-                              ],
-                            ),
-                          ],
+                      const SizedBox(width: 12),
+                      if (detail.status != null && detail.status!.isNotEmpty)
+                        Text(
+                          detail.status!,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    [detail.area, detail.year].where((e) => e != null && e.isNotEmpty).join(' · '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.play_circle_outline),
+                        label: const Text('试看'),
+                        onPressed: () {
+                          if (episodes.isNotEmpty) {
+                            _playEpisode(episodes.first);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: () {
+                          if (episodes.isNotEmpty) {
+                            _playEpisode(episodes.first);
+                          }
+                        },
+                        child: const Text('播放第1集'),
                       ),
                     ],
                   ),
