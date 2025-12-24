@@ -38,47 +38,101 @@ class ComicCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: AspectRatio(
-                  aspectRatio: 3 / 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      color: colorScheme.surfaceVariant,
-                      child: image,
+        child: AspectRatio(
+          aspectRatio: 3 / 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: colorScheme.surfaceVariant,
+                  child: image,
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(8, 32, 8, 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.85),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (extra != null && extra!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            extra!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.amber,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                maxLines: compact ? 1 : 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle.isEmpty ? source : subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.72)),
-              ),
-              if (extra != null && extra!.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  extra!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.w700),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Transform.rotate(
+                    angle: -0.1,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.amber,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        source,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
