@@ -16,6 +16,10 @@ import '../features/comics/comic_reader_page.dart';
 import '../features/comics/comics_page.dart';
 import '../features/comics/comics_provider.dart';
 import '../features/settings/settings_page.dart';
+import '../features/ebooks/ebooks_page.dart';
+import '../features/ebooks/ebook_detail_page.dart';
+import '../features/ebooks/ebook_reader_page.dart';
+import '../features/ebooks/ebook_offline_reader_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -41,6 +45,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/tabs/videos',
                 name: 'videos',
                 builder: (context, state) => const VideosPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tabs/ebooks',
+                name: 'ebooks',
+                builder: (context, state) => const EbooksPage(),
               ),
             ],
           ),
@@ -133,6 +146,48 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      GoRoute(
+        path: '/ebooks/:id',
+        name: 'ebookDetail',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          final source = extra?['source'] as String? ?? 'kanunu8';
+          return EbookDetailPage(bookId: id, source: source);
+        },
+      ),
+      GoRoute(
+        path: '/ebook-reader/:chapterId',
+        name: 'ebookReader',
+        builder: (context, state) {
+          final chapterId = state.pathParameters['chapterId'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          final bookId = extra?['bookId'] as String? ?? '';
+          final source = extra?['source'] as String? ?? 'kanunu8';
+          final bookTitle = extra?['bookTitle'] as String? ?? '';
+          final bookCover = extra?['bookCover'] as String? ?? '';
+          return EbookReaderPage(
+            chapterId: chapterId,
+            bookId: bookId,
+            source: source,
+            bookTitle: bookTitle,
+            bookCover: bookCover,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/ebook-offline-reader/:bookId',
+        name: 'ebookOfflineReader',
+        builder: (context, state) {
+          final bookId = state.pathParameters['bookId'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          final bookTitle = extra?['bookTitle'] as String? ?? '';
+          return EbookOfflineReaderPage(
+            bookId: bookId,
+            bookTitle: bookTitle,
+          );
+        },
+      ),
     ],
   );
 });
@@ -150,6 +205,9 @@ class AppShell extends ConsumerWidget {
       await ref.read(comicsProvider.notifier).ensureWarm();
     } else if (index == 1) {
       await ref.read(videosProvider.notifier).ensureWarm();
+    } else if (index == 2) {
+      // 电子书页面预热
+      // TODO: 添加电子书 provider 的 ensureWarm 方法
     }
     shell.goBranch(index, initialLocation: index == shell.currentIndex);
   }
@@ -165,6 +223,7 @@ class AppShell extends ConsumerWidget {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: '漫画'),
           NavigationDestination(icon: Icon(Icons.movie_outlined), selectedIcon: Icon(Icons.movie), label: '视频'),
+          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: '电子书'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '我的'),
         ],
       ),
