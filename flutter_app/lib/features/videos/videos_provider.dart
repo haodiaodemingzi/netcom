@@ -165,15 +165,23 @@ class VideosNotifier extends StateNotifier<VideosState> {
   }
 
   Future<void> ensureWarm() async {
+    if (!mounted) return;
     if (state.loading || state.refreshing || state.searching) {
       return;
     }
     if (state.categories.isEmpty) {
       await _loadSources();
-      return;
+      if (!mounted) return;
+    }
+    if (state.selectedCategory == null && state.categories.isNotEmpty) {
+      _safeSetState((s) => s.copyWith(selectedCategory: state.categories.first));
     }
     final now = DateTime.now();
     if (_lastFeedAt != null && now.difference(_lastFeedAt!).inMinutes < 1 && state.videos.isNotEmpty) {
+      return;
+    }
+    if (state.videos.isEmpty) {
+      await _loadFeed(reset: true);
       return;
     }
     await _loadFeed(reset: true);
@@ -283,7 +291,7 @@ class VideosNotifier extends StateNotifier<VideosState> {
   }
 
   Future<void> _loadSources() async {
-    _safeSetState((s) => s.copyWith(sourcesLoading: true));
+    _safeSetState((s) => s.copyWith(sourcesLoading: true, error: null));
     try {
       final sources = await _remoteService.fetchSources();
       if (!mounted) return;
@@ -297,6 +305,8 @@ class VideosNotifier extends StateNotifier<VideosState> {
       await _sourceRepository?.setCurrentSource(resolvedSource);
       if (!mounted) return;
       await _loadCategories(resolvedSource);
+      if (!mounted) return;
+      await _loadFeed(reset: true);
     } catch (e) {
       _safeSetState((s) => s.copyWith(
         sourcesLoading: false,
@@ -324,18 +334,18 @@ class VideosNotifier extends StateNotifier<VideosState> {
 
   Future<void> _loadFeed({required bool reset}) async {
     if (!mounted) return;
+    if (state.selectedCategory == null) {
+      return;
+    }
     if (state.loading || state.loadingMore) {
       return;
     }
     if (!reset && !state.hasMore) {
       return;
     }
-    final category = state.selectedCategory;
-    if (category == null) {
-      return;
-    }
+    final category = state.selectedCategory!;
+    final nextPage = reset ? 1 : _nextPage;
     if (reset) {
-      _nextPage = 1;
       _safeSetState((s) => s.copyWith(loading: true, error: null));
     } else {
       _safeSetState((s) => s.copyWith(loadingMore: true));
@@ -343,13 +353,13 @@ class VideosNotifier extends StateNotifier<VideosState> {
     try {
       final feed = await _remoteService.fetchFeed(
         categoryId: category.id,
-        page: _nextPage,
+        page: nextPage,
         limit: _pageSize,
         sourceId: state.selectedSource,
       );
       if (!mounted) return;
       final items = reset ? feed.items : <VideoSummary>[...state.videos, ...feed.items];
-      _nextPage = _nextPage + 1;
+      _nextPage = nextPage + 1;
       _safeSetState((s) => s.copyWith(
         videos: items,
         loading: false,

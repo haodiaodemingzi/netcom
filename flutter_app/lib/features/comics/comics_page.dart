@@ -22,6 +22,9 @@ class _ComicsPageState extends ConsumerState<ComicsPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(comicsProvider.notifier).ensureWarm();
+    });
   }
 
   @override

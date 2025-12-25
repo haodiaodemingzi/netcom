@@ -217,15 +217,17 @@ class AppShell extends ConsumerWidget {
     if (index == shell.currentIndex) {
       return;
     }
-    if (index == 0) {
-      await ref.read(comicsProvider.notifier).ensureWarm();
-    } else if (index == 1) {
-      await ref.read(videosProvider.notifier).ensureWarm();
-    } else if (index == 2) {
-      // 电子书页面预热
-      // TODO: 添加电子书 provider 的 ensureWarm 方法
-    }
     shell.goBranch(index, initialLocation: index == shell.currentIndex);
+    // 异步预热，避免阻塞切换，页面自行显示加载态
+    Future.microtask(() {
+      if (index == 0) {
+        ref.read(comicsProvider.notifier).ensureWarm();
+      } else if (index == 1) {
+        ref.read(videosProvider.notifier).ensureWarm();
+      } else if (index == 2) {
+        // 电子书页面预热（后续可补充 ensureWarm）
+      }
+    });
   }
 
   @override

@@ -164,15 +164,23 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
   }
 
   Future<void> ensureWarm() async {
+    if (!mounted) return;
     if (state.loading || state.refreshing || state.searching) {
       return;
     }
     if (state.categories.isEmpty) {
       await _loadSources();
-      return;
+      if (!mounted) return;
+    }
+    if (state.selectedCategory == null && state.categories.isNotEmpty) {
+      state = state.copyWith(selectedCategory: state.categories.first);
     }
     final now = DateTime.now();
     if (_lastFeedAt != null && now.difference(_lastFeedAt!).inMinutes < 1 && state.comics.isNotEmpty) {
+      return;
+    }
+    if (state.comics.isEmpty) {
+      await _loadFeed(reset: true);
       return;
     }
     await _loadFeed(reset: true);
@@ -360,35 +368,33 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
   }
 
   Future<void> _loadFeed({required bool reset}) async {
+    if (!mounted) return;
     if (state.selectedCategory == null) {
       return;
     }
+    if (state.loading || state.loadingMore) {
+      return;
+    }
+    if (!reset && !state.hasMore) {
+      return;
+    }
+    final category = state.selectedCategory!;
+    final nextPage = reset ? 1 : _nextPage;
     if (reset) {
-      _nextPage = 1;
-      state = state.copyWith(
-        loading: true,
-        refreshing: true,
-        error: null,
-      );
+      state = state.copyWith(loading: true, error: null);
     } else {
-      if (!state.hasMore || state.loadingMore) {
-        return;
-      }
       state = state.copyWith(loadingMore: true);
     }
-    final page = _nextPage;
     try {
       final feed = await _remoteService.fetchFeed(
-        categoryId: state.selectedCategory!.id,
-        page: page,
+        categoryId: category.id,
+        page: nextPage,
         limit: _pageSize,
         sourceId: state.selectedSource,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       final items = reset ? feed.items : <ComicSummary>[...state.comics, ...feed.items];
-      _nextPage = page + 1;
+      _nextPage = nextPage + 1;
       state = state.copyWith(
         comics: items,
         loading: false,
@@ -398,9 +404,7 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
       );
       _lastFeedAt = DateTime.now();
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         refreshing: false,
