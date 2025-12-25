@@ -289,69 +289,109 @@ class _EbookDetailPageState extends ConsumerState<EbookDetailPage> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.2)),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           // 章节排序选项
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Text(
-                  '排序：',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                TextButton(
-                  onPressed: () {
-                    // TODO: 实现正序排列
-                  },
-                  child: const Text('正序'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // TODO: 实现倒序排列
-                  },
-                  child: const Text('倒序'),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    // TODO: 实现批量选择
-                  },
-                  child: const Text('批量'),
-                ),
-              ],
-            ),
+          Row(
+            children: [
+              Text(
+                '排序：',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              TextButton(
+                onPressed: () {
+                  // TODO: 实现正序排列
+                },
+                child: const Text('正序'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // TODO: 实现倒序排列
+                },
+                child: const Text('倒序'),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () {
+                  // TODO: 实现批量选择
+                },
+                child: const Text('批量'),
+              ),
+            ],
           ),
-          const Divider(height: 1),
+          const SizedBox(height: 12),
           
-          // 章节列表
-          ListView.builder(
+          // 章节网格布局
+          GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 2.5,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
             itemCount: chapters.length,
             itemBuilder: (context, index) {
               final chapter = chapters[index];
-              return ListTile(
-                title: Text(chapter.title),
-                subtitle: Text('第${chapter.index + 1}章'),
-                trailing: const Icon(Icons.play_arrow),
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/ebook-reader/${chapter.id}',
-                    arguments: {
-                      'bookId': widget.bookId,
-                      'source': widget.source,
-                      'bookTitle': state.detail?.title ?? '',
-                      'bookCover': state.detail?.cover ?? '',
-                    },
-                  );
-                },
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/ebook-reader/${chapter.id}',
+                      arguments: {
+                        'bookId': widget.bookId,
+                        'source': widget.source,
+                        'bookTitle': state.detail?.title ?? '',
+                        'bookCover': state.detail?.cover ?? '',
+                      },
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          chapter.title,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '第${chapter.index + 1}章',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            const Icon(Icons.menu_book, size: 16, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.download_outlined, size: 16, color: Colors.grey),
+                            const Spacer(),
+                            const Icon(Icons.play_arrow, size: 16, color: colorScheme.primary),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               );
             },
           ),

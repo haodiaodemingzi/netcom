@@ -28,6 +28,7 @@ class SettingsModel {
     this.viewMode = 'card',
     this.showFavoriteTab = true,
     this.videoOrientationMode = 'auto',
+    this.imageZoomScale = 1.0,
   });
 
   final String readingMode;
@@ -43,6 +44,7 @@ class SettingsModel {
   final String viewMode;
   final bool showFavoriteTab;
   final String videoOrientationMode;
+  final double imageZoomScale;
 
   SettingsModel copyWith({
     String? readingMode,
@@ -58,6 +60,7 @@ class SettingsModel {
     String? viewMode,
     bool? showFavoriteTab,
     String? videoOrientationMode,
+    double? imageZoomScale,
   }) {
     return SettingsModel(
       readingMode: readingMode ?? this.readingMode,
@@ -73,6 +76,7 @@ class SettingsModel {
       viewMode: viewMode ?? this.viewMode,
       showFavoriteTab: showFavoriteTab ?? this.showFavoriteTab,
       videoOrientationMode: videoOrientationMode ?? this.videoOrientationMode,
+      imageZoomScale: imageZoomScale ?? this.imageZoomScale,
     );
   }
 
@@ -91,6 +95,7 @@ class SettingsModel {
       'viewMode': viewMode,
       'showFavoriteTab': showFavoriteTab,
       'videoOrientationMode': videoOrientationMode,
+      'imageZoomScale': imageZoomScale,
     };
   }
 
@@ -112,6 +117,7 @@ class SettingsModel {
       viewMode: json['viewMode'] as String? ?? 'card',
       showFavoriteTab: json['showFavoriteTab'] as bool? ?? true,
       videoOrientationMode: json['videoOrientationMode'] as String? ?? 'auto',
+      imageZoomScale: (json['imageZoomScale'] as num?)?.toDouble() ?? 1.0,
     );
   }
 }

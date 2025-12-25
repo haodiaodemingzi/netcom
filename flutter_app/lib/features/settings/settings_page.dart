@@ -269,6 +269,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             );
           },
         ),
+        _buildZoomScaleSetting(
+          context,
+          title: '图片缩放',
+          value: _settings.imageZoomScale,
+          onChanged: (value) {
+            _applySettingsPatch(
+              context,
+              patch: {'imageZoomScale': value},
+              resolveNext: (current) => current.copyWith(imageZoomScale: value),
+            );
+          },
+        ),
       ],
     );
   }
@@ -445,6 +457,88 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 : null,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildZoomScaleSetting(
+    BuildContext context, {
+    required String title,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _buildZoomPresetChip(context, 0.8, value, onChanged),
+                  _buildZoomPresetChip(context, 1.0, value, onChanged),
+                  _buildZoomPresetChip(context, 1.2, value, onChanged),
+                  _buildZoomPresetChip(context, 1.5, value, onChanged),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('自定义: '),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Slider(
+                      value: value,
+                      min: 0.5,
+                      max: 2.0,
+                      divisions: 30,
+                      label: '${(value * 100).toInt()}%',
+                      onChanged: onChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 48,
+                    child: Center(
+                      child: Text(
+                        '${(value * 100).toInt()}%',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+  }
+
+  Widget _buildZoomPresetChip(
+    BuildContext context,
+    double presetValue,
+    double currentValue,
+    ValueChanged<double> onChanged,
+  ) {
+    final isSelected = currentValue == presetValue;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: ChoiceChip(
+          label: Text('${(presetValue * 100).toInt()}%'),
+          selected: isSelected,
+          onSelected: (_) => onChanged(presetValue),
+        ),
       ),
     );
   }

@@ -34,8 +34,10 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
   List<EbookChapter> _chapters = [];
   int _currentChapterIndex = 0;
   bool _showControls = true;
+  bool _showDrawer = false;
   double _fontSize = 16.0;
   double _lineHeight = 1.5;
+  double _columnWidth = 0.8;
   ReadingTheme _theme = ReadingTheme.light;
 
   @override
@@ -118,6 +120,33 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
       isScrollControlled: true,
       builder: (context) => _buildSettingsSheet(),
     );
+  }
+
+  void _showDrawer() {
+    setState(() {
+      _showDrawer = !_showDrawer;
+    });
+  }
+
+  void _jumpToChapter(int index) {
+    if (index >= 0 && index < _chapters.length) {
+      final chapter = _chapters[index];
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EbookReaderPage(
+            chapterId: chapter.id,
+            bookId: widget.bookId,
+            source: widget.source,
+            bookTitle: widget.bookTitle,
+            bookCover: widget.bookCover,
+          ),
+        ),
+      );
+      setState(() {
+        _showDrawer = false;
+      });
+    }
   }
 
   Widget _buildSettingsSheet() {
@@ -211,6 +240,47 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
                       onPressed: () {
                         if (_lineHeight < 2.0) {
                           setState(() => _lineHeight += 0.2);
+                          setModalState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // 列宽
+                Text(
+                  '列宽',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        if (_columnWidth > 0.5) {
+                          setState(() => _columnWidth -= 0.1);
+                          setModalState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _columnWidth,
+                        min: 0.5,
+                        max: 1.0,
+                        divisions: 5,
+                        onChanged: (value) {
+                          setState(() => _columnWidth = value);
+                          setModalState(() {});
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        if (_columnWidth < 1.0) {
+                          setState(() => _columnWidth += 0.1);
                           setModalState(() {});
                         }
                       },
@@ -386,31 +456,135 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
       );
     }
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _chapterContent!.title,
-            style: TextStyle(
-              fontSize: _fontSize + 4,
-              fontWeight: FontWeight.bold,
-              color: _getThemeTextColor(),
-              height: _lineHeight,
+    return Stack(
+      children: [
+        // 主内容
+        SingleChildScrollView(
+          controller: _scrollController,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2,
+            vertical: 16,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * _columnWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _chapterContent!.title,
+                    style: TextStyle(
+                      fontSize: _fontSize + 4,
+                      fontWeight: FontWeight.bold,
+                      color: _getThemeTextColor(),
+                      height: _lineHeight,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _chapterContent!.content,
+                    style: TextStyle(
+                      fontSize: _fontSize,
+                      color: _getThemeTextColor(),
+                      height: _lineHeight,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            _chapterContent!.content,
-            style: TextStyle(
-              fontSize: _fontSize,
-              color: _getThemeTextColor(),
-              height: _lineHeight,
+        ),
+        
+        // 目录侧边栏
+        if (_showDrawer) _buildChapterDrawer(),
+      ],
+    );
+  }
+
+  Widget _buildChapterDrawer() {
+    return GestureDetector(
+      onTap: _showDrawer,
+      child: Container(
+        color: Colors.black.withOpacity(0.3),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.7,
+              height: MediaQuery.of(context).size.height,
+              color: _getThemeBackgroundColor(),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // 标题栏
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _getThemeTextColor().withOpacity(0.2),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '目录',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _getThemeTextColor(),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: _showDrawer,
+                            icon: Icon(
+                              Icons.close,
+                              color: _getThemeTextColor(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // 章节列表
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _chapters.length,
+                        itemBuilder: (context, index) {
+                          final chapter = _chapters[index];
+                          final isCurrent = index == _currentChapterIndex;
+                          return ListTile(
+                            title: Text(
+                              chapter.title,
+                              style: TextStyle(
+                                color: _getThemeTextColor(),
+                                fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '第${chapter.index + 1}章',
+                              style: TextStyle(
+                                color: _getThemeTextColor().withOpacity(0.6),
+                                fontSize: 12,
+                              ),
+                            ),
+                            selected: isCurrent,
+                            onTap: () => _jumpToChapter(index),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

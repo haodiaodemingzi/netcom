@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
@@ -51,6 +52,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   String? _error;
   late int _currentIndex;
   int _currentPage = 1;
+  bool _isFullscreen = false;
 
   final PageController _horizontalController = PageController();
   final ScrollController _verticalController = ScrollController();
@@ -67,12 +69,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     _verticalController.addListener(_handleVerticalScroll);
   }
 
-  @override
-  void dispose() {
-    _horizontalController.dispose();
-    _verticalController.dispose();
-    super.dispose();
-  }
 
   ComicChapter? get _currentChapter {
     if (_currentIndex < 0 || _currentIndex >= widget.args.chapters.length) {
@@ -170,6 +166,19 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget build(BuildContext context) {
     final chapter = _currentChapter;
     final title = chapter?.title ?? '阅读器';
+    
+    if (_isFullscreen) {
+      return Scaffold(
+        backgroundColor: _settings.backgroundColor == 'white' ? Colors.white : Colors.black,
+        body: Stack(
+          children: [
+            _buildBody(context),
+            _buildFullscreenControls(),
+          ],
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.args.comicTitle} - $title'),
@@ -179,11 +188,45 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
             icon: const Icon(Icons.refresh_rounded),
             tooltip: '刷新',
           ),
+          IconButton(
+            onPressed: _toggleFullscreen,
+            icon: const Icon(Icons.fullscreen),
+            tooltip: '全屏',
+          ),
         ],
       ),
       body: _buildBody(context),
       bottomNavigationBar: _buildBottomBar(),
     );
+  }
+
+  void _toggleFullscreen() {
+    setState(() {
+      _isFullscreen = !_isFullscreen;
+    });
+    if (_isFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_isFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
+    _horizontalController.dispose();
+    _verticalController.dispose();
+    super.dispose();
   }
 
   Widget _buildBody(BuildContext context) {
@@ -313,21 +356,64 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget _buildImageCard(ComicPageImage image) {
     final fit = _settings.imageFitMode == 'height' ? BoxFit.fitHeight : BoxFit.contain;
     final bg = _settings.backgroundColor == 'white' ? Colors.white : Colors.black;
+    final zoomScale = _settings.imageZoomScale;
+    
     return Container(
       color: bg,
       alignment: Alignment.center,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: AspectRatio(
-          aspectRatio: _calcAspectRatio(image),
-          child: Image.network(
-            image.url,
-            fit: fit,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey.shade200,
-              alignment: Alignment.center,
-              child: const Icon(Icons.broken_image),
+      child: Transform.scale(
+        scale: zoomScale,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: AspectRatio(
+            aspectRatio: _calcAspectRatio(image),
+            child: Image.network(
+              image.url,
+              fit: fit,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey.shade200,
+                alignment: Alignment.center,
+                child: const Icon(Icons.broken_image),
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullscreenControls() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withOpacity(0.7),
+                Colors.transparent,
+              ],
+            ),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _toggleFullscreen,
+                icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                tooltip: '退出全屏',
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: _loading ? null : _loadImages,
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                tooltip: '刷新',
+              ),
+            ],
           ),
         ),
       ),
