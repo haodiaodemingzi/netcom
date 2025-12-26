@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../comics/comics_models.dart';
@@ -53,6 +56,39 @@ class DownloadCenterState {
   }
 }
 
+// 失败的电子书章节ID管理
+final failedEbookChaptersProvider = StateNotifierProvider<FailedEbookChaptersNotifier, Set<String>>((ref) {
+  return FailedEbookChaptersNotifier();
+});
+
+class FailedEbookChaptersNotifier extends StateNotifier<Set<String>> {
+  FailedEbookChaptersNotifier() : super(<String>{});
+
+  void addChapterId(String chapterId) {
+    if (chapterId.isNotEmpty) {
+      state = {...state, chapterId};
+    }
+  }
+
+  void removeChapterId(String chapterId) {
+    state = state.where((id) => id != chapterId).toSet();
+  }
+
+  void clear() {
+    state = <String>{};
+  }
+
+  void retryAll() {
+    // 清空失败列表，触发重试
+    final toRetry = state.toList();
+    clear();
+    // 返回需要重试的章节ID
+    for (final chapterId in toRetry) {
+      debugPrint('重试章节: $chapterId');
+    }
+  }
+}
+
 final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, DownloadCenterState>((ref) {
   final comicsRemote = ref.watch(comicsRemoteServiceProvider);
   final videosRemote = ref.watch(videosRemoteServiceProvider);
@@ -61,6 +97,7 @@ final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, Dow
   final ebookDownloader = ref.watch(ebookChapterDownloaderProvider);
   final storage = ref.watch(appStorageProvider).maybeWhen(data: (value) => value, orElse: () => null);
   final settingsRepo = ref.watch(settingsRepositoryProvider);
+  final failedChaptersNotifier = ref.watch(failedEbookChaptersProvider.notifier);
   return DownloadCenterNotifier(
     comicsRemote,
     videosRemote,
@@ -69,6 +106,7 @@ final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, Dow
     ebookDownloader,
     storage,
     settingsRepo,
+    failedChaptersNotifier,
   );
 });
 
@@ -81,6 +119,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     this._ebookDownloader,
     this._storage,
     this._settingsRepo,
+    this._failedEbookChaptersNotifier,
   )
       : super(
           DownloadCenterState(
@@ -119,8 +158,13 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
   final EbookChapterDownloader _ebookDownloader;
   final AppStorage? _storage;
   final SettingsRepository? _settingsRepo;
+  final FailedEbookChaptersNotifier _failedEbookChaptersNotifier;
   final Map<String, CancelToken> _taskTokens = <String, CancelToken>{};
   late int _maxConcurrent = _resolveInitialConcurrent();
+  // 下载限速：每秒最多3个请求
+  late int _downloadRateLimit = 3;
+  // 随机延迟范围（秒）
+  final _random = Random();
 
   int _resolveInitialConcurrent() {
     final repo = _settingsRepo;
@@ -568,7 +612,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     List<VideoEpisode> videoEpisodes = const <VideoEpisode>[],
     EbookDetail? ebookDetail,
     List<EbookChapter> ebookChapters = const <EbookChapter>[],
-  }) {
+  }) async {
     final runningCount = state.queue.where((item) => item.status == DownloadStatus.downloading).length;
     if (runningCount >= _maxConcurrent) {
       return;
@@ -578,10 +622,19 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       return;
     }
     var available = _maxConcurrent - runningCount;
+    // 随机延迟函数：1-3秒
+    Future<void> _delay() async {
+      final delayMs = _random.nextInt(2000) + 1000;
+      await Future.delayed(Duration(milliseconds: delayMs));
+    }
+    
     for (final item in pending) {
       if (available <= 0) {
         return;
       }
+      // 添加随机延迟
+      await _delay();
+      
       if (item.type == DownloadType.comic) {
         final resolvedDetail = _resolveDetail(item, detail);
         final resolvedChapter = _resolveChapter(item, chapters);
@@ -641,6 +694,9 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
       _taskTokens.remove(item.id);
     } catch (e) {
       _taskTokens.remove(item.id);
+      // 记录失败的章节ID，用于重试
+      _failedEbookChaptersNotifier.addChapterId(chapter.id);
+      debugPrint('记录失败的章节: ${chapter.id}');
       _updateQueueItem(item.id, status: DownloadStatus.failed, error: e.toString());
     }
     _processQueue();
