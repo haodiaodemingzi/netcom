@@ -18,13 +18,36 @@ class EbooksRemoteService {
   Future<List<EbookCategory>> fetchCategories(String source) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/categories',
+        '/ebooks/categories',
         queryParameters: {'source': source},
       );
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] as List<dynamic>;
-        return data
+        final responseData = response.data;
+        if (responseData == null) {
+          return [];
+        }
+        
+        List<dynamic> categoriesList;
+        if (responseData is Map) {
+          final data = responseData['data'];
+          if (data == null) {
+            return [];
+          }
+          if (data is List) {
+            categoriesList = data;
+          } else if (data is Map && data.containsKey('categories')) {
+            categoriesList = data['categories'] as List<dynamic>;
+          } else {
+            throw Exception('Unexpected data format: data is not a list');
+          }
+        } else if (responseData is List) {
+          categoriesList = responseData;
+        } else {
+          throw Exception('Unexpected response format: ${responseData.runtimeType}');
+        }
+        
+        return categoriesList
             .map((item) => EbookCategory.fromJson(item as Map<String, dynamic>))
             .toList();
       } else {
@@ -32,17 +55,37 @@ class EbooksRemoteService {
       }
     } on DioException catch (e) {
       throw _handleDioError(e, '获取分类失败');
+    } catch (e) {
+      throw Exception('解析分类数据失败: ${e.toString()}');
     }
   }
 
   /// 获取数据源列表
   Future<List<EbookSourceInfo>> fetchSources() async {
     try {
-      final response = await _dio.get('/api/ebooks/sources');
+      final response = await _dio.get('/ebooks/sources');
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] as List<dynamic>;
-        return data
+        final data = response.data;
+        List<dynamic> sourcesList;
+        
+        if (data is Map) {
+          if (data.containsKey('data') && data['data'] is Map && data['data'].containsKey('sources')) {
+            sourcesList = data['data']['sources'] as List<dynamic>;
+          } else if (data.containsKey('sources')) {
+            sourcesList = data['sources'] as List<dynamic>;
+          } else if (data.containsKey('data') && data['data'] is List) {
+            sourcesList = data['data'] as List<dynamic>;
+          } else {
+            throw Exception('Unexpected data format: missing sources field');
+          }
+        } else if (data is List) {
+          sourcesList = data;
+        } else {
+          throw Exception('Unexpected data format: ${data.runtimeType}');
+        }
+        
+        return sourcesList
             .map((item) => EbookSourceInfo.fromJson(item as Map<String, dynamic>))
             .toList();
       } else {
@@ -62,7 +105,7 @@ class EbooksRemoteService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/category/$categoryId',
+        '/ebooks/category/$categoryId',
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -71,8 +114,31 @@ class EbooksRemoteService {
       );
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] as List<dynamic>;
-        return data
+        final responseData = response.data;
+        if (responseData == null) {
+          return [];
+        }
+        
+        List<dynamic> booksList;
+        if (responseData is Map) {
+          final data = responseData['data'];
+          if (data == null) {
+            return [];
+          }
+          if (data is List) {
+            booksList = data;
+          } else if (data is Map && data.containsKey('books')) {
+            booksList = data['books'] as List<dynamic>;
+          } else {
+            throw Exception('Unexpected data format: data is not a list');
+          }
+        } else if (responseData is List) {
+          booksList = responseData;
+        } else {
+          throw Exception('Unexpected response format: ${responseData.runtimeType}');
+        }
+        
+        return booksList
             .map((item) => EbookSummary.fromJson(item as Map<String, dynamic>))
             .toList();
       } else {
@@ -80,6 +146,8 @@ class EbooksRemoteService {
       }
     } on DioException catch (e) {
       throw _handleDioError(e, '获取书籍列表失败');
+    } catch (e) {
+      throw Exception('解析书籍列表失败: ${e.toString()}');
     }
   }
 
@@ -92,7 +160,7 @@ class EbooksRemoteService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/search',
+        '/ebooks/search',
         queryParameters: {
           'keyword': keyword,
           'page': page,
@@ -102,8 +170,31 @@ class EbooksRemoteService {
       );
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] as List<dynamic>;
-        return data
+        final responseData = response.data;
+        if (responseData == null) {
+          return [];
+        }
+        
+        List<dynamic> booksList;
+        if (responseData is Map) {
+          final data = responseData['data'];
+          if (data == null) {
+            return [];
+          }
+          if (data is List) {
+            booksList = data;
+          } else if (data is Map && data.containsKey('books')) {
+            booksList = data['books'] as List<dynamic>;
+          } else {
+            throw Exception('Unexpected data format: data is not a list');
+          }
+        } else if (responseData is List) {
+          booksList = responseData;
+        } else {
+          throw Exception('Unexpected response format: ${responseData.runtimeType}');
+        }
+        
+        return booksList
             .map((item) => EbookSummary.fromJson(item as Map<String, dynamic>))
             .toList();
       } else {
@@ -111,6 +202,8 @@ class EbooksRemoteService {
       }
     } on DioException catch (e) {
       throw _handleDioError(e, '搜索书籍失败');
+    } catch (e) {
+      throw Exception('解析搜索结果失败: ${e.toString()}');
     }
   }
 
@@ -121,7 +214,7 @@ class EbooksRemoteService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/$bookId',
+        '/ebooks/$bookId',
         queryParameters: {'source': source},
       );
 
@@ -143,7 +236,7 @@ class EbooksRemoteService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/$bookId/chapters',
+        '/ebooks/$bookId/chapters',
         queryParameters: {'source': source},
       );
 
@@ -167,7 +260,7 @@ class EbooksRemoteService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/ebooks/chapters/$chapterId/content',
+        '/ebooks/chapters/$chapterId/content',
         queryParameters: {'source': source},
       );
 

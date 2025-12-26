@@ -193,25 +193,6 @@
       "author": "NetCom Team"
     },
     {
-      "id": "kanunu8",
-      "name": "努努书坊",
-      "description": "努努书坊(kanunu8.com) - 提供大量免费电子书",
-      "url": "https://kanunu8.com",
-      "base_url": "https://www.kanunu8.com",
-      "icon": "https://via.placeholder.com/128/A8E6CF/000000?text=努努",
-      "category": "ebook",
-      "tags": ["电子书", "小说", "阅读"],
-      "enabled": true,
-      "proxy": {
-        "enabled": false,
-        "host": "127.0.0.1",
-        "port": 7897,
-        "type": "http"
-      },
-      "version": "1.0.0",
-      "author": "NetCom Team"
-    },
-    {
       "id": "ttkan",
       "name": "天天看小说",
       "description": "天天看小说(ttkan.co) - 海量小说免费在线阅读",

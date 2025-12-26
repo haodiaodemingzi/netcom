@@ -1,103 +1,192 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/features/ebooks/data/ebooks_remote_service.dart';
 import 'package:flutter_app/features/ebooks/ebooks_models.dart';
+import '../../core/storage/storage_providers.dart';
+import '../../core/storage/storage_repository.dart';
 
 /// 电子书远程服务提供者
 final ebooksRemoteServiceProvider = Provider<EbooksRemoteService>((ref) {
   return EbooksRemoteService();
 });
 
+enum EbooksViewMode { grid, list }
+
 /// 电子书状态
 class EbooksState {
   final List<EbookCategory> categories;
   final List<EbookSummary> books;
+  final List<EbookSourceInfo> sources;
   final EbookSourceInfo? selectedSource;
   final EbookCategory? selectedCategory;
   final String searchQuery;
-  final bool isLoading;
+  final bool loading;
+  final bool loadingMore;
   final bool hasMore;
   final int currentPage;
-  final bool isSearching;
+  final bool searching;
   final String? error;
+  final EbooksViewMode viewMode;
 
   const EbooksState({
     this.categories = const [],
     this.books = const [],
+    this.sources = const [],
     this.selectedSource,
     this.selectedCategory,
     this.searchQuery = '',
-    this.isLoading = false,
+    this.loading = false,
+    this.loadingMore = false,
     this.hasMore = true,
     this.currentPage = 1,
-    this.isSearching = false,
+    this.searching = false,
     this.error,
+    this.viewMode = EbooksViewMode.grid,
   });
+
+  bool get inSearchMode => searchQuery.trim().isNotEmpty;
 
   EbooksState copyWith({
     List<EbookCategory>? categories,
     List<EbookSummary>? books,
+    List<EbookSourceInfo>? sources,
     EbookSourceInfo? selectedSource,
     EbookCategory? selectedCategory,
     String? searchQuery,
-    bool? isLoading,
+    bool? loading,
+    bool? loadingMore,
     bool? hasMore,
     int? currentPage,
-    bool? isSearching,
+    bool? searching,
     String? error,
+    EbooksViewMode? viewMode,
   }) {
     return EbooksState(
       categories: categories ?? this.categories,
       books: books ?? this.books,
+      sources: sources ?? this.sources,
       selectedSource: selectedSource ?? this.selectedSource,
       selectedCategory: selectedCategory ?? this.selectedCategory,
       searchQuery: searchQuery ?? this.searchQuery,
-      isLoading: isLoading ?? this.isLoading,
+      loading: loading ?? this.loading,
+      loadingMore: loadingMore ?? this.loadingMore,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
-      isSearching: isSearching ?? this.isSearching,
-      error: error ?? this.error,
+      searching: searching ?? this.searching,
+      error: error,
+      viewMode: viewMode ?? this.viewMode,
     );
   }
 }
 
 /// 电子书状态通知器
 class EbooksNotifier extends StateNotifier<EbooksState> {
-  final EbooksRemoteService _remoteService;
+  EbooksNotifier({
+    required EbooksRemoteService remoteService,
+    required SettingsRepository? settingsRepository,
+  })  : _remoteService = remoteService,
+        _settingsRepository = settingsRepository,
+        super(const EbooksState()) {
+    _hydrateViewMode();
+  }
 
-  EbooksNotifier(this._remoteService) : super(const EbooksState()) {
-    _initialize();
+  final EbooksRemoteService _remoteService;
+  final SettingsRepository? _settingsRepository;
+  bool _initialized = false;
+
+  void _hydrateViewMode() {
+    final settings = _settingsRepository?.load();
+    if (settings == null) {
+      return;
+    }
+    final mode = settings.viewMode == 'list' ? EbooksViewMode.list : EbooksViewMode.grid;
+    state = state.copyWith(viewMode: mode);
+  }
+
+  Future<void> toggleViewMode() async {
+    final next = state.viewMode == EbooksViewMode.grid ? EbooksViewMode.list : EbooksViewMode.grid;
+    state = state.copyWith(viewMode: next);
+    await _settingsRepository?.update({'viewMode': next == EbooksViewMode.list ? 'list' : 'card'});
   }
 
   /// 初始化
   Future<void> _initialize() async {
-    try {
-      // 获取数据源列表
-      final sources = await _remoteService.fetchSources();
-      if (sources.isNotEmpty) {
-        state = state.copyWith(selectedSource: sources.first);
-        await _loadCategories(sources.first.id);
-      }
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
+    if (_initialized || !mounted) {
+      return;
     }
+    
+    try {
+      state = state.copyWith(loading: true, error: null);
+      final sources = await _remoteService.fetchSources();
+      
+      if (!mounted) return;
+      
+      if (sources.isEmpty) {
+        state = state.copyWith(
+          loading: false,
+          error: '未找到可用的数据源',
+        );
+        return;
+      }
+      
+      state = state.copyWith(
+        sources: sources,
+        selectedSource: sources.first,
+      );
+      
+      await _loadCategories(sources.first.id);
+      _initialized = true;
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        loading: false,
+        error: '加载数据源失败: ${e.toString()}',
+      );
+    }
+  }
+
+  /// 确保初始化完成
+  Future<void> ensureWarm() async {
+    if (!mounted) return;
+    
+    if (!_initialized) {
+      await _initialize();
+      if (!mounted) return;
+    }
+    
+    if (state.selectedCategory == null && state.categories.isNotEmpty) {
+      state = state.copyWith(selectedCategory: state.categories.first);
+    }
+    
+    if (state.books.isEmpty && state.selectedCategory != null && !state.loading) {
+      await loadBooks(reset: true);
+    }
+  }
+
+  /// 加载更多
+  Future<void> loadMore() async {
+    if (state.inSearchMode) {
+      return;
+    }
+    await loadBooks(reset: false);
   }
 
   /// 加载分类
   Future<void> _loadCategories(String sourceId) async {
     try {
-      state = state.copyWith(isLoading: true, error: null);
       final categories = await _remoteService.fetchCategories(sourceId);
+      if (!mounted) return;
+      
       state = state.copyWith(
         categories: categories,
-        isLoading: false,
+        selectedCategory: categories.isNotEmpty ? categories.first : null,
+        loading: false,
       );
-      
-      // 自动选择第一个分类
-      if (categories.isNotEmpty) {
-        await changeCategory(categories.first);
-      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      if (!mounted) return;
+      state = state.copyWith(
+        loading: false,
+        error: '加载分类失败: ${e.toString()}',
+      );
     }
   }
 
@@ -105,8 +194,23 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
   Future<void> changeSource(EbookSourceInfo source) async {
     if (state.selectedSource?.id == source.id) return;
     
-    state = state.copyWith(selectedSource: source, books: []);
+    state = state.copyWith(
+      selectedSource: source,
+      books: [],
+      categories: [],
+      selectedCategory: null,
+      currentPage: 1,
+      hasMore: true,
+      loading: true,
+      error: null,
+    );
+    
     await _loadCategories(source.id);
+    if (!mounted) return;
+    
+    if (state.selectedCategory != null) {
+      await loadBooks(reset: true);
+    }
   }
 
   /// 切换分类
@@ -118,6 +222,7 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
       books: [],
       currentPage: 1,
       hasMore: true,
+      error: null,
     );
     await loadBooks(reset: true);
   }
@@ -131,10 +236,11 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
 
     state = state.copyWith(
       searchQuery: keyword,
-      isSearching: true,
+      searching: true,
       books: [],
       currentPage: 1,
       hasMore: true,
+      error: null,
     );
 
     try {
@@ -144,13 +250,15 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
         source: sourceId,
         page: 1,
       );
+      if (!mounted) return;
       state = state.copyWith(
         books: books,
-        isSearching: false,
-        hasMore: books.length == 20, // 假设每页20条
+        searching: false,
+        hasMore: books.isNotEmpty,
       );
     } catch (e) {
-      state = state.copyWith(isSearching: false, error: e.toString());
+      if (!mounted) return;
+      state = state.copyWith(searching: false, error: e.toString());
     }
   }
 
@@ -159,7 +267,7 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
     if (state.searchQuery.isNotEmpty) {
       state = state.copyWith(
         searchQuery: '',
-        isSearching: false,
+        searching: false,
         books: [],
         currentPage: 1,
         hasMore: true,
@@ -172,7 +280,9 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
 
   /// 加载书籍
   Future<void> loadBooks({bool reset = false}) async {
-    if (state.isLoading) return;
+    if (!mounted) return;
+    if (state.loading || state.loadingMore) return;
+    if (!reset && !state.hasMore) return;
     
     final sourceId = state.selectedSource?.id ?? 'kanunu8';
     final categoryId = state.selectedCategory?.id;
@@ -180,7 +290,11 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
     if (categoryId == null) return;
 
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      if (reset) {
+        state = state.copyWith(loading: true, error: null);
+      } else {
+        state = state.copyWith(loadingMore: true);
+      }
       
       final page = reset ? 1 : state.currentPage;
       final books = await _remoteService.fetchBooksByCategory(
@@ -189,39 +303,46 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
         page: page,
       );
 
+      if (!mounted) return;
       final allBooks = reset ? books : [...state.books, ...books];
-      final hasMore = books.length == 20; // 假设每页20条
+      // 只有当返回空列表时才认为没有更多数据
+      final hasMore = books.isNotEmpty;
 
       state = state.copyWith(
         books: allBooks,
-        isLoading: false,
+        loading: false,
+        loadingMore: false,
         currentPage: page + 1,
         hasMore: hasMore,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      if (!mounted) return;
+      state = state.copyWith(
+        loading: false,
+        loadingMore: false,
+        error: e.toString(),
+      );
     }
   }
 
   /// 刷新
   Future<void> refresh() async {
-    if (state.isSearching) {
+    if (state.inSearchMode) {
       await searchBooks(state.searchQuery);
     } else {
       await loadBooks(reset: true);
     }
-  }
-
-  /// 清除错误
-  void clearError() {
-    state = state.copyWith(error: null);
   }
 }
 
 /// 电子书提供者
 final ebooksProvider = StateNotifierProvider<EbooksNotifier, EbooksState>((ref) {
   final remoteService = ref.watch(ebooksRemoteServiceProvider);
-  return EbooksNotifier(remoteService);
+  final settingsRepository = ref.watch(settingsRepositoryProvider);
+  return EbooksNotifier(
+    remoteService: remoteService,
+    settingsRepository: settingsRepository,
+  );
 });
 
 /// 电子书详情状态

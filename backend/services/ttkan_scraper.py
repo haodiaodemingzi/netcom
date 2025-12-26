@@ -123,24 +123,14 @@ class TtkanScraper(BaseEbookScraper):
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 查找所有小说条目 - 先找到 div.pure-g 容器,然后找其中包含 novel_cell 的子div
-            pure_g_container = soup.find('div', class_='pure-g')
-            if not pure_g_container:
-                logger.warning("未找到 div.pure-g 容器")
-                return {'books': [], 'total': 0, 'page': page, 'hasMore': False}
-            
-            # 在容器中查找所有包含 novel_cell 的 div
-            novel_items = pure_g_container.find_all('div', class_=lambda x: x and 'novel_cell' in x)
+            # 查找所有包含 novel_cell 的 div (不限制在特定的 pure-g 容器中)
+            novel_items = soup.find_all('div', class_=lambda x: x and 'novel_cell' in x)
             logger.info(f"找到 {len(novel_items)} 个小说条目")
             
             for item in novel_items:
                 try:
-                    # 查找 h3 标签内的链接
-                    h3 = item.find('h3')
-                    if not h3:
-                        continue
-                    
-                    link = h3.find('a', href=re.compile(r'/novel/chapters/'))
+                    # 查找书籍链接 - 可能在 h3 > a 或直接在 a 标签中
+                    link = item.find('a', href=re.compile(r'/novel/chapters/'))
                     if not link:
                         continue
                     
@@ -151,15 +141,21 @@ class TtkanScraper(BaseEbookScraper):
                     # 提取书籍ID
                     book_id = self._extract_book_id(book_url)
                     if not book_id:
+                        logger.debug(f"无法提取书籍ID: {book_url}")
                         continue
                     
-                    # 提取书名
-                    title = link.get_text(strip=True)
+                    # 提取书名 - 从 h3 标签或链接文本中获取
+                    h3 = item.find('h3')
+                    if h3:
+                        title = h3.get_text(strip=True)
+                    else:
+                        title = link.get_text(strip=True)
+                    
                     if not title:
+                        logger.debug(f"无法提取书名: {book_id}")
                         continue
                     
-                    # 构建封面图片URL - 使用book_id直接构建
-                    # 格式: https://static.ttkan.co/cover/{book_id}.jpg?w=75&h=100&q=100
+                    # 构建封面图片URL
                     cover = f"https://static.ttkan.co/cover/{book_id}.jpg?w=75&h=100&q=100"
                     
                     # 提取作者和简介 - 从 ul > li 中提取
@@ -169,13 +165,13 @@ class TtkanScraper(BaseEbookScraper):
                     # 查找 ul 标签
                     ul = item.find('ul')
                     if ul:
-                        lis = ul.find_all('li')
+                        lis = ul.find_all('li', recursive=False)
                         for li in lis:
                             text = li.get_text(strip=True)
-                            if text.startswith('作者：'):
-                                author = text.replace('作者：', '').strip()
-                            elif text.startswith('简介：'):
-                                description = text.replace('简介：', '').strip()
+                            if '作者：' in text or '作者:' in text:
+                                author = text.replace('作者：', '').replace('作者:', '').strip()
+                            elif '简介：' in text or '简介:' in text:
+                                description = text.replace('简介：', '').replace('简介:', '').strip()
                     
                     books.append({
                         'id': book_id,
@@ -188,7 +184,7 @@ class TtkanScraper(BaseEbookScraper):
                     })
                     
                 except Exception as e:
-                    logger.debug(f"解析书籍条目失败: {str(e)}")
+                    logger.warning(f"解析书籍条目失败: {str(e)}")
                     continue
             
             # 去重

@@ -36,7 +36,17 @@ def get_categories():
     """获取所有分类"""
     source = get_source_param()
     scraper = EbookScraperFactory.get_scraper(source)
-    return success_response(scraper.get_categories())
+    result = scraper.get_categories()
+    logger.info(f"[分类接口] source={source}, scraper返回: {type(result)}")
+    if isinstance(result, dict) and 'categories' in result:
+        final_result = result['categories']
+        logger.info(f"[分类接口] 提取categories字段, 共 {len(final_result)} 个分类")
+        if final_result:
+            logger.info(f"[分类接口] 第一个分类: {final_result[0]}")
+        return success_response(final_result)
+    final_result = result if isinstance(result, list) else []
+    logger.info(f"[分类接口] 直接返回列表, 共 {len(final_result)} 个分类")
+    return success_response(final_result)
 
 @ebook_bp.route('/ebooks/category/<category_id>', methods=['GET'])
 @cache_response(timeout=600, key_prefix='ebook_category')
@@ -46,7 +56,21 @@ def get_books_by_category(category_id):
     page, limit = get_pagination_params()
     source = get_source_param()
     scraper = EbookScraperFactory.get_scraper(source)
-    return success_response(scraper.get_books_by_category(category_id, page, limit))
+    result = scraper.get_books_by_category(category_id, page, limit)
+    logger.info(f"[书籍列表接口] source={source}, category_id={category_id}, page={page}, scraper返回类型: {type(result)}")
+    
+    # 统一返回格式: 如果scraper返回字典且包含books字段,提取books数组
+    if isinstance(result, dict):
+        logger.info(f"[书籍列表接口] 返回字典, keys: {result.keys()}")
+        if 'books' in result:
+            books = result['books']
+            logger.info(f"[书籍列表接口] 提取books字段, 返回 {len(books)} 本书籍")
+            return success_response(books)
+    
+    # 如果是列表,直接返回
+    final_result = result if isinstance(result, list) else []
+    logger.info(f"[书籍列表接口] 最终返回: {len(final_result)} 本书籍")
+    return success_response(final_result)
 
 @ebook_bp.route('/ebooks/<book_id>', methods=['GET'])
 @cache_response(timeout=1800, key_prefix='ebook_detail')
@@ -92,14 +116,23 @@ def search_books():
     page, limit = get_pagination_params()
     source = get_source_param()
     scraper = EbookScraperFactory.get_scraper(source)
-    return success_response(scraper.search_books(keyword, page, limit))
+    result = scraper.search_books(keyword, page, limit)
+    
+    # 统一返回格式: 如果scraper返回字典且包含books字段,提取books数组
+    if isinstance(result, dict) and 'books' in result:
+        return success_response(result['books'])
+    
+    # 如果是列表,直接返回
+    return success_response(result if isinstance(result, list) else [])
 
 @ebook_bp.route('/ebooks/sources', methods=['GET'])
 @handle_errors("获取数据源列表失败")
 def get_sources():
     """获取所有可用的电子书数据源"""
     sources = EbookScraperFactory.get_available_sources()
-    return success_response({'sources': sources})
+    result = {'sources': sources}
+    logger.info(f"[数据源接口] 返回数据: {result}")
+    return success_response(result)
 
 async def fetch_page_async(scraper, category_id, page, limit, category, config, semaphore):
     """异步获取单页数据"""

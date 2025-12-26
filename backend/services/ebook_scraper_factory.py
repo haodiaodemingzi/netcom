@@ -12,11 +12,6 @@ class EbookScraperFactory:
     """电子书爬虫工厂类"""
     
     _scrapers = {
-        'kanunu8': {
-            'class': KanuNu8Scraper,
-            'name': '努努书坊',
-            'description': '努努书坊(kanunu8.com) - 提供大量免费电子书',
-        },
         'ttkan': {
             'class': TtkanScraper,
             'name': '天天看小说',
@@ -39,7 +34,7 @@ class EbookScraperFactory:
         }
      }
 
-    _default_source = 'kanunu8'
+    _default_source = 'ttkan'
     _source_market = None
 
     @classmethod

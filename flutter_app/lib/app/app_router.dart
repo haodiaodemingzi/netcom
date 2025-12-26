@@ -167,9 +167,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'ebookDetail',
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
-          final extra = state.extra as Map<String, dynamic>?;
-          final source = extra?['source'] as String? ?? 'kanunu8';
-          return EbookDetailPage(bookId: id, source: source);
+          return EbookDetailPage(bookId: id);
         },
       ),
       GoRoute(
@@ -177,18 +175,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'ebookReader',
         builder: (context, state) {
           final chapterId = state.pathParameters['chapterId'] ?? '';
-          final extra = state.extra as Map<String, dynamic>?;
-          final bookId = extra?['bookId'] as String? ?? '';
-          final source = extra?['source'] as String? ?? 'kanunu8';
-          final bookTitle = extra?['bookTitle'] as String? ?? '';
-          final bookCover = extra?['bookCover'] as String? ?? '';
-          return EbookReaderPage(
-            chapterId: chapterId,
-            bookId: bookId,
-            source: source,
-            bookTitle: bookTitle,
-            bookCover: bookCover,
-          );
+          return EbookReaderPage(chapterId: chapterId);
         },
       ),
       GoRoute(

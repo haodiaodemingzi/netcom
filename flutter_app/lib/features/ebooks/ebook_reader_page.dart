@@ -1,38 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_app/features/ebooks/data/ebooks_remote_service.dart';
-import 'package:flutter_app/features/ebooks/ebooks_models.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/storage/storage_repository.dart';
+import '../../core/storage/storage_providers.dart';
+import 'ebook_models.dart';
+import 'ebook_providers.dart';
 
 class EbookReaderPage extends ConsumerStatefulWidget {
   final String chapterId;
-  final String bookId;
-  final String source;
-  final String bookTitle;
-  final String bookCover;
 
   const EbookReaderPage({
     super.key,
     required this.chapterId,
-    required this.bookId,
-    required this.source,
-    required this.bookTitle,
-    required this.bookCover,
   });
 
   @override
   ConsumerState<EbookReaderPage> createState() => _EbookReaderPageState();
 }
 
-class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
-    with WidgetsBindingObserver {
-  final EbooksRemoteService _remoteService = EbooksRemoteService();
+class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
   final ScrollController _scrollController = ScrollController();
-  
-  bool _isLoading = true;
-  String? _error;
-  ChapterContent? _chapterContent;
-  List<EbookChapter> _chapters = [];
-  int _currentChapterIndex = 0;
+
   bool _showControls = true;
   bool _showDrawer = false;
   double _fontSize = 16.0;
@@ -43,69 +32,30 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _loadChapter();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chapterContentProvider(widget.chapterId).notifier).load();
+    });
+  }
+
+  void _saveReadingProgress() {
+    final historyRepo = ref.read(historyRepositoryProvider);
+    if (historyRepo != null) {
+      final state = ref.watch(chapterContentProvider(widget.chapterId));
+      if (state.content != null) {
+        historyRepo.addEbook(
+          id: widget.chapterId,
+          title: state.content!.title,
+          chapterId: widget.chapterId,
+          page: 1,
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _saveReadingProgress();
-    }
-  }
-
-  Future<void> _loadChapter() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      // 加载章节内容
-      final content = await _remoteService.fetchChapterContent(
-        chapterId: widget.chapterId,
-        source: widget.source,
-      );
-
-      // 加载章节列表
-      final chapters = await _remoteService.fetchChapters(
-        bookId: widget.bookId,
-        source: widget.source,
-      );
-
-      // 找到当前章节索引
-      final currentIndex = chapters.indexWhere((c) => c.id == widget.chapterId);
-
-      setState(() {
-        _chapterContent = content;
-        _chapters = chapters;
-        _currentChapterIndex = currentIndex >= 0 ? currentIndex : 0;
-        _isLoading = false;
-      });
-
-      // 恢复阅读进度
-      _restoreReadingProgress();
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _saveReadingProgress() {
-    // TODO: 保存阅读进度到本地存储
-  }
-
-  void _restoreReadingProgress() {
-    // TODO: 从本地存储恢复阅读进度
   }
 
   void _toggleControls() {
@@ -122,31 +72,277 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
     );
   }
 
-  void _showDrawer() {
+  void _toggleDrawer() {
     setState(() {
       _showDrawer = !_showDrawer;
     });
   }
 
-  void _jumpToChapter(int index) {
-    if (index >= 0 && index < _chapters.length) {
-      final chapter = _chapters[index];
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EbookReaderPage(
-            chapterId: chapter.id,
-            bookId: widget.bookId,
-            source: widget.source,
-            bookTitle: widget.bookTitle,
-            bookCover: widget.bookCover,
-          ),
+  void _jumpToChapter(String chapterId) {
+    if (chapterId.isEmpty) {
+      return;
+    }
+    context.push('/ebook-reader/$chapterId');
+    setState(() {
+      _showDrawer = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(chapterContentProvider(widget.chapterId));
+
+    return Scaffold(
+      backgroundColor: _getThemeBackgroundColor(),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 内容区域
+            GestureDetector(
+              onTap: _toggleControls,
+              child: _buildContent(state),
+            ),
+
+            // 控制栏
+            if (_showControls) ...[
+              _buildTopBar(state),
+              _buildBottomBar(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(EbookChapterContentState state) {
+    if (state.loading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // 保存阅读进度到历史记录
+    if (state.content != null && state.error == null) {
+      _saveReadingProgress();
+    }
+
+    if (state.error != null && state.content == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              state.error!,
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                ref.read(chapterContentProvider(widget.chapterId).notifier).load();
+              },
+              child: const Text('重试'),
+            ),
+          ],
         ),
       );
-      setState(() {
-        _showDrawer = false;
-      });
     }
+
+    if (state.content == null) {
+      return const Center(
+        child: Text('章节内容不存在'),
+      );
+    }
+
+    return Stack(
+      children: [
+        // 主内容
+        SingleChildScrollView(
+          controller: _scrollController,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2,
+            vertical: 16,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * _columnWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.content!.title,
+                    style: TextStyle(
+                      fontSize: _fontSize + 4,
+                      fontWeight: FontWeight.bold,
+                      color: _getThemeTextColor(),
+                      height: _lineHeight,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.content!.content,
+                    style: TextStyle(
+                      fontSize: _fontSize,
+                      color: _getThemeTextColor(),
+                      height: _lineHeight,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // 目录侧边栏
+        if (_showDrawer) _buildChapterDrawer(),
+      ],
+    );
+  }
+
+  Widget _buildChapterDrawer() {
+    return GestureDetector(
+      onTap: _toggleDrawer,
+      child: Container(
+        color: Colors.black.withOpacity(0.3),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.7,
+              height: MediaQuery.of(context).size.height,
+              color: _getThemeBackgroundColor(),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // 标题栏
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _getThemeTextColor().withOpacity(0.2),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '目录',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _getThemeTextColor(),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: _toggleDrawer,
+                            icon: Icon(
+                              Icons.close,
+                              color: _getThemeTextColor(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar(EbookChapterContentState state) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _getThemeBackgroundColor().withOpacity(0.95),
+            _getThemeBackgroundColor().withOpacity(0.8),
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(
+                Icons.arrow_back,
+                color: _getThemeTextColor(),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                state.content?.title ?? '章节',
+                style: TextStyle(
+                  color: _getThemeTextColor(),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              onPressed: _showSettings,
+              icon: Icon(
+                Icons.settings,
+                color: _getThemeTextColor(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              _getThemeBackgroundColor().withOpacity(0.95),
+              _getThemeBackgroundColor().withOpacity(0.8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Row(
+            children: [
+              const Spacer(),
+              IconButton(
+                onPressed: _toggleDrawer,
+                icon: Icon(
+                  Icons.list,
+                  color: _getThemeTextColor(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildSettingsSheet() {
@@ -166,7 +362,7 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 24),
-                
+
                 // 字体大小
                 Text(
                   '字体大小',
@@ -207,7 +403,7 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // 行距
                 Text(
                   '行距',
@@ -248,7 +444,7 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // 列宽
                 Text(
                   '列宽',
@@ -289,7 +485,7 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // 主题
                 Text(
                   '主题',
@@ -355,346 +551,6 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage>
       case ReadingTheme.green:
         return const Color(0xFF2E7D32);
     }
-  }
-
-  void _previousChapter() {
-    if (_currentChapterIndex > 0) {
-      final previousChapter = _chapters[_currentChapterIndex - 1];
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EbookReaderPage(
-            chapterId: previousChapter.id,
-            bookId: widget.bookId,
-            source: widget.source,
-            bookTitle: widget.bookTitle,
-            bookCover: widget.bookCover,
-          ),
-        ),
-      );
-    }
-  }
-
-  void _nextChapter() {
-    if (_currentChapterIndex < _chapters.length - 1) {
-      final nextChapter = _chapters[_currentChapterIndex + 1];
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EbookReaderPage(
-            chapterId: nextChapter.id,
-            bookId: widget.bookId,
-            source: widget.source,
-            bookTitle: widget.bookTitle,
-            bookCover: widget.bookCover,
-          ),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _getThemeBackgroundColor(),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // 内容区域
-            GestureDetector(
-              onTap: _toggleControls,
-              child: _buildContent(),
-            ),
-            
-            // 控制栏
-            if (_showControls) ...[
-              _buildTopBar(),
-              _buildBottomBar(),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              style: Theme.of(context).textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadChapter,
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_chapterContent == null) {
-      return const Center(
-        child: Text('章节内容不存在'),
-      );
-    }
-
-    return Stack(
-      children: [
-        // 主内容
-        SingleChildScrollView(
-          controller: _scrollController,
-          padding: EdgeInsets.symmetric(
-            horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2,
-            vertical: 16,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * _columnWidth,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _chapterContent!.title,
-                    style: TextStyle(
-                      fontSize: _fontSize + 4,
-                      fontWeight: FontWeight.bold,
-                      color: _getThemeTextColor(),
-                      height: _lineHeight,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _chapterContent!.content,
-                    style: TextStyle(
-                      fontSize: _fontSize,
-                      color: _getThemeTextColor(),
-                      height: _lineHeight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        
-        // 目录侧边栏
-        if (_showDrawer) _buildChapterDrawer(),
-      ],
-    );
-  }
-
-  Widget _buildChapterDrawer() {
-    return GestureDetector(
-      onTap: _showDrawer,
-      child: Container(
-        color: Colors.black.withOpacity(0.3),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.7,
-              height: MediaQuery.of(context).size.height,
-              color: _getThemeBackgroundColor(),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    // 标题栏
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: _getThemeTextColor().withOpacity(0.2),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '目录',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _getThemeTextColor(),
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: _showDrawer,
-                            icon: Icon(
-                              Icons.close,
-                              color: _getThemeTextColor(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // 章节列表
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _chapters.length,
-                        itemBuilder: (context, index) {
-                          final chapter = _chapters[index];
-                          final isCurrent = index == _currentChapterIndex;
-                          return ListTile(
-                            title: Text(
-                              chapter.title,
-                              style: TextStyle(
-                                color: _getThemeTextColor(),
-                                fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '第${chapter.index + 1}章',
-                              style: TextStyle(
-                                color: _getThemeTextColor().withOpacity(0.6),
-                                fontSize: 12,
-                              ),
-                            ),
-                            selected: isCurrent,
-                            onTap: () => _jumpToChapter(index),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _getThemeBackgroundColor().withOpacity(0.95),
-            _getThemeBackgroundColor().withOpacity(0.8),
-          ],
-        ),
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: Icon(
-                Icons.arrow_back,
-                color: _getThemeTextColor(),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                _chapterContent?.title ?? '章节',
-                style: TextStyle(
-                  color: _getThemeTextColor(),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            IconButton(
-              onPressed: _showSettings,
-              icon: Icon(
-                Icons.settings,
-                color: _getThemeTextColor(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              _getThemeBackgroundColor().withOpacity(0.95),
-              _getThemeBackgroundColor().withOpacity(0.8),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // 进度条
-              LinearProgressIndicator(
-                value: _chapters.isEmpty ? 0 : (_currentChapterIndex + 1) / _chapters.length,
-                backgroundColor: _getThemeTextColor().withOpacity(0.2),
-                valueColor: AlwaysStoppedAnimation<Color>(_getThemeTextColor()),
-              ),
-              const SizedBox(height: 8),
-              
-              // 章节导航
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    onPressed: _currentChapterIndex > 0 ? _previousChapter : null,
-                    icon: Icon(
-                      Icons.skip_previous,
-                      color: _getThemeTextColor(),
-                    ),
-                  ),
-                  Text(
-                    '${_currentChapterIndex + 1}/${_chapters.length}',
-                    style: TextStyle(
-                      color: _getThemeTextColor(),
-                      fontSize: 14,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _currentChapterIndex < _chapters.length - 1 ? _nextChapter : null,
-                    icon: Icon(
-                      Icons.skip_next,
-                      color: _getThemeTextColor(),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

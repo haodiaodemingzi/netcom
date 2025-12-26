@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/ebook_file_cache_service.dart';
 import 'app_storage.dart';
 import 'storage_repository.dart';
 
@@ -54,11 +55,14 @@ final activationRepositoryProvider = Provider<ActivationRepository?>((ref) {
   }
   return ActivationRepository(storage);
 });
-
 final searchHistoryRepositoryProvider = Provider<SearchHistoryRepository?>((ref) {
   final storage = ref.watch(appStorageProvider).maybeWhen(data: (value) => value, orElse: () => null);
   if (storage == null) {
     return null;
   }
   return SearchHistoryRepository(storage);
+});
+
+final ebookFileCacheServiceProvider = Provider<EbookFileCacheService>((ref) {
+  return EbookFileCacheService();
 });

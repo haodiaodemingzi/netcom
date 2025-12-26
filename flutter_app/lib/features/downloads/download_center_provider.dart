@@ -14,6 +14,8 @@ import '../../core/storage/storage_providers.dart';
 import '../../core/storage/storage_repository.dart';
 import 'comic_downloader.dart';
 import 'download_models.dart';
+import 'ebook_chapter_downloader.dart';
+import '../ebooks/ebook_models.dart';
 
 class DownloadCenterState {
   DownloadCenterState({
@@ -56,6 +58,7 @@ final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, Dow
   final videosRemote = ref.watch(videosRemoteServiceProvider);
   final comicDownloader = ref.watch(comicDownloaderProvider);
   final videoDownloader = ref.watch(videoDownloaderProvider);
+  final ebookDownloader = ref.watch(ebookChapterDownloaderProvider);
   final storage = ref.watch(appStorageProvider).maybeWhen(data: (value) => value, orElse: () => null);
   final settingsRepo = ref.watch(settingsRepositoryProvider);
   return DownloadCenterNotifier(
@@ -63,6 +66,7 @@ final downloadCenterProvider = StateNotifierProvider<DownloadCenterNotifier, Dow
     videosRemote,
     comicDownloader,
     videoDownloader,
+    ebookDownloader,
     storage,
     settingsRepo,
   );
@@ -74,6 +78,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     this._videosRemote,
     this._comicDownloader,
     this._videoDownloader,
+    this._ebookDownloader,
     this._storage,
     this._settingsRepo,
   )
@@ -111,6 +116,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
   final VideoRemoteService _videosRemote;
   final ComicDownloader _comicDownloader;
   final VideoDownloader _videoDownloader;
+  final EbookChapterDownloader _ebookDownloader;
   final AppStorage? _storage;
   final SettingsRepository? _settingsRepo;
   final Map<String, CancelToken> _taskTokens = <String, CancelToken>{};
@@ -220,6 +226,52 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     }
     state = state.copyWith(queue: [...state.queue, ...newItems]);
     _processQueue(detail: null, chapters: const <ComicChapter>[], videoDetail: detail, videoEpisodes: episodes);
+    _persistQueues();
+  }
+
+  void enqueueEbookChapters({
+    required EbookDetail detail,
+    required List<EbookChapter> chapters,
+  }) {
+    if (chapters.isEmpty || detail.id.isEmpty) {
+      return;
+    }
+    final exists = <String>{
+      ...state.queue.map((e) => e.resourceId).whereType<String>(),
+      ...state.completed.map((e) => e.resourceId).whereType<String>(),
+    };
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final newItems = <DownloadItem>[];
+    var offset = 0;
+    for (final chapter in chapters) {
+      if (chapter.id.isEmpty || exists.contains(chapter.id)) {
+        continue;
+      }
+      newItems.add(
+        DownloadItem(
+          id: 'dl-${detail.id}-${chapter.id}-${now + offset}',
+          type: DownloadType.ebook,
+          kind: 'task',
+          title: chapter.title,
+          parentTitle: detail.title,
+          status: DownloadStatus.pending,
+          progress: 0,
+          source: detail.source,
+          parentId: detail.id,
+          resourceId: chapter.id,
+          metadata: <String, dynamic>{
+            'chapterIndex': chapter.index,
+            'chapterTitle': chapter.title,
+          },
+        ),
+      );
+      offset += 1;
+    }
+    if (newItems.isEmpty) {
+      return;
+    }
+    state = state.copyWith(queue: [...state.queue, ...newItems]);
+    _processQueue(ebookDetail: detail, ebookChapters: chapters);
     _persistQueues();
   }
 
@@ -514,6 +566,8 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
     List<ComicChapter> chapters = const <ComicChapter>[],
     VideoDetail? videoDetail,
     List<VideoEpisode> videoEpisodes = const <VideoEpisode>[],
+    EbookDetail? ebookDetail,
+    List<EbookChapter> ebookChapters = const <EbookChapter>[],
   }) {
     final runningCount = state.queue.where((item) => item.status == DownloadStatus.downloading).length;
     if (runningCount >= _maxConcurrent) {
@@ -550,7 +604,94 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
         _runVideoDownload(item, resolvedDetail, resolvedEpisode);
         continue;
       }
+      if (item.type == DownloadType.ebook) {
+        final resolvedDetail = _resolveEbookDetail(item, ebookDetail);
+        final resolvedChapter = _resolveEbookChapter(item, ebookChapters);
+        if (resolvedDetail == null || resolvedChapter == null) {
+          _updateQueueItem(item.id, status: DownloadStatus.failed, error: '缺少下载参数');
+          continue;
+        }
+        available -= 1;
+        _runEbookDownload(item, resolvedDetail, resolvedChapter);
+        continue;
+      }
     }
+  }
+
+  Future<void> _runEbookDownload(DownloadItem item, EbookDetail detail, EbookChapter chapter) async {
+    try {
+      final token = CancelToken();
+      _taskTokens[item.id] = token;
+      _updateQueueItem(item.id, status: DownloadStatus.downloading, progress: 0, error: null);
+
+      await _ebookDownloader.downloadChapter(
+        detail: detail,
+        chapter: chapter,
+        onProgress: (progress) {
+          _updateQueueItem(
+            item.id,
+            status: DownloadStatus.downloading,
+            progress: progress,
+          );
+        },
+        cancelToken: token,
+      );
+
+      _markAsCompleted(item.id);
+      _taskTokens.remove(item.id);
+    } catch (e) {
+      _taskTokens.remove(item.id);
+      _updateQueueItem(item.id, status: DownloadStatus.failed, error: e.toString());
+    }
+    _processQueue();
+  }
+
+  EbookDetail? _resolveEbookDetail(DownloadItem item, EbookDetail? prefer) {
+    if (prefer != null && prefer.id.isNotEmpty && prefer.title.isNotEmpty) {
+      return prefer;
+    }
+    if (item.parentId == null || item.parentId!.isEmpty || item.parentTitle.isEmpty || (item.source ?? '').isEmpty) {
+      return null;
+    }
+    return EbookDetail(
+      id: item.parentId!,
+      title: item.parentTitle,
+      author: '',
+      description: '',
+      url: '',
+      cover: '',
+      source: item.source ?? '',
+    );
+  }
+
+  EbookChapter? _resolveEbookChapter(DownloadItem item, List<EbookChapter> chapters) {
+    if (item.resourceId == null || item.resourceId!.isEmpty) {
+      return null;
+    }
+    final matched = chapters.firstWhere(
+      (e) => e.id == item.resourceId,
+      orElse: () => const EbookChapter(
+        id: '',
+        bookId: '',
+        title: '',
+        url: '',
+        order: 0,
+      ),
+    );
+    if (matched.id.isNotEmpty) {
+      return matched;
+    }
+    final meta = item.metadata ?? <String, dynamic>{};
+    final index = (meta['chapterIndex'] as num?)?.toInt() ?? 0;
+    final title = (meta['chapterTitle'] as String?) ?? item.title;
+    return EbookChapter(
+      id: item.resourceId ?? '',
+      bookId: item.parentId ?? '',
+      title: title,
+      url: '',
+      order: index,
+      index: index,
+    );
   }
 
   VideoDetail? _resolveVideoDetail(DownloadItem item, VideoDetail? prefer) {
