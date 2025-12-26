@@ -280,7 +280,7 @@ class _EbooksPageState extends ConsumerState<EbooksPage> {
     if (bookId.isEmpty) {
       return;
     }
-    context.push('/ebook/$bookId');
+    context.push('/ebooks/$bookId');
   }
 
   void _openSourceSelector(List<EbookSourceInfo> sources, EbookSourceInfo? selectedSource) {

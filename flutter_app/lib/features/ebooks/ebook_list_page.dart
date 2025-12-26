@@ -268,7 +268,7 @@ class _EbookListPageState extends ConsumerState<EbookListPage> {
     if (bookId.isEmpty) {
       return;
     }
-    context.push('/ebook/$bookId');
+    context.push('/ebooks/$bookId');
   }
 }
 
