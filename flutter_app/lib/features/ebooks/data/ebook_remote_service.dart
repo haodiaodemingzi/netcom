@@ -6,7 +6,7 @@ import '../ebook_models.dart';
 class EbookRemoteService {
   EbookRemoteService(this._api);
 
-  static const String _defaultSource = 'kanunu8';
+  static const String _defaultSource = 'ttkan';
   final ApiClient _api;
 
   Future<EbookCategoriesResponse> fetchCategories({String? sourceId}) async {

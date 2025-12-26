@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
+import '../downloads/download_center_provider.dart';
+import '../downloads/download_models.dart';
 import 'ebook_models.dart';
 import 'ebook_providers.dart';
 
@@ -20,49 +23,74 @@ class EbookDetailPage extends ConsumerStatefulWidget {
 }
 
 class _EbookDetailPageState extends ConsumerState<EbookDetailPage> {
-@override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    ref.read(ebookDetailProvider(widget.bookId).notifier).load();
-  });
-}
-
-bool get _isFavorite {
-  final favoritesRepo = ref.read(favoritesRepositoryProvider);
-  if (favoritesRepo == null) {
-    return false;
-  }
-  return favoritesRepo.isFavorite(widget.bookId);
-}
-
-Future<void> _toggleFavorite() async {
-  final favoritesRepo = ref.read(favoritesRepositoryProvider);
-  if (favoritesRepo == null) {
-    return;
-  }
-  
-  final state = ref.read(ebookDetailProvider(widget.bookId));
-  final detail = state.detail;
-
-  if (detail == null) {
-    return;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(ebookDetailProvider(widget.bookId).notifier).load();
+    });
   }
 
-  if (_isFavorite) {
-    await favoritesRepo.remove(widget.bookId);
-  } else {
-    await favoritesRepo.add(FavoriteItem(
-      id: widget.bookId,
-      title: detail.title,
-      cover: detail.cover,
-      type: 'ebook',
-      source: detail.source,
-    ));
+  double _getDownloadProgress(List<EbookChapter> chapters) {
+    final downloadState = ref.watch(downloadCenterProvider);
+    if (chapters.isEmpty) {
+      return 0;
+    }
+    // 同时统计队列中和已完成的下载任务
+    final bookDownloads = [
+      ...downloadState.queue.where((item) =>
+        item.type == DownloadType.ebook &&
+        item.parentId == widget.bookId
+      ),
+      ...downloadState.completed.where((item) =>
+        item.type == DownloadType.ebook &&
+        item.parentId == widget.bookId
+      ),
+    ];
+    if (bookDownloads.isEmpty) {
+      return 0;
+    }
+    final completedCount = bookDownloads.where((item) =>
+      item.status == DownloadStatus.completed
+    ).length;
+    return completedCount / chapters.length;
   }
 
-  setState(() {});
-}
+  bool get _isFavorite {
+    final favoritesRepo = ref.read(favoritesRepositoryProvider);
+    if (favoritesRepo == null) {
+      return false;
+    }
+    return favoritesRepo.isFavorite(widget.bookId);
+  }
+
+  Future<void> _toggleFavorite() async {
+    final favoritesRepo = ref.read(favoritesRepositoryProvider);
+    if (favoritesRepo == null) {
+      return;
+    }
+    
+    final state = ref.read(ebookDetailProvider(widget.bookId));
+    final detail = state.detail;
+    
+    if (detail == null) {
+      return;
+    }
+
+    if (_isFavorite) {
+      await favoritesRepo.remove(widget.bookId);
+    } else {
+      await favoritesRepo.add(FavoriteItem(
+        id: widget.bookId,
+        title: detail.title,
+        cover: detail.cover,
+        type: 'ebook',
+        source: detail.source,
+      ));
+    }
+
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +172,12 @@ Future<void> _toggleFavorite() async {
           _buildSectionTitle('章节列表 (${state.chapters.length}章)'),
           const SizedBox(height: 8),
           _buildChapterList(state.chapters),
+
+          // 下载进度
+          if (state.chapters.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _buildDownloadProgress(state.chapters),
+          ],
         ],
       ),
     );
@@ -153,7 +187,7 @@ Future<void> _toggleFavorite() async {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 书籍封面占位符
+        // 书籍封面
         Container(
           width: 120,
           height: 160,
@@ -161,13 +195,47 @@ Future<void> _toggleFavorite() async {
             color: Colors.grey[300],
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Center(
-            child: Icon(
-              Icons.book_outlined,
-              size: 48,
-              color: Colors.grey,
-            ),
-          ),
+          child: detail.cover != null && detail.cover!.isNotEmpty
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: detail.cover!,
+                    width: 120,
+                    height: 160,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 120,
+                      height: 160,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(
+                          Icons.book_outlined,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 120,
+                      height: 160,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(
+                          Icons.book_outlined,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : const Center(
+                  child: Icon(
+                    Icons.book_outlined,
+                    size: 48,
+                    color: Colors.grey,
+                  ),
+                ),
         ),
         const SizedBox(width: 16),
 
@@ -197,6 +265,9 @@ Future<void> _toggleFavorite() async {
   }
 
   Widget _buildActionButtons(EbookDetail detail, EbookDetailState state) {
+    final downloadProgress = _getDownloadProgress(state.chapters);
+    final isDownloading = downloadProgress > 0 && downloadProgress < 1;
+    
     return Row(
       children: [
         Expanded(
@@ -210,7 +281,70 @@ Future<void> _toggleFavorite() async {
             label: const Text('开始阅读'),
           ),
         ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Stack(
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  if (state.chapters.isNotEmpty && !isDownloading) {
+                    _downloadBook(detail, state.chapters);
+                  }
+                },
+                icon: const Icon(Icons.download),
+                label: Text(isDownloading ? '下载中...' : '下载整本'),
+              ),
+              if (isDownloading)
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: LinearProgressIndicator(
+                      value: downloadProgress,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.white.withOpacity(0.5),
+                      ),
+                      minHeight: 4,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildFavoriteButton(detail),
+        ),
       ],
+    );
+  }
+
+  void _downloadBook(EbookDetail detail, List<EbookChapter> chapters) {
+    if (chapters.isEmpty) {
+      return;
+    }
+    // 确保source不为空，使用默认值'ttkan'
+    final detailWithSource = detail.source != null && detail.source!.isNotEmpty
+        ? detail
+        : EbookDetail(
+            id: detail.id,
+            title: detail.title,
+            author: detail.author,
+            description: detail.description,
+            url: detail.url,
+            cover: detail.cover,
+            source: 'ttkan',
+          );
+    final downloadCenter = ref.read(downloadCenterProvider.notifier);
+    downloadCenter.enqueueEbookChapters(
+      detail: detailWithSource,
+      chapters: chapters,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已添加到下载队列'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -275,6 +409,16 @@ Future<void> _toggleFavorite() async {
       itemCount: chapters.length,
       itemBuilder: (context, index) {
         final chapter = chapters[index];
+        final downloadState = ref.watch(downloadCenterProvider);
+        final bookDownloads = downloadState.queue.where((item) =>
+          item.type == DownloadType.ebook &&
+          item.parentId == widget.bookId
+        ).toList();
+        final chapterDownload = bookDownloads.cast<DownloadItem?>().firstWhere(
+          (item) => item?.resourceId == chapter.id,
+          orElse: () => null,
+        );
+
         return Card(
           elevation: 2,
           shape: RoundedRectangleBorder(
@@ -300,11 +444,33 @@ Future<void> _toggleFavorite() async {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '第${chapter.order}章',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.primary,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '第${chapter.order}章',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (chapterDownload != null)
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            value: chapterDownload.progress,
+                            backgroundColor: colorScheme.surface,
+                            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                            minHeight: 4,
+                          ),
+                        )
+                      else if (chapterDownload?.status == DownloadStatus.completed)
+                        const Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: Colors.green,
+                        )
+                      else
+                        const SizedBox(width: 16),
+                    ],
                   ),
                 ],
               ),
@@ -312,6 +478,60 @@ Future<void> _toggleFavorite() async {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDownloadProgress(List<EbookChapter> chapters) {
+    final downloadState = ref.watch(downloadCenterProvider);
+    final bookDownloads = downloadState.queue.where((item) =>
+      item.type == DownloadType.ebook &&
+      item.parentId == widget.bookId
+    ).toList();
+    if (bookDownloads.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final total = chapters.length;
+    final completed = bookDownloads.where((item) => item.status == DownloadStatus.completed).length;
+    final progress = completed / total;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.download, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '下载进度',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$completed/$total章',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary,
+            ),
+            minHeight: 6,
+          ),
+        ],
+      ),
     );
   }
 

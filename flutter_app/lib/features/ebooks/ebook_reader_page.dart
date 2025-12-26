@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/storage/storage_repository.dart';
 import '../../core/storage/storage_providers.dart';
+import '../downloads/ebook_chapter_downloader.dart';
 import 'ebook_models.dart';
 import 'ebook_providers.dart';
+import 'ebook_page_calculator.dart';
 
 class EbookReaderPage extends ConsumerStatefulWidget {
   final String chapterId;
@@ -20,7 +22,7 @@ class EbookReaderPage extends ConsumerStatefulWidget {
 }
 
 class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
-  final ScrollController _scrollController = ScrollController();
+  final PageController _pageController = PageController();
 
   bool _showControls = true;
   bool _showDrawer = false;
@@ -28,13 +30,80 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
   double _lineHeight = 1.5;
   double _columnWidth = 0.8;
   ReadingTheme _theme = ReadingTheme.light;
+  List<EbookChapter> _chapters = [];
+  int _currentChapterIndex = 0;
+  bool _swipeToTurnPages = true;
+  List<String> _pages = [];
+  int _currentPage = 0; // 左右滑动翻页开关
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chapterContentProvider(widget.chapterId).notifier).load();
+      _loadChapters();
     });
+  }
+
+  Future<void> _loadChapters() async {
+    // 从章节ID中提取书籍ID
+    final bookId = _extractBookIdFromChapterId(widget.chapterId);
+    if (bookId.isEmpty) {
+      return;
+    }
+    try {
+      final remote = ref.read(ebookRemoteServiceProvider);
+      final detailData = await remote.fetchBookDetail(bookId: bookId, sourceId: null);
+      if (mounted) {
+        setState(() {
+          _chapters = detailData.chapters;
+          // 找到当前章节的索引
+          for (int i = 0; i < _chapters.length; i++) {
+            if (_chapters[i].id == widget.chapterId) {
+              _currentChapterIndex = i;
+              break;
+            }
+          }
+        });
+        // 预下载当前章节及后续4章
+        _preloadChapters(detailData.detail);
+      }
+    } catch (e) {
+      debugPrint('加载章节列表失败: $e');
+    }
+  }
+
+  Future<void> _preloadChapters(EbookDetail? detail) async {
+    if (detail == null || _chapters.isEmpty) {
+      return;
+    }
+    // 预下载当前章节及后续4章（共5章）
+    final startIndex = _currentChapterIndex;
+    final endIndex = (startIndex + 4).clamp(0, _chapters.length - 1);
+    
+    for (int i = startIndex; i <= endIndex; i++) {
+      final chapter = _chapters[i];
+      try {
+        final downloader = ref.read(ebookChapterDownloaderProvider);
+        await downloader.downloadChapter(
+          detail: detail,
+          chapter: chapter,
+        );
+        debugPrint('预下载完成: ${chapter.title}');
+      } catch (e) {
+        debugPrint('预下载失败: ${chapter.title}, error=$e');
+      }
+    }
+  }
+
+  String _extractBookIdFromChapterId(String chapterId) {
+    // 章节ID格式为 {bookId}_{序号}，如 wanxiangzhiwang-tiancantudou_1
+    // 需要从最后一个下划线处分割，提取书籍ID
+    final lastUnderscoreIndex = chapterId.lastIndexOf('_');
+    if (lastUnderscoreIndex > 0) {
+      return chapterId.substring(0, lastUnderscoreIndex);
+    }
+    return chapterId;
   }
 
   void _saveReadingProgress() {
@@ -46,15 +115,54 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
           id: widget.chapterId,
           title: state.content!.title,
           chapterId: widget.chapterId,
-          page: 1,
+          page: _currentPage + 1,
         );
       }
     }
   }
 
+  void _calculatePages(String content, Size screenSize) {
+    if (content.isEmpty) {
+      setState(() {
+        _pages = [];
+      });
+      return;
+    }
+
+    final padding = EdgeInsets.symmetric(
+      horizontal: screenSize.width * (1 - _columnWidth) / 2 + 16,
+      vertical: 80,
+    );
+
+    final pages = EbookPageCalculator.calculatePages(
+      content: content,
+      fontSize: _fontSize,
+      lineHeight: _lineHeight,
+      pageWidth: screenSize.width,
+      pageHeight: screenSize.height,
+      padding: padding,
+    );
+
+    setState(() {
+      _pages = pages;
+      if (_currentPage >= pages.length) {
+        _currentPage = pages.length - 1;
+      }
+      if (_currentPage < 0) {
+        _currentPage = 0;
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients && _currentPage < pages.length) {
+        _pageController.jumpToPage(_currentPage);
+      }
+    });
+  }
+
   @override
   void dispose() {
-    _scrollController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -88,6 +196,20 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
     });
   }
 
+  void _previousChapter() {
+    if (_currentChapterIndex > 0) {
+      final prevChapter = _chapters[_currentChapterIndex - 1];
+      _jumpToChapter(prevChapter.id);
+    }
+  }
+
+  void _nextChapter() {
+    if (_currentChapterIndex < _chapters.length - 1) {
+      final nextChapter = _chapters[_currentChapterIndex + 1];
+      _jumpToChapter(nextChapter.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chapterContentProvider(widget.chapterId));
@@ -97,16 +219,12 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 内容区域
-            GestureDetector(
-              onTap: _toggleControls,
-              child: _buildContent(state),
-            ),
+            _buildContent(state),
 
             // 控制栏
             if (_showControls) ...[
               _buildTopBar(state),
-              _buildBottomBar(),
+              _buildBottomBar(state),
             ],
           ],
         ),
@@ -119,11 +237,6 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
       return const Center(
         child: CircularProgressIndicator(),
       );
-    }
-
-    // 保存阅读进度到历史记录
-    if (state.content != null && state.error == null) {
-      _saveReadingProgress();
     }
 
     if (state.error != null && state.content == null) {
@@ -160,50 +273,132 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
       );
     }
 
+    if (state.content != null && state.error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final screenSize = MediaQuery.of(context).size;
+          _calculatePages(state.content!.content, screenSize);
+          _saveReadingProgress();
+        }
+      });
+    }
+
     return Stack(
       children: [
-        // 主内容
-        SingleChildScrollView(
-          controller: _scrollController,
-          padding: EdgeInsets.symmetric(
-            horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2,
-            vertical: 16,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * _columnWidth,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    state.content!.title,
-                    style: TextStyle(
-                      fontSize: _fontSize + 4,
-                      fontWeight: FontWeight.bold,
-                      color: _getThemeTextColor(),
-                      height: _lineHeight,
+        if (_swipeToTurnPages)
+          _buildPageView(state)
+        else
+          _buildScrollView(state),
+        if (_showDrawer) _buildChapterDrawer(),
+      ],
+    );
+  }
+
+  Widget _buildPageView(EbookChapterContentState state) {
+    if (_pages.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _toggleControls,
+      child: PageView.builder(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _currentPage = index;
+          });
+          _saveReadingProgress();
+        },
+        itemCount: _pages.length,
+        itemBuilder: (context, index) {
+          return Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2 + 16,
+              vertical: 80,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * _columnWidth,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (index == 0) ...[
+                      Text(
+                        state.content!.title,
+                        style: TextStyle(
+                          fontSize: _fontSize + 4,
+                          fontWeight: FontWeight.bold,
+                          color: _getThemeTextColor(),
+                          height: _lineHeight,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          _pages[index],
+                          style: TextStyle(
+                            fontSize: _fontSize,
+                            color: _getThemeTextColor(),
+                            height: _lineHeight,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    state.content!.content,
-                    style: TextStyle(
-                      fontSize: _fontSize,
-                      color: _getThemeTextColor(),
-                      height: _lineHeight,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScrollView(EbookChapterContentState state) {
+    return GestureDetector(
+      onTap: _toggleControls,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: MediaQuery.of(context).size.width * (1 - _columnWidth) / 2,
+          vertical: 16,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * _columnWidth,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  state.content!.title,
+                  style: TextStyle(
+                    fontSize: _fontSize + 4,
+                    fontWeight: FontWeight.bold,
+                    color: _getThemeTextColor(),
+                    height: _lineHeight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  state.content!.content,
+                  style: TextStyle(
+                    fontSize: _fontSize,
+                    color: _getThemeTextColor(),
+                    height: _lineHeight,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-
-        // 目录侧边栏
-        if (_showDrawer) _buildChapterDrawer(),
-      ],
+      ),
     );
   }
 
@@ -253,6 +448,45 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                           ),
                         ],
                       ),
+                    ),
+                    // 章节列表
+                    Expanded(
+                      child: _chapters.isEmpty
+                          ? Center(
+                              child: Text(
+                                '暂无章节',
+                                style: TextStyle(
+                                  color: _getThemeTextColor().withOpacity(0.6),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _chapters.length,
+                              itemBuilder: (context, index) {
+                                final chapter = _chapters[index];
+                                final isCurrent = index == _currentChapterIndex;
+                                return ListTile(
+                                  title: Text(
+                                    chapter.title,
+                                    style: TextStyle(
+                                      color: isCurrent
+                                            ? Theme.of(context).colorScheme.primary
+                                            : _getThemeTextColor(),
+                                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    '第${chapter.order}章',
+                                    style: TextStyle(
+                                      color: _getThemeTextColor().withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  selected: isCurrent,
+                                  onTap: () => _jumpToChapter(chapter.id),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -311,7 +545,7 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
     );
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(EbookChapterContentState state) {
     return Positioned(
       bottom: 0,
       left: 0,
@@ -328,15 +562,78 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
           ),
         ),
         child: SafeArea(
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Spacer(),
-              IconButton(
-                onPressed: _toggleDrawer,
-                icon: Icon(
-                  Icons.list,
-                  color: _getThemeTextColor(),
+              if (_swipeToTurnPages && _pages.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${_currentPage + 1}/${_pages.length}',
+                        style: TextStyle(
+                          color: _getThemeTextColor(),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 2,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                          ),
+                          child: Slider(
+                            value: _currentPage.toDouble(),
+                            min: 0,
+                            max: (_pages.length - 1).toDouble(),
+                            onChanged: (value) {
+                              final page = value.round();
+                              if (page != _currentPage) {
+                                _pageController.jumpToPage(page);
+                                setState(() {
+                                  _currentPage = page;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _currentChapterIndex > 0 ? _previousChapter : null,
+                    icon: Icon(
+                      Icons.skip_previous,
+                      color: _currentChapterIndex > 0
+                          ? _getThemeTextColor()
+                          : _getThemeTextColor().withOpacity(0.3),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _toggleDrawer,
+                    icon: Icon(
+                      Icons.list,
+                      color: _getThemeTextColor(),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _currentChapterIndex < _chapters.length - 1 ? _nextChapter : null,
+                    icon: Icon(
+                      Icons.skip_next,
+                      color: _currentChapterIndex < _chapters.length - 1
+                          ? _getThemeTextColor()
+                          : _getThemeTextColor().withOpacity(0.3),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -363,7 +660,6 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // 字体大小
                 Text(
                   '字体大小',
                   style: Theme.of(context).textTheme.titleMedium,
@@ -373,7 +669,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_fontSize > 12) {
-                          setState(() => _fontSize -= 2);
+                          setState(() {
+                            _fontSize -= 2;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -386,7 +688,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                         max: 24,
                         divisions: 6,
                         onChanged: (value) {
-                          setState(() => _fontSize = value);
+                          setState(() {
+                            _fontSize = value;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         },
                       ),
@@ -394,7 +702,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_fontSize < 24) {
-                          setState(() => _fontSize += 2);
+                          setState(() {
+                            _fontSize += 2;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -404,7 +718,6 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // 行距
                 Text(
                   '行距',
                   style: Theme.of(context).textTheme.titleMedium,
@@ -414,7 +727,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_lineHeight > 1.0) {
-                          setState(() => _lineHeight -= 0.2);
+                          setState(() {
+                            _lineHeight -= 0.2;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -427,7 +746,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                         max: 2.0,
                         divisions: 5,
                         onChanged: (value) {
-                          setState(() => _lineHeight = value);
+                          setState(() {
+                            _lineHeight = value;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         },
                       ),
@@ -435,7 +760,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_lineHeight < 2.0) {
-                          setState(() => _lineHeight += 0.2);
+                          setState(() {
+                            _lineHeight += 0.2;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -445,7 +776,6 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // 列宽
                 Text(
                   '列宽',
                   style: Theme.of(context).textTheme.titleMedium,
@@ -455,7 +785,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_columnWidth > 0.5) {
-                          setState(() => _columnWidth -= 0.1);
+                          setState(() {
+                            _columnWidth -= 0.1;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -468,7 +804,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                         max: 1.0,
                         divisions: 5,
                         onChanged: (value) {
-                          setState(() => _columnWidth = value);
+                          setState(() {
+                            _columnWidth = value;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         },
                       ),
@@ -476,7 +818,13 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                     IconButton(
                       onPressed: () {
                         if (_columnWidth < 1.0) {
-                          setState(() => _columnWidth += 0.1);
+                          setState(() {
+                            _columnWidth += 0.1;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
@@ -505,6 +853,43 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
                       },
                     );
                   }).toList(),
+                ),
+                const SizedBox(height: 24),
+
+                Text(
+                  '翻页模式',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('上下滑动'),
+                      selected: !_swipeToTurnPages,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _swipeToTurnPages = false);
+                          setModalState(() {});
+                        }
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('左右翻页'),
+                      selected: _swipeToTurnPages,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _swipeToTurnPages = true;
+                            final state = ref.read(chapterContentProvider(widget.chapterId));
+                            if (state.content != null) {
+                              _calculatePages(state.content!.content, MediaQuery.of(context).size);
+                            }
+                          });
+                          setModalState(() {});
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
