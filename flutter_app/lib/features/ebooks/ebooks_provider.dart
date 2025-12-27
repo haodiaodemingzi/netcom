@@ -24,6 +24,7 @@ class EbooksState {
   final bool hasMore;
   final int currentPage;
   final bool searching;
+  final bool sourceSwitching;
   final String? error;
   final EbooksViewMode viewMode;
 
@@ -39,6 +40,7 @@ class EbooksState {
     this.hasMore = true,
     this.currentPage = 1,
     this.searching = false,
+    this.sourceSwitching = false,
     this.error,
     this.viewMode = EbooksViewMode.grid,
   });
@@ -57,6 +59,7 @@ class EbooksState {
     bool? hasMore,
     int? currentPage,
     bool? searching,
+    bool? sourceSwitching,
     String? error,
     EbooksViewMode? viewMode,
   }) {
@@ -72,6 +75,7 @@ class EbooksState {
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
       searching: searching ?? this.searching,
+      sourceSwitching: sourceSwitching ?? this.sourceSwitching,
       error: error,
       viewMode: viewMode ?? this.viewMode,
     );
@@ -192,16 +196,17 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
 
   /// 切换数据源
   Future<void> changeSource(EbookSourceInfo source) async {
+    if (!mounted) return;
     if (state.selectedSource?.id == source.id) return;
     
     state = state.copyWith(
       selectedSource: source,
+      sourceSwitching: true,
       books: [],
       categories: [],
       selectedCategory: null,
       currentPage: 1,
       hasMore: true,
-      loading: true,
       error: null,
     );
     
@@ -211,6 +216,8 @@ class EbooksNotifier extends StateNotifier<EbooksState> {
     if (state.selectedCategory != null) {
       await loadBooks(reset: true);
     }
+    if (!mounted) return;
+    state = state.copyWith(sourceSwitching: false);
   }
 
   /// 切换分类

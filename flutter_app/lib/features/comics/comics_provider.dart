@@ -29,6 +29,7 @@ class ComicsState {
     this.sources = const <String, ComicSourceInfo>{},
     this.selectedSource,
     this.sourcesLoading = false,
+    this.sourceSwitching = false,
     this.searchKeyword = '',
     this.searchResults = const <ComicSummary>[],
     this.searching = false,
@@ -48,6 +49,7 @@ class ComicsState {
   final Map<String, ComicSourceInfo> sources;
   final String? selectedSource;
   final bool sourcesLoading;
+  final bool sourceSwitching;
   final String searchKeyword;
   final List<ComicSummary> searchResults;
   final bool searching;
@@ -69,6 +71,7 @@ class ComicsState {
     Map<String, ComicSourceInfo>? sources,
     String? selectedSource,
     bool? sourcesLoading,
+    bool? sourceSwitching,
     String? searchKeyword,
     List<ComicSummary>? searchResults,
     bool? searching,
@@ -88,6 +91,7 @@ class ComicsState {
       sources: sources != null ? Map.unmodifiable(sources) : this.sources,
       selectedSource: selectedSource ?? this.selectedSource,
       sourcesLoading: sourcesLoading ?? this.sourcesLoading,
+      sourceSwitching: sourceSwitching ?? this.sourceSwitching,
       searchKeyword: searchKeyword ?? this.searchKeyword,
       searchResults: searchResults != null ? List.unmodifiable(searchResults) : this.searchResults,
       searching: searching ?? this.searching,
@@ -202,13 +206,25 @@ class ComicsNotifier extends StateNotifier<ComicsState> {
   }
 
   Future<void> changeSource(String sourceId) async {
+    if (!mounted) return;
     if (sourceId.isEmpty || sourceId == state.selectedSource) {
       return;
     }
-    state = state.copyWith(selectedSource: sourceId);
+    state = state.copyWith(
+      selectedSource: sourceId,
+      sourceSwitching: true,
+      comics: <ComicSummary>[],
+      categories: <ComicCategory>[],
+      selectedCategory: null,
+      error: null,
+    );
     await _sourceRepository?.setCurrentSource(sourceId);
+    if (!mounted) return;
     await _loadCategories(sourceId);
+    if (!mounted) return;
     await _loadFeed(reset: true);
+    if (!mounted) return;
+    state = state.copyWith(sourceSwitching: false);
   }
 
   Future<void> search(String keyword) async {

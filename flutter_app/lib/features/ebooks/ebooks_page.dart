@@ -177,11 +177,11 @@ class _EbooksPageState extends ConsumerState<EbooksPage> {
                 ],
               ),
             ),
-            if (state.loading && items.isNotEmpty)
+            if ((state.loading || state.sourceSwitching) && items.isNotEmpty)
               const SliverToBoxAdapter(
                 child: LinearProgressIndicator(minHeight: 2),
               ),
-            if (state.loading && items.isEmpty)
+            if ((state.loading || state.sourceSwitching) && items.isEmpty)
               const SliverFillRemaining(
                 child: Center(child: CircularProgressIndicator()),
               )

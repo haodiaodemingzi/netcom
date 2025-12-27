@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/network/api_config.dart';
+import '../../core/network/api_client.dart';
 import '../../core/network/network_providers.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
@@ -478,7 +480,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget _buildImageCard(ComicPageImage image) {
     final fit = _settings.imageFitMode == 'height' ? BoxFit.fitHeight : BoxFit.contain;
     final bg = _settings.backgroundColor == 'white' ? Colors.white : Colors.black;
-    final zoomScale = _settings.imageZoomScale;
+    final zoomScale = _settings.imageZoomScale.clamp(1.0, 1.5);
     
     Widget imageWidget;
     final localPath = _localImagePaths[image.page];
@@ -494,15 +496,11 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       );
     } else {
       final headers = _buildImageHeaders();
-      imageWidget = Image.network(
-        image.url,
+      imageWidget = _NetworkImageWithHeaders(
+        url: image.url,
         headers: headers,
         fit: fit,
-        errorBuilder: (_, __, ___) => Container(
-          color: Colors.grey.shade200,
-          alignment: Alignment.center,
-          child: const Icon(Icons.broken_image),
-        ),
+        apiClient: ref.read(apiClientProvider),
       );
     }
     
@@ -651,15 +649,163 @@ class _MeasuredItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, constraints) {
+      builder: (ctx, constraints) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          final render = context.findRenderObject();
-          if (render is RenderBox) {
+          if (!ctx.mounted) return;
+          final render = ctx.findRenderObject();
+          if (render is RenderBox && render.hasSize) {
             onHeight(render.size.height);
           }
         });
         return child;
       },
+    );
+  }
+}
+
+class _NetworkImageWithHeaders extends StatefulWidget {
+  const _NetworkImageWithHeaders({
+    required this.url,
+    required this.headers,
+    required this.fit,
+    required this.apiClient,
+  });
+
+  final String url;
+  final Map<String, String> headers;
+  final BoxFit fit;
+  final ApiClient apiClient;
+
+  @override
+  State<_NetworkImageWithHeaders> createState() => _NetworkImageWithHeadersState();
+}
+
+class _NetworkImageWithHeadersState extends State<_NetworkImageWithHeaders> {
+  Uint8List? _imageData;
+  bool _loading = true;
+  bool _hasError = false;
+  int _retryCount = 0;
+  static const int _maxRetries = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  @override
+  void didUpdateWidget(_NetworkImageWithHeaders oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _retryCount = 0;
+      _loadImage();
+    }
+  }
+
+  Future<void> _loadImage() async {
+    if (widget.url.isEmpty) {
+      setState(() {
+        _loading = false;
+        _hasError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+
+    try {
+      final response = await widget.apiClient.get<List<int>>(
+        widget.url,
+        options: Options(
+          headers: widget.headers,
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 && response.data != null) {
+        setState(() {
+          _imageData = Uint8List.fromList(response.data!);
+          _loading = false;
+          _hasError = false;
+        });
+      } else if (response.statusCode == 403 && _retryCount < _maxRetries) {
+        _retryCount++;
+        debugPrint('图片403重试 $_retryCount: ${widget.url}');
+        await Future.delayed(Duration(milliseconds: 500 * _retryCount));
+        if (mounted) {
+          _loadImage();
+        }
+      } else {
+        debugPrint('图片加载失败 statusCode=${response.statusCode}: ${widget.url}');
+        setState(() {
+          _loading = false;
+          _hasError = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('图片加载异常: $e');
+      if (!mounted) return;
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        await Future.delayed(Duration(milliseconds: 500 * _retryCount));
+        if (mounted) {
+          _loadImage();
+        }
+      } else {
+        setState(() {
+          _loading = false;
+          _hasError = true;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        color: Colors.grey.shade100,
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (_hasError || _imageData == null) {
+      return Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image, size: 32),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                _retryCount = 0;
+                _loadImage();
+              },
+              child: const Text('点击重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Image.memory(
+      _imageData!,
+      fit: widget.fit,
+      errorBuilder: (_, __, ___) => Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image),
+      ),
     );
   }
 }

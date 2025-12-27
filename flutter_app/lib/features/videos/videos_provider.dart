@@ -29,6 +29,7 @@ class VideosState {
     this.sources = const <String, VideoSourceInfo>{},
     this.selectedSource,
     this.sourcesLoading = false,
+    this.sourceSwitching = false,
     this.searchKeyword = '',
     this.searchResults = const <VideoSummary>[],
     this.searching = false,
@@ -48,6 +49,7 @@ class VideosState {
   final Map<String, VideoSourceInfo> sources;
   final String? selectedSource;
   final bool sourcesLoading;
+  final bool sourceSwitching;
   final String searchKeyword;
   final List<VideoSummary> searchResults;
   final bool searching;
@@ -69,6 +71,7 @@ class VideosState {
     Map<String, VideoSourceInfo>? sources,
     String? selectedSource,
     bool? sourcesLoading,
+    bool? sourceSwitching,
     String? searchKeyword,
     List<VideoSummary>? searchResults,
     bool? searching,
@@ -88,6 +91,7 @@ class VideosState {
       sources: sources != null ? Map.unmodifiable(sources) : this.sources,
       selectedSource: selectedSource ?? this.selectedSource,
       sourcesLoading: sourcesLoading ?? this.sourcesLoading,
+      sourceSwitching: sourceSwitching ?? this.sourceSwitching,
       searchKeyword: searchKeyword ?? this.searchKeyword,
       searchResults: searchResults != null ? List.unmodifiable(searchResults) : this.searchResults,
       searching: searching ?? this.searching,
@@ -208,12 +212,21 @@ class VideosNotifier extends StateNotifier<VideosState> {
     if (sourceId.isEmpty || sourceId == state.selectedSource) {
       return;
     }
-    _safeSetState((s) => s.copyWith(selectedSource: sourceId));
+    _safeSetState((s) => s.copyWith(
+      selectedSource: sourceId,
+      sourceSwitching: true,
+      videos: <VideoSummary>[],
+      categories: <VideoCategory>[],
+      selectedCategory: null,
+      error: null,
+    ));
     await _sourceRepository?.setCurrentSource(sourceId);
     if (!mounted) return;
     await _loadCategories(sourceId);
     if (!mounted) return;
     await _loadFeed(reset: true);
+    if (!mounted) return;
+    _safeSetState((s) => s.copyWith(sourceSwitching: false));
   }
 
   Future<void> search(String keyword) async {

@@ -478,9 +478,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             children: [
               Row(
                 children: [
-                  _buildZoomPresetChip(context, 0.8, value, onChanged),
                   _buildZoomPresetChip(context, 1.0, value, onChanged),
-                  _buildZoomPresetChip(context, 1.2, value, onChanged),
+                  _buildZoomPresetChip(context, 1.1, value, onChanged),
+                  _buildZoomPresetChip(context, 1.25, value, onChanged),
                   _buildZoomPresetChip(context, 1.5, value, onChanged),
                 ],
               ),
@@ -491,10 +491,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Slider(
-                      value: value,
-                      min: 0.5,
-                      max: 2.0,
-                      divisions: 30,
+                      value: value.clamp(1.0, 1.5),
+                      min: 1.0,
+                      max: 1.5,
+                      divisions: 10,
                       label: '${(value * 100).toInt()}%',
                       onChanged: onChanged,
                     ),
