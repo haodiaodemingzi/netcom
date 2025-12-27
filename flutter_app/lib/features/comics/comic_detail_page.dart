@@ -753,11 +753,16 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
       );
       return;
     }
+    final comicsState = ref.read(comicsProvider);
+    final currentSource = comicsState.selectedSource;
+    final sourceId = (currentSource != null && currentSource.isNotEmpty)
+        ? currentSource
+        : detail.source;
     final args = ComicReaderArgs(
       chapters: state.chapters,
       currentChapterId: chapter.id,
       comicTitle: detail.title,
-      sourceId: detail.source,
+      sourceId: sourceId,
     );
     context.pushNamed(
       'comicReader',
@@ -776,8 +781,13 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
     if (detail == null) {
       return;
     }
+    final comicsState = ref.read(comicsProvider);
+    final currentSource = comicsState.selectedSource;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : detail;
     downloadNotifier.enqueueComicChapters(
-      detail: detail,
+      detail: detailWithSource,
       chapters: [chapter],
     );
     ScaffoldMessenger.of(context).showSnackBar(
@@ -802,7 +812,12 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
       );
       return;
     }
-    downloadNotifier.enqueueComicChapters(detail: detail, chapters: chapters);
+    final comicsState = ref.read(comicsProvider);
+    final currentSource = comicsState.selectedSource;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : detail;
+    downloadNotifier.enqueueComicChapters(detail: detailWithSource, chapters: chapters);
     notifier.clearSelection();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已加入 ${chapters.length} 个章节到下载队列')),

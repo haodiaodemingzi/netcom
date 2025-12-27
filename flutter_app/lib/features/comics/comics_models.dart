@@ -94,6 +94,28 @@ class ComicDetail {
   final String source;
   final List<String> tags;
 
+  ComicDetail copyWith({
+    String? id,
+    String? title,
+    String? cover,
+    String? author,
+    String? description,
+    String? status,
+    String? source,
+    List<String>? tags,
+  }) {
+    return ComicDetail(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      cover: cover ?? this.cover,
+      author: author ?? this.author,
+      description: description ?? this.description,
+      status: status ?? this.status,
+      source: source ?? this.source,
+      tags: tags ?? this.tags,
+    );
+  }
+
   factory ComicDetail.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const ComicDetail(

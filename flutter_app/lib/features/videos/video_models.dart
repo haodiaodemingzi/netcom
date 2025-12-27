@@ -129,6 +129,34 @@ class VideoDetail {
   final String? area;
   final String? year;
 
+  VideoDetail copyWith({
+    String? id,
+    String? title,
+    String? cover,
+    String? source,
+    String? description,
+    List<String>? actors,
+    List<String>? tags,
+    double? rating,
+    String? status,
+    String? area,
+    String? year,
+  }) {
+    return VideoDetail(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      cover: cover ?? this.cover,
+      source: source ?? this.source,
+      description: description ?? this.description,
+      actors: actors ?? this.actors,
+      tags: tags ?? this.tags,
+      rating: rating ?? this.rating,
+      status: status ?? this.status,
+      area: area ?? this.area,
+      year: year ?? this.year,
+    );
+  }
+
   factory VideoDetail.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const VideoDetail(id: '', title: '', cover: '', source: '');

@@ -245,7 +245,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
                               rating: video.rating,
                               extra: video.episodes != null && video.episodes! > 0 ? '${video.episodes} 集' : null,
                               onTap: () {
-                                context.push('/videos/${video.id}', extra: {'source': video.source});
+                                context.push('/videos/${video.id}', extra: {'source': state.selectedSource ?? video.source});
                               },
                             );
                           },
@@ -266,7 +266,7 @@ class _VideosPageState extends ConsumerState<VideosPage> {
                                 rating: video.rating,
                                 compact: true,
                                 onTap: () {
-                                  context.push('/videos/${video.id}', extra: {'source': video.source});
+                                  context.push('/videos/${video.id}', extra: {'source': state.selectedSource ?? video.source});
                                 },
                               ),
                             );

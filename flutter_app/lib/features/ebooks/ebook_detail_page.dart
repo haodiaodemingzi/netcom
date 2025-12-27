@@ -323,18 +323,11 @@ class _EbookDetailPageState extends ConsumerState<EbookDetailPage> {
     if (chapters.isEmpty) {
       return;
     }
-    // 确保source不为空，使用默认值'ttkan'
-    final detailWithSource = detail.source != null && detail.source!.isNotEmpty
-        ? detail
-        : EbookDetail(
-            id: detail.id,
-            title: detail.title,
-            author: detail.author,
-            description: detail.description,
-            url: detail.url,
-            cover: detail.cover,
-            source: 'ttkan',
-          );
+    final ebookListState = ref.read(ebookListProvider);
+    final currentSource = ebookListState.selectedSource;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : (detail.source != null && detail.source!.isNotEmpty ? detail : detail.copyWith(source: 'ttkan'));
     final downloadCenter = ref.read(downloadCenterProvider.notifier);
     downloadCenter.enqueueEbookChapters(
       detail: detailWithSource,

@@ -97,6 +97,26 @@ class EbookDetail {
   final String? cover;
   final String? source;
 
+  EbookDetail copyWith({
+    String? id,
+    String? title,
+    String? author,
+    String? description,
+    String? url,
+    String? cover,
+    String? source,
+  }) {
+    return EbookDetail(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      author: author ?? this.author,
+      description: description ?? this.description,
+      url: url ?? this.url,
+      cover: cover ?? this.cover,
+      source: source ?? this.source,
+    );
+  }
+
   factory EbookDetail.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const EbookDetail(

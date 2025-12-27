@@ -649,7 +649,11 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     if (episodes.isEmpty) {
       return;
     }
-    notifier.enqueueVideoEpisodes(detail: detail, episodes: episodes);
+    final currentSource = widget.source;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : detail;
+    notifier.enqueueVideoEpisodes(detail: detailWithSource, episodes: episodes);
     setState(() {
       _selectedEpisodeIds.clear();
       _isBulkMode = false;
@@ -664,7 +668,11 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     if (allEpisodes.isEmpty) {
       return;
     }
-    notifier.enqueueVideoEpisodes(detail: detail, episodes: allEpisodes);
+    final currentSource = widget.source;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : detail;
+    notifier.enqueueVideoEpisodes(detail: detailWithSource, episodes: allEpisodes);
   }
 
   void _downloadSingle(
@@ -675,7 +683,11 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     if (episode.id.isEmpty) {
       return;
     }
-    notifier.enqueueVideoEpisodes(detail: detail, episodes: [episode]);
+    final currentSource = widget.source;
+    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
+        ? detail.copyWith(source: currentSource)
+        : detail;
+    notifier.enqueueVideoEpisodes(detail: detailWithSource, episodes: [episode]);
   }
 
   void _pauseSelected(

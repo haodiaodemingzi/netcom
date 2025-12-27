@@ -53,7 +53,9 @@ class _EbookReaderPageState extends ConsumerState<EbookReaderPage> {
     }
     try {
       final remote = ref.read(ebookRemoteServiceProvider);
-      final detailData = await remote.fetchBookDetail(bookId: bookId, sourceId: null);
+      final ebookListState = ref.read(ebookListProvider);
+      final currentSource = ebookListState.selectedSource;
+      final detailData = await remote.fetchBookDetail(bookId: bookId, sourceId: currentSource);
       if (mounted) {
         setState(() {
           _chapters = detailData.chapters;

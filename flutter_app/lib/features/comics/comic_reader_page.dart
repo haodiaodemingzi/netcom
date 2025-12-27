@@ -1,7 +1,15 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
+import '../../core/network/api_config.dart';
+import '../../core/network/network_providers.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
 import 'comics_provider.dart';
@@ -47,6 +55,9 @@ class ComicReaderPage extends ConsumerStatefulWidget {
 
 class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   List<ComicPageImage> _images = <ComicPageImage>[];
+  Map<String, dynamic> _downloadConfig = <String, dynamic>{};
+  Map<int, String> _localImagePaths = <int, String>{};
+  bool _useLocalImages = false;
   SettingsModel _settings = SettingsModel();
   bool _loading = false;
   String? _error;
@@ -110,6 +121,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (chapter == null || chapter.id.isEmpty) {
       setState(() {
         _images = <ComicPageImage>[];
+        _downloadConfig = <String, dynamic>{};
+        _localImagePaths = <int, String>{};
+        _useLocalImages = false;
         _error = '未找到章节';
         _loading = false;
       });
@@ -119,10 +133,35 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       _loading = true;
       _error = null;
       _images = <ComicPageImage>[];
+      _downloadConfig = <String, dynamic>{};
+      _localImagePaths = <int, String>{};
+      _useLocalImages = false;
     });
+
+    final localPaths = await _checkLocalChapter(widget.comicId, chapter.id);
+    if (localPaths.isNotEmpty) {
+      debugPrint('使用本地已下载图片: ${localPaths.length} 张');
+      final images = localPaths.entries
+          .map((e) => ComicPageImage(page: e.key, url: ''))
+          .toList()
+        ..sort((a, b) => a.page.compareTo(b.page));
+      if (!mounted) return;
+      setState(() {
+        _images = images;
+        _localImagePaths = localPaths;
+        _useLocalImages = true;
+        _loading = false;
+        _error = images.isEmpty ? '暂无图片' : null;
+      });
+      if (images.isNotEmpty) {
+        _saveHistory(page: 1);
+      }
+      return;
+    }
+
     final service = ref.read(comicsRemoteServiceProvider);
     try {
-      final data = await service.fetchChapterImages(
+      final data = await service.fetchChapterDownloadInfo(
         chapterId: chapter.id,
         sourceId: widget.args.sourceId,
       );
@@ -132,10 +171,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       }
       setState(() {
         _images = images;
+        _downloadConfig = data.downloadConfig;
         _loading = false;
         _error = images.isEmpty ? '暂无图片' : null;
       });
       if (images.isNotEmpty) {
+        await _preheatCookie();
         _prefetchAround(0);
         _saveHistory(page: 1);
       }
@@ -146,6 +187,67 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _loading = false;
         _error = '加载失败 ${e.toString()}';
       });
+    }
+  }
+
+  Future<Map<int, String>> _checkLocalChapter(String comicId, String chapterId) async {
+    final localPaths = <int, String>{};
+    try {
+      final safeComicId = comicId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final safeChapterId = chapterId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final base = await getApplicationDocumentsDirectory();
+      final dir = Directory(p.join(base.path, 'comics', safeComicId, safeChapterId));
+      if (!await dir.exists()) {
+        return localPaths;
+      }
+      final metaFile = File(p.join(dir.path, 'meta.json'));
+      if (!await metaFile.exists()) {
+        return localPaths;
+      }
+      final files = await dir.list().toList();
+      for (final entity in files) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (name == 'meta.json') continue;
+        final ext = p.extension(name).toLowerCase();
+        if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].contains(ext)) continue;
+        final baseName = p.basenameWithoutExtension(name);
+        final page = int.tryParse(baseName);
+        if (page != null && page > 0) {
+          localPaths[page] = entity.path;
+        }
+      }
+    } catch (e) {
+      debugPrint('检查本地章节失败: $e');
+    }
+    return localPaths;
+  }
+
+  Future<void> _preheatCookie() async {
+    final cookieUrl = (_downloadConfig['cookie_url'] as String?)?.trim();
+    if (cookieUrl == null || cookieUrl.isEmpty) {
+      return;
+    }
+    try {
+      debugPrint('预热 Cookie: $cookieUrl');
+      final api = ref.read(apiClientProvider);
+      final headers = _buildImageHeaders();
+      await api.get<String>(
+        cookieUrl,
+        options: Options(
+          headers: {
+            'User-Agent': headers['User-Agent'] ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            if (headers['Referer'] != null) 'Referer': headers['Referer'],
+          },
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+      debugPrint('Cookie 预热成功');
+    } catch (e) {
+      debugPrint('预热 cookie 失败: $e');
     }
   }
 
@@ -353,10 +455,56 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     );
   }
 
+  Map<String, String> _buildImageHeaders() {
+    final headers = <String, String>{};
+    final referer = _downloadConfig['referer'] as String?;
+    if (referer != null && referer.isNotEmpty) {
+      headers['Referer'] = referer;
+    }
+    final configHeaders = _downloadConfig['headers'];
+    if (configHeaders is Map) {
+      for (final entry in configHeaders.entries) {
+        if (entry.key is String && entry.value is String) {
+          headers[entry.key as String] = entry.value as String;
+        }
+      }
+    }
+    if (headers['User-Agent'] == null) {
+      headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15';
+    }
+    return headers;
+  }
+
   Widget _buildImageCard(ComicPageImage image) {
     final fit = _settings.imageFitMode == 'height' ? BoxFit.fitHeight : BoxFit.contain;
     final bg = _settings.backgroundColor == 'white' ? Colors.white : Colors.black;
     final zoomScale = _settings.imageZoomScale;
+    
+    Widget imageWidget;
+    final localPath = _localImagePaths[image.page];
+    if (_useLocalImages && localPath != null && localPath.isNotEmpty) {
+      imageWidget = Image.file(
+        File(localPath),
+        fit: fit,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade200,
+          alignment: Alignment.center,
+          child: const Icon(Icons.broken_image),
+        ),
+      );
+    } else {
+      final headers = _buildImageHeaders();
+      imageWidget = Image.network(
+        image.url,
+        headers: headers,
+        fit: fit,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade200,
+          alignment: Alignment.center,
+          child: const Icon(Icons.broken_image),
+        ),
+      );
+    }
     
     return Container(
       color: bg,
@@ -367,15 +515,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
           borderRadius: BorderRadius.circular(8),
           child: AspectRatio(
             aspectRatio: _calcAspectRatio(image),
-            child: Image.network(
-              image.url,
-              fit: fit,
-              errorBuilder: (_, __, ___) => Container(
-                color: Colors.grey.shade200,
-                alignment: Alignment.center,
-                child: const Icon(Icons.broken_image),
-              ),
-            ),
+            child: imageWidget,
           ),
         ),
       ),
