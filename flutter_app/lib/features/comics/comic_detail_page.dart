@@ -76,101 +76,133 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        title: Text(detail.title),
+        actions: [
+          IconButton(
+            icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border),
+            onPressed: notifier.toggleFavorite,
+          ),
+        ],
+      ),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: MediaQuery.of(context).size.width * 9 / 16,
-            pinned: false,
-            floating: false,
-            backgroundColor: Colors.black,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => context.pop(),
-            ),
-            actions: [
-              IconButton(
-                icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border, color: Colors.white),
-                onPressed: notifier.toggleFavorite,
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: CachedNetworkImage(
-                imageUrl: proxyImageUrl(detail.cover),
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey.shade900,
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.white54),
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              color: Theme.of(context).colorScheme.surface,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 封面图
+                  Container(
+                    width: 120,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: proxyImageUrl(detail.cover),
+                        width: 120,
+                        height: 160,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 120,
+                          height: 160,
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 120,
+                          height: 160,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, size: 48),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey.shade900,
-                  child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                ),
+                  const SizedBox(width: 16),
+                  // 右侧信息
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 标题
+                        Text(
+                          detail.title,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        // 作者
+                        Text(
+                          detail.author,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        // 状态和来源
+                        Row(
+                          children: [
+                            if (detail.status.isNotEmpty)
+                              Text(
+                                detail.status == 'completed' ? '完结' : '连载中',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.primary),
+                              ),
+                            const SizedBox(width: 12),
+                            if (detail.source.isNotEmpty)
+                              Text(
+                                detail.source,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.primary),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 操作按钮
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.menu_book, size: 18),
+                              label: const Text('试读'),
+                              onPressed: () {
+                                if (state.chapters.isNotEmpty) {
+                                  _handleStartReading(context, state);
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () {
+                                if (state.chapters.isNotEmpty) {
+                                  _handleStartReading(context, state);
+                                }
+                              },
+                              child: const Text('开始阅读'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               color: Theme.of(context).colorScheme.surface,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    detail.title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      if (detail.status.isNotEmpty)
-                        Text(
-                          detail.status == 'completed' ? '完结' : '连载中',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
-                        ),
-                      const SizedBox(width: 12),
-                      if (detail.source.isNotEmpty)
-                        Text(
-                          detail.source,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.primary),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    detail.author,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.menu_book),
-                        label: const Text('试读'),
-                        onPressed: () {
-                          if (state.chapters.isNotEmpty) {
-                            _handleStartReading(context, state);
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: () {
-                          if (state.chapters.isNotEmpty) {
-                            _handleStartReading(context, state);
-                          }
-                        },
-                        child: const Text('开始阅读'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  if (detail.tags.isNotEmpty)
+                  if (detail.tags.isNotEmpty) ...[
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -185,7 +217,8 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
                         );
                       }).toList(),
                     ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
                   ..._buildDescriptionSection(detail.description),
                 ],
               ),
