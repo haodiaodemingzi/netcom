@@ -1,4 +1,8 @@
-import '../../core/network/image_proxy.dart';
+enum ChapterDisplayType {
+  all,
+  volume,
+  chapter,
+}
 
 class ComicCategory {
   const ComicCategory({
@@ -232,4 +236,16 @@ class ComicSourceInfo {
       type: (json['type'] as String?)?.trim(),
     );
   }
+}
+
+class ComicVolume {
+  const ComicVolume({
+    required this.id,
+    required this.title,
+    required this.chapters,
+  });
+
+  final String id;
+  final String title;
+  final List<ComicChapter> chapters;
 }

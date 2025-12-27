@@ -458,23 +458,35 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
 
   Future<void> _runComicDownload(DownloadItem item, ComicDetail detail, ComicChapter chapter) async {
     try {
+      debugPrint('=== 开始漫画下载任务 ===');
+      debugPrint('漫画: ${detail.title}');
+      debugPrint('章节: ${chapter.title}');
+      debugPrint('章节ID: ${chapter.id}');
+      debugPrint('数据源: ${detail.source}');
+      
       final token = CancelToken();
       _taskTokens[item.id] = token;
       _updateQueueItem(item.id, status: DownloadStatus.downloading, progress: 0, error: null);
       
+      debugPrint('正在获取章节下载信息...');
       final info = await _comicsRemote.fetchChapterDownloadInfo(
         chapterId: chapter.id,
         sourceId: detail.source,
         cancelToken: token,
       );
       
+      debugPrint('获取到 ${info.images.length} 张图片');
+      debugPrint('下载配置: ${info.downloadConfig}');
+      
       if (info.images.isEmpty) {
+        debugPrint('错误: 无可下载图片');
         _updateQueueItem(item.id, status: DownloadStatus.failed, error: '无可下载图片');
         _taskTokens.remove(item.id);
         _processQueue();
         return;
       }
       
+      debugPrint('开始下载图片...');
       await _comicDownloader.downloadChapter(
         detail: detail,
         chapter: chapter,
@@ -484,6 +496,7 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
             return;
           }
           final progress = (completed / total).clamp(0.0, 1.0);
+          debugPrint('下载进度: $completed/$total (${(progress * 100).toStringAsFixed(1)}%)');
           _updateQueueItem(
             item.id,
             status: DownloadStatus.downloading,
@@ -493,9 +506,14 @@ class DownloadCenterNotifier extends StateNotifier<DownloadCenterState> {
         cancelToken: token,
       );
       
+      debugPrint('章节下载完成');
       _markAsCompleted(item.id);
       _taskTokens.remove(item.id);
     } catch (e, stack) {
+      debugPrint('下载失败: $e');
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stack);
+      }
       _taskTokens.remove(item.id);
       _updateQueueItem(item.id, status: DownloadStatus.failed, error: e.toString());
     }

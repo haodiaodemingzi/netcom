@@ -4,11 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../downloads/download_center_provider.dart';
-import '../../core/network/image_proxy.dart';
 import '../downloads/download_models.dart';
 import 'comic_reader_page.dart';
 import 'comic_detail_provider.dart';
 import 'comics_models.dart';
+import 'comics_provider.dart';
+import '../../core/network/image_proxy.dart';
 
 class ComicDetailPage extends ConsumerStatefulWidget {
   const ComicDetailPage({super.key, required this.comicId});
@@ -24,7 +25,9 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final request = ComicDetailRequest(id: widget.comicId);
+    final comicsState = ref.watch(comicsProvider);
+    final currentSource = comicsState.selectedSource;
+    final request = ComicDetailRequest(id: widget.comicId, sourceId: currentSource);
     final state = ref.watch(comicDetailProvider(request));
     final notifier = ref.read(comicDetailProvider(request).notifier);
     
@@ -209,7 +212,7 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
                       children: detail.tags.map((tag) {
                         return Chip(
                           label: Text(tag),
-                          backgroundColor: colorScheme.surfaceVariant,
+                          backgroundColor: colorScheme.surfaceContainerHighest,
                           side: BorderSide(color: colorScheme.outlineVariant),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           visualDensity: VisualDensity.compact,
@@ -225,43 +228,185 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
             ),
           ),
           SliverToBoxAdapter(
-            child: _buildActionBar(context, state, notifier, downloadNotifier),
+            child: _buildNewSelectorPanel(context, state, notifier),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                '章节列表 (${state.chapters.length})',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-          ),
-          if (state.segments.isNotEmpty)
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemBuilder: (context, index) {
-                    final segment = state.segments[index];
-                    final selected = index == state.currentSegmentIndex;
-                    return ChoiceChip(
-                      label: Text(segment.label()),
-                      selected: selected,
-                      onSelected: (_) => notifier.selectSegment(index),
-                    );
-                  },
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemCount: state.segments.length,
-                ),
-              ),
-            ),
           _buildChapterList(context, state, notifier, downloadNotifier),
         ],
       ),
+      bottomNavigationBar: state.selectionMode && state.selectedChapterIds.isNotEmpty
+          ? _buildBatchActionBar(context, state, notifier, downloadNotifier)
+          : null,
+    );
+  }
+  
+  Widget _buildBatchActionBar(
+    BuildContext context,
+    ComicDetailState state,
+    ComicDetailNotifier notifier,
+    DownloadCenterNotifier downloadNotifier,
+  ) {
+    final selectedCount = state.selectedChapterIds.length;
+    return BottomAppBar(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Text(
+              '已选 $selectedCount 项',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: () => _handleDownloadSelected(
+                context,
+                state,
+                notifier,
+                downloadNotifier,
+              ),
+              icon: const Icon(Icons.download, size: 20),
+              label: Text('下载 ($selectedCount)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewSelectorPanel(
+    BuildContext context,
+    ComicDetailState state,
+    ComicDetailNotifier notifier,
+  ) {
+    final key = '${state.chapterDisplayType.name}-${state.currentSegment?.label() ?? 'all'}';
+    final descending = state.sortOrderMap[key] ?? true;
+    final selectedCount = state.selectedChapterIds.length;
+    
+    return Card(
+      margin: const EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '章节列表 (${state.allChapters.length})',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ToggleButtons(
+              isSelected: [
+                state.chapterDisplayType == ChapterDisplayType.all,
+                state.chapterDisplayType == ChapterDisplayType.volume,
+                state.chapterDisplayType == ChapterDisplayType.chapter,
+              ],
+              onPressed: (index) {
+                notifier.setChapterDisplayType(ChapterDisplayType.values[index]);
+              },
+              borderRadius: BorderRadius.circular(8),
+              constraints: const BoxConstraints(minHeight: 36, minWidth: 80),
+              children: const [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('全部'),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('卷'),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('章节'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSegmentDropdown(context, state, notifier),
+                ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: notifier.toggleSortOrder,
+                  icon: Icon(
+                    descending ? Icons.arrow_downward : Icons.arrow_upward,
+                    size: 18,
+                  ),
+                  label: Text(descending ? '倒序' : '正序'),
+                ),
+                IconButton(
+                  icon: Icon(state.selectionMode ? Icons.close : Icons.select_all),
+                  onPressed: notifier.toggleSelectionMode,
+                  tooltip: state.selectionMode ? '取消选择' : '批量选择',
+                ),
+              ],
+            ),
+            if (state.selectionMode) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text('已选 $selectedCount 章', style: Theme.of(context).textTheme.bodyMedium),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: notifier.selectAllVisibleChapters,
+                    child: const Text('全选当前'),
+                  ),
+                  TextButton(
+                    onPressed: notifier.clearSelection,
+                    child: const Text('清空选择'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildSegmentDropdown(
+    BuildContext context,
+    ComicDetailState state,
+    ComicDetailNotifier notifier,
+  ) {
+    final segments = state.segmentMap[state.chapterDisplayType] ?? [];
+    
+    if (segments.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).dividerColor),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text('全部'),
+      );
+    }
+    
+    String getLabel(ChapterSegment segment) {
+      if (state.chapterDisplayType == ChapterDisplayType.volume) {
+        return '第${segment.start + 1}-${segment.end + 1}卷';
+      }
+      
+      return '${segment.start}-${segment.end}';
+    }
+    
+    return DropdownButton<ChapterSegment>(
+      value: state.currentSegment,
+      isExpanded: true,
+      underline: Container(),
+      items: segments.map((segment) {
+        return DropdownMenuItem(
+          value: segment,
+          child: Text(getLabel(segment)),
+        );
+      }).toList(),
+      onChanged: (segment) {
+        if (segment != null) {
+          notifier.setSegment(segment);
+        }
+      },
     );
   }
 
@@ -302,78 +447,6 @@ class _ComicDetailPageState extends ConsumerState<ComicDetailPage> {
     ];
   }
 
-  Widget _buildActionBar(
-    BuildContext context,
-    ComicDetailState state,
-    ComicDetailNotifier notifier,
-    DownloadCenterNotifier downloadNotifier,
-  ) {
-    final selectedCount = state.selectedChapterIds.length;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-          bottom: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: notifier.toggleSelectionMode,
-                icon: Icon(
-                  state.selectionMode ? Icons.close : Icons.check_box_outline_blank,
-                  size: 20,
-                ),
-                label: Text(state.selectionMode ? '取消' : '多选'),
-              ),
-              const SizedBox(width: 8),
-              if (state.selectionMode && selectedCount > 0)
-                FilledButton.icon(
-                  onPressed: () => _handleDownloadSelected(
-                    context,
-                    state,
-                    notifier,
-                    downloadNotifier,
-                  ),
-                  icon: const Icon(Icons.download, size: 20),
-                  label: Text('下载 ($selectedCount)'),
-                ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: notifier.toggleSortOrder,
-                icon: Icon(
-                  state.descending ? Icons.arrow_downward : Icons.arrow_upward,
-                  size: 20,
-                ),
-                label: Text(state.descending ? '倒序' : '正序'),
-              ),
-            ],
-          ),
-          if (state.selectionMode) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text('已选 $selectedCount 章'),
-                const Spacer(),
-                TextButton(
-                  onPressed: notifier.selectAllVisibleChapters,
-                  child: const Text('全选'),
-                ),
-                TextButton(
-                  onPressed: notifier.clearSelection,
-                  child: const Text('清空'),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
   Widget _buildChapterList(
     BuildContext context,

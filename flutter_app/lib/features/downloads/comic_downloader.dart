@@ -39,10 +39,17 @@ class ComicDownloader {
       throw ArgumentError('下载参数缺失');
     }
 
+    debugPrint('开始下载章节: ${detail.title} - ${chapter.title}');
+    debugPrint('图片数量: ${downloadInfo.images.length}');
+    debugPrint('下载配置: ${downloadInfo.downloadConfig}');
+
     final dir = await _ensureChapterDir(detail.id, chapter.id);
     final total = downloadInfo.images.length;
     var completed = 0;
     final headers = _buildHeaders(downloadInfo.downloadConfig);
+    
+    debugPrint('请求 Headers: $headers');
+    
     await _preheatCookie(downloadInfo.downloadConfig, headers, cancelToken);
 
     await _runWithConcurrency<ComicPageImage>(
@@ -156,19 +163,38 @@ class ComicDownloader {
     Map<String, dynamic> headers,
     CancelToken? cancelToken,
   ) async {
-    final url = (config['cookie_url'] as String?)?.trim();
-    if (url == null || url.isEmpty) {
+    final cookieUrl = (config['cookie_url'] as String?)?.trim();
+    if (cookieUrl == null || cookieUrl.isEmpty) {
       return;
     }
+    
     try {
+      debugPrint('预热 Cookie: $cookieUrl');
+      
+      final preheatHeaders = <String, dynamic>{
+        'User-Agent': headers['User-Agent'] ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+      };
+      
+      if (headers['Referer'] != null) {
+        preheatHeaders['Referer'] = headers['Referer'];
+      }
+      
       await _apiClient.get<String>(
-        url,
-        options: Options(headers: headers, followRedirects: true),
+        cookieUrl,
+        options: Options(
+          headers: preheatHeaders,
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
         cancelToken: cancelToken,
       );
+      
+      debugPrint('Cookie 预热成功');
     } catch (e, stack) {
       if (kDebugMode) {
-        debugPrint('预热 cookie 失败 url=$url error=${e.toString()}');
+        debugPrint('预热 cookie 失败 url=$cookieUrl error=${e.toString()}');
         debugPrintStack(stackTrace: stack);
       }
     }
@@ -256,16 +282,24 @@ class ComicDownloader {
       return <String, dynamic>{};
     }
     final headers = <String, dynamic>{};
+    
     final rawHeaders = config['headers'];
     if (rawHeaders is Map) {
       headers.addAll(rawHeaders.map((key, value) => MapEntry(key.toString(), value)));
     }
+    
     if (config['referer'] is String && (config['referer'] as String).isNotEmpty) {
-      headers.putIfAbsent('Referer', () => config['referer']);
+      headers['Referer'] = config['referer'];
     }
+    
     if (config['cookie'] is String && (config['cookie'] as String).isNotEmpty) {
-      headers.putIfAbsent('Cookie', () => config['cookie']);
+      headers['Cookie'] = config['cookie'];
     }
+    
+    headers.putIfAbsent('User-Agent', () => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36');
+    headers.putIfAbsent('Accept', () => 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8');
+    headers.putIfAbsent('Accept-Language', () => 'zh-CN,zh;q=0.9');
+    
     return headers;
   }
 }

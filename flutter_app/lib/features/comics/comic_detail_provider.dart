@@ -43,6 +43,12 @@ class ComicDetailState {
     this.segments = const <ChapterSegment>[],
     this.currentSegmentIndex = 0,
     this.segmentSize = 50,
+    this.chapterDisplayType = ChapterDisplayType.all,
+    this.segmentMap = const <ChapterDisplayType, List<ChapterSegment>>{},
+    this.currentSegment,
+    this.sortOrderMap = const <String, bool>{},
+    this.allChapters = const <ComicChapter>[],
+    this.allVolumes = const <ComicVolume>[],
   });
 
   final ComicDetail? detail;
@@ -53,9 +59,15 @@ class ComicDetailState {
   final Set<String> selectedChapterIds;
   final bool selectionMode;
   final bool isFavorite;
-   final List<ChapterSegment> segments;
+  final List<ChapterSegment> segments;
   final int currentSegmentIndex;
   final int segmentSize;
+  final ChapterDisplayType chapterDisplayType;
+  final Map<ChapterDisplayType, List<ChapterSegment>> segmentMap;
+  final ChapterSegment? currentSegment;
+  final Map<String, bool> sortOrderMap;
+  final List<ComicChapter> allChapters;
+  final List<ComicVolume> allVolumes;
 
   ComicDetailState copyWith({
     ComicDetail? detail,
@@ -69,6 +81,12 @@ class ComicDetailState {
     List<ChapterSegment>? segments,
     int? currentSegmentIndex,
     int? segmentSize,
+    ChapterDisplayType? chapterDisplayType,
+    Map<ChapterDisplayType, List<ChapterSegment>>? segmentMap,
+    ChapterSegment? currentSegment,
+    Map<String, bool>? sortOrderMap,
+    List<ComicChapter>? allChapters,
+    List<ComicVolume>? allVolumes,
   }) {
     return ComicDetailState(
       detail: detail ?? this.detail,
@@ -84,6 +102,12 @@ class ComicDetailState {
       segments: segments ?? this.segments,
       currentSegmentIndex: currentSegmentIndex ?? this.currentSegmentIndex,
       segmentSize: segmentSize ?? this.segmentSize,
+      chapterDisplayType: chapterDisplayType ?? this.chapterDisplayType,
+      segmentMap: segmentMap ?? this.segmentMap,
+      currentSegment: currentSegment ?? this.currentSegment,
+      sortOrderMap: sortOrderMap ?? this.sortOrderMap,
+      allChapters: allChapters ?? this.allChapters,
+      allVolumes: allVolumes ?? this.allVolumes,
     );
   }
 }
@@ -145,10 +169,26 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
     try {
       final sourceId = _request.sourceId?.isNotEmpty == true ? _request.sourceId : _sourceRepository?.currentSource();
       final data = await _remoteService.fetchDetail(comicId: _request.id, sourceId: sourceId);
+      
+      final volumes = _parseVolumesFromChapters(data.chapters);
+      final chaptersOnly = _extractChaptersOnly(data.chapters);
+      
+      final segmentMap = {
+        ChapterDisplayType.all: _buildSegmentsFor(data.chapters),
+        ChapterDisplayType.volume: _buildSegmentsForVolumes(volumes),
+        ChapterDisplayType.chapter: _buildSegmentsFor(chaptersOnly),
+      };
+      
+      final initialSegment = segmentMap[ChapterDisplayType.all]?.first;
+      final initialSortOrder = state.descending;
+      final initialSortKey = _getCurrentViewKey(ChapterDisplayType.all, initialSegment);
+      final initialSortMap = {initialSortKey: initialSortOrder};
+      
       final sorted = _sortChapters(data.chapters, descending: state.descending);
       final segments = _buildSegments(sorted, size: state.segmentSize);
       final defaultSegmentIndex = _pickDefaultSegmentIndex(segments, descending: state.descending);
       final isFavorite = _favoritesRepository?.isFavorite(_request.id) ?? false;
+      
       state = state.copyWith(
         detail: data.detail,
         chapters: sorted,
@@ -159,6 +199,12 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
         selectionMode: false,
         segments: segments,
         currentSegmentIndex: defaultSegmentIndex,
+        allChapters: data.chapters,
+        allVolumes: volumes,
+        segmentMap: segmentMap,
+        chapterDisplayType: ChapterDisplayType.all,
+        currentSegment: initialSegment,
+        sortOrderMap: initialSortMap,
       );
     } catch (e) {
       state = state.copyWith(loading: false, error: '加载失败 ${e.toString()}');
@@ -166,11 +212,28 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
   }
 
   void toggleSortOrder() {
-    final nextDescending = !state.descending;
-    final sorted = _sortChapters(state.chapters, descending: nextDescending);
+    final key = _getCurrentViewKey(state.chapterDisplayType, state.currentSegment);
+    final currentOrder = state.sortOrderMap[key] ?? true;
+    final newSortOrderMap = Map<String, bool>.from(state.sortOrderMap);
+    newSortOrderMap[key] = !currentOrder;
+    state = state.copyWith(sortOrderMap: newSortOrderMap);
+  }
+  
+  void setChapterDisplayType(ChapterDisplayType type) {
+    final segments = state.segmentMap[type] ?? [];
     state = state.copyWith(
-      descending: nextDescending,
-      chapters: sorted,
+      chapterDisplayType: type,
+      currentSegment: segments.isNotEmpty ? segments.first : null,
+      selectedChapterIds: const <String>{},
+      selectionMode: false,
+    );
+  }
+  
+  void setSegment(ChapterSegment segment) {
+    state = state.copyWith(
+      currentSegment: segment,
+      selectedChapterIds: const <String>{},
+      selectionMode: false,
     );
   }
 
@@ -238,14 +301,20 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
   }
 
   List<ComicChapter> visibleChapters() {
-    if (state.segments.isEmpty) {
-      return state.chapters;
+    List<ComicChapter> baseList;
+    
+    if (state.chapterDisplayType == ChapterDisplayType.volume) {
+      baseList = _getChaptersFromVolumesInSegment(state.currentSegment);
+    } else if (state.chapterDisplayType == ChapterDisplayType.chapter) {
+      baseList = _getChaptersInSegment(state.currentSegment, _extractChaptersOnly(state.allChapters));
+    } else {
+      baseList = _getChaptersInSegment(state.currentSegment, state.allChapters);
     }
-    if (state.currentSegmentIndex < 0 || state.currentSegmentIndex >= state.segments.length) {
-      return state.chapters;
-    }
-    final segment = state.segments[state.currentSegmentIndex];
-    return state.chapters.where((chapter) => segment.contains(chapter.index)).toList(growable: false);
+    
+    final key = _getCurrentViewKey(state.chapterDisplayType, state.currentSegment);
+    final descending = state.sortOrderMap[key] ?? true;
+    
+    return _sortChapters(baseList, descending: descending);
   }
 
   void selectSegment(int index) {
@@ -288,16 +357,46 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
   List<ComicChapter> _sortChapters(List<ComicChapter> chapters, {required bool descending}) {
     final list = List<ComicChapter>.from(chapters);
     list.sort((a, b) {
-      final result = a.index.compareTo(b.index);
-      if (result != 0) {
-        return result;
+      final aNum = _extractNumber(a.title);
+      final bNum = _extractNumber(b.title);
+      
+      if (aNum != null && bNum != null) {
+        final result = aNum.compareTo(bNum);
+        if (result != 0) {
+          return result;
+        }
       }
+      
+      final indexResult = a.index.compareTo(b.index);
+      if (indexResult != 0) {
+        return indexResult;
+      }
+      
       return a.title.compareTo(b.title);
     });
     if (descending) {
       return list.reversed.toList(growable: false);
     }
     return list;
+  }
+  
+  int? _extractNumber(String title) {
+    final patterns = [
+      RegExp(r'第(\d+)卷'),
+      RegExp(r'第(\d+)话'),
+      RegExp(r'第(\d+)章'),
+      RegExp(r'Vol\.(\d+)', caseSensitive: false),
+      RegExp(r'Chapter\s*(\d+)', caseSensitive: false),
+      RegExp(r'(\d+)'),
+    ];
+    
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(title);
+      if (match != null && match.groupCount > 0) {
+        return int.tryParse(match.group(1)!);
+      }
+    }
+    return null;
   }
 
   List<ChapterSegment> _buildSegments(List<ComicChapter> chapters, {required int size}) {
@@ -328,5 +427,115 @@ class ComicDetailNotifier extends StateNotifier<ComicDetailState> {
       return segments.length - 1;
     }
     return 0;
+  }
+  
+  String _getCurrentViewKey(ChapterDisplayType type, ChapterSegment? segment) {
+    return '${type.name}-${segment?.label() ?? 'all'}';
+  }
+  
+  List<ComicVolume> _parseVolumesFromChapters(List<ComicChapter> allChapters) {
+    final Map<String, List<ComicChapter>> volumeMap = {};
+    for (final chapter in allChapters) {
+      final volMatch = RegExp(r'(第\d+卷|Vol\.\d+)', caseSensitive: false).firstMatch(chapter.title);
+      if (volMatch != null) {
+        final volumeTitle = volMatch.group(0)!;
+        if (volumeMap.containsKey(volumeTitle)) {
+          volumeMap[volumeTitle]!.add(chapter);
+        } else {
+          volumeMap[volumeTitle] = [chapter];
+        }
+      }
+    }
+    
+    final volumes = volumeMap.entries.map((entry) {
+      return ComicVolume(id: entry.key, title: entry.key, chapters: entry.value);
+    }).toList();
+    
+    volumes.sort((a, b) {
+      final aNum = _extractNumber(a.title);
+      final bNum = _extractNumber(b.title);
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+      return a.title.compareTo(b.title);
+    });
+    
+    return volumes;
+  }
+  
+  List<ComicChapter> _extractChaptersOnly(List<ComicChapter> allChapters) {
+    return allChapters.where((chapter) {
+      final hasVolume = RegExp(r'第\d+卷|Vol\.\d+', caseSensitive: false).hasMatch(chapter.title);
+      return !hasVolume;
+    }).toList();
+  }
+  
+  List<ChapterSegment> _buildSegmentsFor(List<ComicChapter> chapters) {
+    if (chapters.isEmpty) {
+      return const <ChapterSegment>[];
+    }
+    
+    final sortedChapters = List<ComicChapter>.from(chapters);
+    sortedChapters.sort((a, b) {
+      final aNum = _extractNumber(a.title);
+      final bNum = _extractNumber(b.title);
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+      return a.index.compareTo(b.index);
+    });
+    
+    final List<ChapterSegment> result = <ChapterSegment>[];
+    final size = state.segmentSize;
+    
+    final firstNum = _extractNumber(sortedChapters.first.title) ?? 1;
+    final lastNum = _extractNumber(sortedChapters.last.title) ?? sortedChapters.length;
+    
+    var currentStart = firstNum;
+    while (currentStart <= lastNum) {
+      final currentEnd = currentStart + size - 1;
+      result.add(ChapterSegment(start: currentStart, end: currentEnd.clamp(currentStart, lastNum)));
+      currentStart = currentEnd + 1;
+    }
+    
+    return result;
+  }
+  
+  List<ChapterSegment> _buildSegmentsForVolumes(List<ComicVolume> volumes) {
+    if (volumes.isEmpty) {
+      return const <ChapterSegment>[];
+    }
+    final List<ChapterSegment> result = <ChapterSegment>[];
+    final size = state.segmentSize;
+    for (var i = 0; i < volumes.length; i += size) {
+      final end = (i + size - 1).clamp(0, volumes.length - 1);
+      result.add(ChapterSegment(start: i, end: end));
+    }
+    return result;
+  }
+  
+  List<ComicChapter> _getChaptersFromVolumesInSegment(ChapterSegment? segment) {
+    if (segment == null || state.allVolumes.isEmpty) {
+      return const <ComicChapter>[];
+    }
+    final List<ComicChapter> result = <ComicChapter>[];
+    for (var i = segment.start; i <= segment.end && i < state.allVolumes.length; i++) {
+      result.addAll(state.allVolumes[i].chapters);
+    }
+    return result;
+  }
+  
+  List<ComicChapter> _getChaptersInSegment(ChapterSegment? segment, List<ComicChapter> chapters) {
+    if (segment == null || chapters.isEmpty) {
+      return chapters;
+    }
+    
+    return chapters.where((chapter) {
+      final chapterNum = _extractNumber(chapter.title);
+      if (chapterNum == null) {
+        return false;
+      }
+      return chapterNum >= segment.start && chapterNum <= segment.end;
+    }).toList();
   }
 }
