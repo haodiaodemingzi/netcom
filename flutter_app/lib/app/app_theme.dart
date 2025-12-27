@@ -1,34 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/theme/app_theme_color.dart';
 
 class AppTheme {
   AppTheme._();
 
-  static const _tweetBlue = Color(0xFF1DA1F2);
   static const _tweetNavy = Color(0xFF0F1419);
   static const _tweetGray = Color(0xFFE6ECF0);
   static const _tweetBg = Color(0xFFF5F8FA);
 
-  static ThemeData get light {
+  static ThemeData get light => createThemeData(AppThemeColor.blue, Brightness.light);
+  static ThemeData get dark => createThemeData(AppThemeColor.blue, Brightness.dark);
+
+  static ThemeData createThemeData(AppThemeColor themeColor, Brightness brightness) {
+    final isLight = brightness == Brightness.light;
     final scheme = ColorScheme.fromSeed(
-      seedColor: _tweetBlue,
-      brightness: Brightness.light,
+      seedColor: themeColor.seedColor,
+      brightness: brightness,
     ).copyWith(
-      background: _tweetBg,
-      surface: Colors.white,
-      surfaceTint: Colors.white,
-      outlineVariant: _tweetGray,
-      primary: _tweetBlue,
-      onPrimary: Colors.white,
-      secondary: const Color(0xFF657786),
-      onSurface: _tweetNavy,
+      background: isLight ? _tweetBg : null,
+      surface: isLight ? Colors.white : null,
+      surfaceTint: isLight ? Colors.white : null,
+      outlineVariant: isLight ? _tweetGray : null,
+      onSurface: isLight ? _tweetNavy : null,
     );
+
+    final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(999));
+    const buttonPadding = EdgeInsets.symmetric(horizontal: 16);
+    const buttonMinSize = Size.fromHeight(48);
 
     final base = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      scaffoldBackgroundColor: _tweetBg,
+      scaffoldBackgroundColor: isLight ? _tweetBg : null,
       fontFamily: 'Helvetica Neue',
-      textTheme: Typography.blackMountainView.copyWith(
+      textTheme: (isLight ? Typography.blackMountainView : Typography.whiteMountainView).copyWith(
         displaySmall: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.2),
         headlineMedium: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.1),
         titleLarge: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.1),
@@ -38,125 +43,116 @@ class AppTheme {
         bodyMedium: const TextStyle(letterSpacing: -0.05, height: 1.24),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
-        foregroundColor: _tweetNavy,
+        backgroundColor: isLight ? Colors.white : null,
+        foregroundColor: isLight ? _tweetNavy : null,
         centerTitle: false,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: _tweetNavy,
+          color: isLight ? _tweetNavy : null,
           letterSpacing: -0.2,
         ),
-        shape: const Border(
+        shape: isLight ? const Border(
           bottom: BorderSide(color: _tweetGray, width: 1),
-        ),
+        ) : null,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.white,
-        indicatorColor: _tweetBlue.withOpacity(0.12),
+        backgroundColor: isLight ? Colors.white : null,
+        indicatorColor: scheme.primary.withOpacity(0.12),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         surfaceTintColor: Colors.transparent,
-        iconTheme: MaterialStateProperty.resolveWith(
+        iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            color: states.contains(MaterialState.selected) ? _tweetBlue : const Color(0xFF536471),
+            color: states.contains(WidgetState.selected) 
+                ? scheme.primary 
+                : (isLight ? const Color(0xFF536471) : null),
           ),
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: Colors.white,
+        color: isLight ? Colors.white : null,
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shadowColor: Colors.black.withOpacity(0.04),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: _tweetGray),
+          side: isLight ? const BorderSide(color: _tweetGray) : BorderSide.none,
         ),
       ),
-      dividerColor: _tweetGray,
+      dividerColor: isLight ? _tweetGray : null,
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: _tweetBlue,
-          foregroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(48),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          minimumSize: buttonMinSize,
+          padding: buttonPadding,
+          shape: buttonShape,
           elevation: 0,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: _tweetNavy,
-          foregroundColor: Colors.white,
+          backgroundColor: scheme.primaryContainer,
+          foregroundColor: scheme.onPrimaryContainer,
           minimumSize: const Size(48, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          padding: buttonPadding,
+          shape: buttonShape,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: _tweetBlue,
-          side: BorderSide(color: _tweetBlue.withOpacity(0.4)),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          foregroundColor: scheme.primary,
+          side: BorderSide(color: scheme.primary.withOpacity(0.4)),
+          padding: buttonPadding,
+          shape: buttonShape,
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: Colors.white,
-        selectedColor: _tweetBlue,
-        labelStyle: const TextStyle(
+        backgroundColor: isLight ? Colors.white : null,
+        selectedColor: scheme.primary,
+        labelStyle: TextStyle(
           fontWeight: FontWeight.w700,
           letterSpacing: -0.1,
-          color: _tweetNavy,
+          color: isLight ? _tweetNavy : null,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999),
-          side: BorderSide(color: _tweetBlue.withOpacity(0.25)),
+          side: BorderSide(color: scheme.primary.withOpacity(0.25)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: isLight ? Colors.white : null,
         hintStyle: TextStyle(color: const Color(0xFF536471).withOpacity(0.7)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _tweetGray),
+          borderSide: isLight ? const BorderSide(color: _tweetGray) : BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _tweetGray),
+          borderSide: isLight ? const BorderSide(color: _tweetGray) : BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _tweetBlue, width: 1.4),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
         ),
       ),
     );
     return base.copyWith(
       bottomNavigationBarTheme: base.bottomNavigationBarTheme.copyWith(
-        backgroundColor: Colors.white,
-        selectedItemColor: _tweetBlue,
-        unselectedItemColor: const Color(0xFF536471),
+        backgroundColor: isLight ? Colors.white : null,
+        selectedItemColor: scheme.primary,
+        unselectedItemColor: isLight ? const Color(0xFF536471) : null,
         elevation: 0,
         type: BottomNavigationBarType.fixed,
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.1),
         unselectedLabelStyle: const TextStyle(letterSpacing: -0.05),
       ),
-    );
-  }
-
-  static ThemeData get dark {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: _tweetBlue,
-      brightness: Brightness.dark,
-    );
-    return ThemeData(
-      colorScheme: scheme,
-      useMaterial3: true,
     );
   }
 }

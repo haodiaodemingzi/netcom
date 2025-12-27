@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../app/theme/app_theme_color.dart';
+import '../../app/theme/theme_provider.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
 import '../../core/storage/storage_repository.dart';
@@ -183,10 +185,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget _buildSettingsSection(
     BuildContext context,
   ) {
+    final themeMode = ref.watch(themeModeProvider);
+    final themeColor = ref.watch(themeColorProvider);
+    
     return _buildSection(
       context,
       title: '设置',
       children: [
+        _buildThemeModeSetting(context, themeMode),
+        _buildThemeColorSetting(context, themeColor),
         _buildRadioSetting(
           context,
           title: '显示模式',
@@ -216,18 +223,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               context,
               patch: {'scrollMode': value},
               resolveNext: (current) => current.copyWith(scrollMode: value),
-            );
-          },
-        ),
-        _buildSwitchSetting(
-          context,
-          title: '夜间模式',
-          value: _settings.darkMode,
-          onChanged: (value) {
-            _applySettingsPatch(
-              context,
-              patch: {'darkMode': value},
-              resolveNext: (current) => current.copyWith(darkMode: value),
             );
           },
         ),
@@ -540,6 +535,118 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onSelected: (_) => onChanged(presetValue),
         ),
       ),
+    );
+  }
+
+  Widget _buildThemeModeSetting(BuildContext context, ThemeMode currentMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            '主题模式',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: const Text('浅色'),
+                    selected: currentMode == ThemeMode.light,
+                    onSelected: (_) {
+                      ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light);
+                    },
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: const Text('深色'),
+                    selected: currentMode == ThemeMode.dark,
+                    onSelected: (_) {
+                      ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark);
+                    },
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: const Text('跟随系统'),
+                    selected: currentMode == ThemeMode.system,
+                    onSelected: (_) {
+                      ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+  }
+
+  Widget _buildThemeColorSetting(BuildContext context, AppThemeColor currentColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            '主题颜色',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            children: AppThemeColor.values.map((color) {
+              final isSelected = currentColor == color;
+              return InkWell(
+                onTap: () {
+                  ref.read(themeColorProvider.notifier).setThemeColor(color);
+                },
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: color.seedColor,
+                    shape: BoxShape.circle,
+                    border: isSelected
+                        ? Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 3,
+                          )
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 24,
+                        )
+                      : null,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const Divider(height: 1),
+      ],
     );
   }
 
