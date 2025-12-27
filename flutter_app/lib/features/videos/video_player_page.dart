@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'video_models.dart';
 import 'video_detail_provider.dart';
@@ -48,6 +49,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     if (widget.fullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     }
+    WakelockPlus.enable();
     if (widget.initialController != null) {
       _videoPlayerController = widget.initialController;
       _ownsController = false;
@@ -65,6 +67,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     if (_ownsController) {
       _videoPlayerController?.dispose();
     }
+    WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
