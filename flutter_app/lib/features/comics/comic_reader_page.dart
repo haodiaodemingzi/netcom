@@ -202,10 +202,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       if (!await dir.exists()) {
         return localPaths;
       }
-      final metaFile = File(p.join(dir.path, 'meta.json'));
-      if (!await metaFile.exists()) {
-        return localPaths;
-      }
       final files = await dir.list().toList();
       for (final entity in files) {
         if (entity is! File) continue;
@@ -218,6 +214,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         if (page != null && page > 0) {
           localPaths[page] = entity.path;
         }
+      }
+      if (localPaths.isEmpty) {
+        debugPrint('本地章节目录存在但未找到图片: ${dir.path}');
       }
     } catch (e) {
       debugPrint('检查本地章节失败: $e');
@@ -481,7 +480,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final fit = _settings.imageFitMode == 'height' ? BoxFit.fitHeight : BoxFit.contain;
     final bg = _settings.backgroundColor == 'white' ? Colors.white : Colors.black;
     final zoomScale = _settings.imageZoomScale.clamp(1.0, 1.5);
-    
+    final aspect = _calcAspectRatio(image);
+
     Widget imageWidget;
     final localPath = _localImagePaths[image.page];
     if (_useLocalImages && localPath != null && localPath.isNotEmpty) {
@@ -503,20 +503,29 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         apiClient: ref.read(apiClientProvider),
       );
     }
-    
-    return Container(
-      color: bg,
-      alignment: Alignment.center,
-      child: Transform.scale(
-        scale: zoomScale,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: AspectRatio(
-            aspectRatio: _calcAspectRatio(image),
-            child: imageWidget,
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final baseWidth = constraints.maxWidth.isFinite && constraints.maxWidth > 0 ? constraints.maxWidth : MediaQuery.of(context).size.width;
+        final displayWidth = baseWidth * zoomScale;
+        final displayHeight = displayWidth / aspect;
+
+        return Container(
+          color: bg,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: displayWidth,
+            height: displayHeight.isFinite && displayHeight > 0 ? displayHeight : null,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: AspectRatio(
+                aspectRatio: aspect,
+                child: imageWidget,
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

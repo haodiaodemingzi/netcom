@@ -103,7 +103,9 @@ class ComicDownloader {
     CancelToken? cancelToken,
   }) async {
     final page = image.page.toString().padLeft(3, '0');
-    final ext = image.url.split('.').last;
+    final cleanUrl = image.url.split('?').first;
+    final extFromPath = p.extension(cleanUrl).replaceFirst('.', '');
+    final ext = extFromPath.isNotEmpty ? extFromPath : 'jpg';
     final fileName = '$page.$ext';
     final filePath = p.join(dir.path, fileName);
     final file = File(filePath);
