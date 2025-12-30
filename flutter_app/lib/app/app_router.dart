@@ -21,6 +21,7 @@ import '../features/ebooks/ebooks_page.dart';
 import '../features/ebooks/ebook_detail_page.dart';
 import '../features/ebooks/ebook_reader_page.dart';
 import '../features/ebooks/ebook_offline_reader_page.dart';
+import '../features/market/market_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -88,6 +89,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         name: 'settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/market',
+        name: 'market',
+        builder: (context, state) => const MarketPage(),
       ),
       GoRoute(
         path: '/comic/:id',

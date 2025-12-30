@@ -14,6 +14,8 @@ import '../../core/network/api_client.dart';
 import '../../core/network/network_providers.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/storage/storage_providers.dart';
+import '../../core/image_utils.dart';
+import '../downloads/comic_downloader.dart';
 import 'comics_provider.dart';
 import 'data/comics_remote_service.dart';
 import 'comics_models.dart';
@@ -66,6 +68,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   late int _currentIndex;
   int _currentPage = 1;
   bool _isFullscreen = false;
+  int _loadVersion = 0;
+  int _downloadedCount = 0;
+  int _downloadTotal = 0;
 
   final PageController _horizontalController = PageController();
   final ScrollController _verticalController = ScrollController();
@@ -119,6 +124,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   }
 
   Future<void> _loadImages() async {
+    final currentVersion = ++_loadVersion;
     final chapter = _currentChapter;
     if (chapter == null || chapter.id.isEmpty) {
       setState(() {
@@ -128,6 +134,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _useLocalImages = false;
         _error = '未找到章节';
         _loading = false;
+        _downloadedCount = 0;
+        _downloadTotal = 0;
       });
       return;
     }
@@ -138,9 +146,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       _downloadConfig = <String, dynamic>{};
       _localImagePaths = <int, String>{};
       _useLocalImages = false;
+      _downloadedCount = 0;
+      _downloadTotal = 0;
     });
 
     final localPaths = await _checkLocalChapter(widget.comicId, chapter.id);
+    if (!mounted || currentVersion != _loadVersion) {
+      return;
+    }
     if (localPaths.isNotEmpty) {
       debugPrint('使用本地已下载图片: ${localPaths.length} 张');
       final images = localPaths.entries
@@ -156,6 +169,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _error = images.isEmpty ? '暂无图片' : null;
       });
       if (images.isNotEmpty) {
+        _prefetchAround(0);
         _saveHistory(page: 1);
       }
       return;
@@ -167,21 +181,49 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         chapterId: chapter.id,
         sourceId: widget.args.sourceId,
       );
-      final images = data.images;
-      if (!mounted) {
+      if (!mounted || currentVersion != _loadVersion) {
         return;
       }
+
       setState(() {
-        _images = images;
         _downloadConfig = data.downloadConfig;
-        _loading = false;
-        _error = images.isEmpty ? '暂无图片' : null;
       });
-      if (images.isNotEmpty) {
-        await _preheatCookie();
-        _prefetchAround(0);
-        _saveHistory(page: 1);
+
+      final downloaded = await _downloadChapterToLocal(
+        chapter: chapter,
+        downloadInfo: data,
+        loadVersion: currentVersion,
+      );
+      if (!mounted || currentVersion != _loadVersion) {
+        return;
       }
+
+      if (downloaded.isNotEmpty) {
+        final images = downloaded.entries
+            .map((e) => ComicPageImage(page: e.key, url: ''))
+            .toList()
+          ..sort((a, b) => a.page.compareTo(b.page));
+        setState(() {
+          _images = images;
+          _localImagePaths = downloaded;
+          _useLocalImages = true;
+          _loading = false;
+          _error = images.isEmpty ? '暂无图片' : null;
+        });
+        if (images.isNotEmpty) {
+          _prefetchAround(0);
+          _saveHistory(page: 1);
+        }
+        return;
+      }
+
+      setState(() {
+        _images = <ComicPageImage>[];
+        _localImagePaths = <int, String>{};
+        _useLocalImages = false;
+        _loading = false;
+        _error = '章节下载失败';
+      });
     } catch (e, stack) {
       debugPrint('加载章节图片失败 ${chapter.id} ${e.toString()}');
       debugPrintStack(stackTrace: stack);
@@ -190,6 +232,56 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _error = '加载失败 ${e.toString()}';
       });
     }
+  }
+
+  ComicDetail _buildDownloadDetail() {
+    return ComicDetail(
+      id: widget.comicId,
+      title: widget.args.comicTitle,
+      cover: '',
+      author: '',
+      description: '',
+      status: '',
+      source: widget.args.sourceId,
+    );
+  }
+
+  Future<Map<int, String>> _downloadChapterToLocal({
+    required ComicChapter chapter,
+    required ComicDownloadInfo downloadInfo,
+    required int loadVersion,
+  }) async {
+    final downloader = ref.read(comicDownloaderProvider);
+    final detail = _buildDownloadDetail();
+    if (mounted && loadVersion == _loadVersion) {
+      setState(() {
+        _downloadedCount = 0;
+        _downloadTotal = downloadInfo.images.length;
+      });
+    }
+    try {
+      await downloader.downloadChapter(
+        detail: detail,
+        chapter: chapter,
+        downloadInfo: downloadInfo,
+        onProgress: (completed, total) {
+          if (!mounted || loadVersion != _loadVersion) {
+            return;
+          }
+          setState(() {
+            _downloadedCount = completed;
+            _downloadTotal = total;
+          });
+        },
+      );
+    } catch (e, stack) {
+      debugPrint(
+        '章节下载失败 comicId=${widget.comicId} chapterId=${chapter.id} source=${widget.args.sourceId} error=${e.toString()}',
+      );
+      debugPrintStack(stackTrace: stack);
+      return <int, String>{};
+    }
+    return _checkLocalChapter(widget.comicId, chapter.id);
   }
 
   Future<Map<int, String>> _checkLocalChapter(String comicId, String chapterId) async {
@@ -334,6 +426,19 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading) {
+      final total = _downloadTotal;
+      if (total > 0) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text('下载中 $_downloadedCount/$total'),
+            ],
+          ),
+        );
+      }
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
@@ -485,14 +590,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     Widget imageWidget;
     final localPath = _localImagePaths[image.page];
     if (_useLocalImages && localPath != null && localPath.isNotEmpty) {
-      imageWidget = Image.file(
-        File(localPath),
+      imageWidget = _LocalImageWithProcessing(
+        path: localPath,
         fit: fit,
-        errorBuilder: (_, __, ___) => Container(
-          color: Colors.grey.shade200,
-          alignment: Alignment.center,
-          child: const Icon(Icons.broken_image),
-        ),
+        enableRemoveWhiteBorder: _settings.enableRemoveWhiteBorder,
       );
     } else {
       final headers = _buildImageHeaders();
@@ -501,6 +602,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         headers: headers,
         fit: fit,
         apiClient: ref.read(apiClientProvider),
+        enableRemoveWhiteBorder: _settings.enableRemoveWhiteBorder,
       );
     }
 
@@ -585,6 +687,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       return;
     }
     final image = _images[index];
+    if (_useLocalImages) {
+      final localPath = _localImagePaths[image.page];
+      if (localPath == null || localPath.isEmpty) {
+        return;
+      }
+      precacheImage(FileImage(File(localPath)), context);
+      return;
+    }
     if (image.url.isEmpty) {
       return;
     }
@@ -672,18 +782,186 @@ class _MeasuredItem extends StatelessWidget {
   }
 }
 
+class _LocalImageWithProcessing extends StatefulWidget {
+  const _LocalImageWithProcessing({
+    required this.path,
+    required this.fit,
+    required this.enableRemoveWhiteBorder,
+  });
+
+  final String path;
+  final BoxFit fit;
+  final bool enableRemoveWhiteBorder;
+
+  @override
+  State<_LocalImageWithProcessing> createState() => _LocalImageWithProcessingState();
+}
+
+class _LocalImageWithProcessingState extends State<_LocalImageWithProcessing> {
+  Uint8List? _imageData;
+  Uint8List? _originalData;
+  bool _loading = true;
+  bool _hasError = false;
+  int _processVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAndProcess();
+  }
+
+  @override
+  void didUpdateWidget(_LocalImageWithProcessing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path) {
+      _loadAndProcess();
+      return;
+    }
+    if (oldWidget.enableRemoveWhiteBorder != widget.enableRemoveWhiteBorder) {
+      _reprocess();
+    }
+  }
+
+  Future<void> _loadAndProcess() async {
+    final path = widget.path.trim();
+    if (path.isEmpty) {
+      setState(() {
+        _loading = false;
+        _hasError = true;
+        _imageData = null;
+        _originalData = null;
+      });
+      return;
+    }
+
+    final current = ++_processVersion;
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+
+    try {
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      if (!mounted || current != _processVersion) {
+        return;
+      }
+      _originalData = bytes;
+      final processed = await _applyRemoveWhiteBorder(
+        bytes,
+        enableRemoveWhiteBorder: widget.enableRemoveWhiteBorder,
+        source: path,
+      );
+      if (!mounted || current != _processVersion) {
+        return;
+      }
+      setState(() {
+        _imageData = processed;
+        _loading = false;
+        _hasError = false;
+      });
+    } catch (e, stack) {
+      debugPrint('读取本地图片失败 path=$path error=${e.toString()}');
+      debugPrintStack(stackTrace: stack);
+      if (!mounted || current != _processVersion) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _hasError = true;
+      });
+    }
+  }
+
+  Future<void> _reprocess() async {
+    final original = _originalData;
+    if (original == null || original.isEmpty) {
+      _loadAndProcess();
+      return;
+    }
+
+    final current = ++_processVersion;
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+
+    final processed = await _applyRemoveWhiteBorder(
+      original,
+      enableRemoveWhiteBorder: widget.enableRemoveWhiteBorder,
+      source: widget.path,
+    );
+    if (!mounted || current != _processVersion) {
+      return;
+    }
+    setState(() {
+      _imageData = processed;
+      _loading = false;
+      _hasError = false;
+    });
+  }
+
+  Future<Uint8List> _applyRemoveWhiteBorder(
+    Uint8List original, {
+    required bool enableRemoveWhiteBorder,
+    required String source,
+  }) async {
+    if (!enableRemoveWhiteBorder) {
+      return original;
+    }
+    try {
+      return await ImageCropper.removeWhiteBorder(original);
+    } catch (e, stack) {
+      debugPrint('去白边处理失败 source=$source error=${e.toString()}');
+      debugPrintStack(stackTrace: stack);
+      return original;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        color: Colors.grey.shade100,
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (_hasError || _imageData == null) {
+      return Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image),
+      );
+    }
+
+    return Image.memory(
+      _imageData!,
+      fit: widget.fit,
+      errorBuilder: (_, __, ___) => Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image),
+      ),
+    );
+  }
+}
+
 class _NetworkImageWithHeaders extends StatefulWidget {
   const _NetworkImageWithHeaders({
     required this.url,
     required this.headers,
     required this.fit,
     required this.apiClient,
+    required this.enableRemoveWhiteBorder,
   });
 
   final String url;
   final Map<String, String> headers;
   final BoxFit fit;
   final ApiClient apiClient;
+  final bool enableRemoveWhiteBorder;
 
   @override
   State<_NetworkImageWithHeaders> createState() => _NetworkImageWithHeadersState();
@@ -691,10 +969,12 @@ class _NetworkImageWithHeaders extends StatefulWidget {
 
 class _NetworkImageWithHeadersState extends State<_NetworkImageWithHeaders> {
   Uint8List? _imageData;
+  Uint8List? _originalData;
   bool _loading = true;
   bool _hasError = false;
   int _retryCount = 0;
   static const int _maxRetries = 2;
+  int _processVersion = 0;
 
   @override
   void initState() {
@@ -708,6 +988,55 @@ class _NetworkImageWithHeadersState extends State<_NetworkImageWithHeaders> {
     if (oldWidget.url != widget.url) {
       _retryCount = 0;
       _loadImage();
+      return;
+    }
+    if (oldWidget.enableRemoveWhiteBorder != widget.enableRemoveWhiteBorder) {
+      _reprocess();
+    }
+  }
+
+  Future<void> _reprocess() async {
+    final original = _originalData;
+    if (original == null || original.isEmpty) {
+      _loadImage();
+      return;
+    }
+
+    final current = ++_processVersion;
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+
+    final processed = await _applyRemoveWhiteBorder(
+      original,
+      enableRemoveWhiteBorder: widget.enableRemoveWhiteBorder,
+      source: widget.url,
+    );
+    if (!mounted || current != _processVersion) {
+      return;
+    }
+    setState(() {
+      _imageData = processed;
+      _loading = false;
+      _hasError = false;
+    });
+  }
+
+  Future<Uint8List> _applyRemoveWhiteBorder(
+    Uint8List original, {
+    required bool enableRemoveWhiteBorder,
+    required String source,
+  }) async {
+    if (!enableRemoveWhiteBorder) {
+      return original;
+    }
+    try {
+      return await ImageCropper.removeWhiteBorder(original);
+    } catch (e, stack) {
+      debugPrint('去白边处理失败 source=$source error=${e.toString()}');
+      debugPrintStack(stackTrace: stack);
+      return original;
     }
   }
 
@@ -739,8 +1068,20 @@ class _NetworkImageWithHeadersState extends State<_NetworkImageWithHeaders> {
       if (!mounted) return;
 
       if (response.statusCode == 200 && response.data != null) {
+        final originalData = Uint8List.fromList(response.data!);
+        final current = ++_processVersion;
+        _originalData = originalData;
+        final processedData = await _applyRemoveWhiteBorder(
+          originalData,
+          enableRemoveWhiteBorder: widget.enableRemoveWhiteBorder,
+          source: widget.url,
+        );
+        if (!mounted || current != _processVersion) {
+          return;
+        }
+        
         setState(() {
-          _imageData = Uint8List.fromList(response.data!);
+          _imageData = processedData;
           _loading = false;
           _hasError = false;
         });

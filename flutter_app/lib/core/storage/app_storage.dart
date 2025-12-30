@@ -29,6 +29,7 @@ class SettingsModel {
     this.showFavoriteTab = true,
     this.videoOrientationMode = 'auto',
     this.imageZoomScale = 1.0,
+    this.enableRemoveWhiteBorder = false,
   });
 
   final String readingMode;
@@ -45,6 +46,7 @@ class SettingsModel {
   final bool showFavoriteTab;
   final String videoOrientationMode;
   final double imageZoomScale;
+  final bool enableRemoveWhiteBorder;
 
   SettingsModel copyWith({
     String? readingMode,
@@ -61,6 +63,7 @@ class SettingsModel {
     bool? showFavoriteTab,
     String? videoOrientationMode,
     double? imageZoomScale,
+    bool? enableRemoveWhiteBorder,
   }) {
     return SettingsModel(
       readingMode: readingMode ?? this.readingMode,
@@ -77,6 +80,7 @@ class SettingsModel {
       showFavoriteTab: showFavoriteTab ?? this.showFavoriteTab,
       videoOrientationMode: videoOrientationMode ?? this.videoOrientationMode,
       imageZoomScale: imageZoomScale ?? this.imageZoomScale,
+      enableRemoveWhiteBorder: enableRemoveWhiteBorder ?? this.enableRemoveWhiteBorder,
     );
   }
 
@@ -96,6 +100,7 @@ class SettingsModel {
       'showFavoriteTab': showFavoriteTab,
       'videoOrientationMode': videoOrientationMode,
       'imageZoomScale': imageZoomScale,
+      'enableRemoveWhiteBorder': enableRemoveWhiteBorder,
     };
   }
 
@@ -118,6 +123,7 @@ class SettingsModel {
       showFavoriteTab: json['showFavoriteTab'] as bool? ?? true,
       videoOrientationMode: json['videoOrientationMode'] as String? ?? 'auto',
       imageZoomScale: (json['imageZoomScale'] as num?)?.toDouble() ?? 1.0,
+      enableRemoveWhiteBorder: json['enableRemoveWhiteBorder'] as bool? ?? false,
     );
   }
 }

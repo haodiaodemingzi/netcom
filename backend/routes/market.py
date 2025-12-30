@@ -42,9 +42,12 @@ def get_market_sources():
     try:
         category = request.args.get('category', 'all')
         search = request.args.get('search', '').strip()
-        token = request.args.get('token', '').strip()
+        # 优先从请求头获取 token，如果没有再从 query parameter 获取
+        token = (request.headers.get('X-Activation-Token') or '').strip()
+        if not token:
+            token = request.args.get('token', '').strip()
         activated = activation_service.is_token_valid(token)
-        
+
         if search:
             sources = source_market.search_sources(search, category)
         else:
@@ -52,7 +55,7 @@ def get_market_sources():
 
         if not activated:
             sources = _filter_sources_for_guest(sources)
-        
+
         return jsonify({
             'sources': sources,
             'total': len(sources),
@@ -73,16 +76,19 @@ def get_market_sources():
 def get_source_detail(source_id):
     """获取数据源详情"""
     try:
-        token = request.args.get('token', '').strip()
+        # 优先从请求头获取 token，如果没有再从 query parameter 获取
+        token = (request.headers.get('X-Activation-Token') or '').strip()
+        if not token:
+            token = request.args.get('token', '').strip()
         activated = activation_service.is_token_valid(token)
         source = source_market.get_source_by_id(source_id)
-        
+
         if not source:
             return jsonify({'error': '数据源不存在'}), 404
 
         if not activated and source.get('id') not in DEFAULT_VISIBLE_IDS:
             return jsonify({'error': '未激活无法查看该数据源'}), 403
-        
+
         return jsonify(source), 200
     except Exception as e:
         logger.error(f"获取数据源详情失败: {str(e)}")

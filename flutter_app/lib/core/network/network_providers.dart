@@ -40,6 +40,7 @@ final dioProvider = Provider<Dio>((ref) {
           'path': err.requestOptions.path,
           'status': err.response?.statusCode,
           'msg': err.message,
+          'error': err.error?.toString(),
         };
         // ignore: avoid_print
         print(payload);

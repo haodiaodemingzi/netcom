@@ -112,7 +112,10 @@ class ImageCropper {
   static bool _isColumnWhite(img.Image image, int x, int height, int threshold) {
     for (int y = 0; y < height; y++) {
       final pixel = image.getPixel(x, y);
-      if (!_isWhitePixel(pixel, threshold)) {
+      final r = pixel.r.toInt();
+      final g = pixel.g.toInt();
+      final b = pixel.b.toInt();
+      if (!_isWhitePixel(r, g, b, threshold)) {
         return false;
       }
     }
@@ -123,7 +126,10 @@ class ImageCropper {
   static bool _isRowWhite(img.Image image, int y, int width, int threshold) {
     for (int x = 0; x < width; x++) {
       final pixel = image.getPixel(x, y);
-      if (!_isWhitePixel(pixel, threshold)) {
+      final r = pixel.r.toInt();
+      final g = pixel.g.toInt();
+      final b = pixel.b.toInt();
+      if (!_isWhitePixel(r, g, b, threshold)) {
         return false;
       }
     }
@@ -131,11 +137,7 @@ class ImageCropper {
   }
 
   /// 检查像素是否为白色
-  static bool _isWhitePixel(int pixel, int threshold) {
-    final r = (pixel >> 16) & 0xFF;
-    final g = (pixel >> 8) & 0xFF;
-    final b = pixel & 0xFF;
-    
+  static bool _isWhitePixel(int r, int g, int b, int threshold) {
     // 如果 RGB 通道都大于阈值，认为是白色
     return r >= threshold && g >= threshold && b >= threshold;
   }

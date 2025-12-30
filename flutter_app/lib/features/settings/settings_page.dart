@@ -265,17 +265,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           },
         ),
         _buildZoomScaleSetting(
-          context,
-          title: '图片缩放',
-          value: _settings.imageZoomScale,
-          onChanged: (value) {
-            _applySettingsPatch(
-              context,
-              patch: {'imageZoomScale': value},
-              resolveNext: (current) => current.copyWith(imageZoomScale: value),
-            );
-          },
-        ),
+           context,
+           title: '图片缩放',
+           value: _settings.imageZoomScale,
+           onChanged: (value) {
+             _applySettingsPatch(
+               context,
+               patch: {'imageZoomScale': value},
+               resolveNext: (current) => current.copyWith(imageZoomScale: value),
+             );
+           },
+         ),
+        _buildSwitchSetting(
+           context,
+           title: '自动去白边',
+           value: _settings.enableRemoveWhiteBorder,
+           onChanged: (value) {
+             _applySettingsPatch(
+               context,
+               patch: {'enableRemoveWhiteBorder': value},
+               resolveNext: (current) => current.copyWith(enableRemoveWhiteBorder: value),
+             );
+           },
+         ),
       ],
     );
   }

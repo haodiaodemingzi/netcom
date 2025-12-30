@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../components/ebook_card.dart';
+import '../../core/storage/storage_providers.dart';
 import 'ebooks_models.dart';
 import 'ebooks_provider.dart';
 
@@ -150,6 +151,7 @@ class _EbooksPageState extends ConsumerState<EbooksPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _SourceTabBar(),
                   _CategoryBar(
                     expanded: _categoriesExpanded,
                     onToggle: _toggleCategories,
@@ -491,6 +493,63 @@ class _SearchBar extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
+      ),
+    );
+  }
+}
+
+/// 源 TabBar - 显示已安装的电子书源
+class _SourceTabBar extends ConsumerWidget {
+  const _SourceTabBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(ebooksProvider);
+    final installedSources = ref.watch(sourceRepositoryProvider)?.listInstalled()['ebook'] ?? [];
+
+    if (installedSources.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: installedSources.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final sourceId = installedSources[index];
+          final selected = sourceId == state.selectedSource?.id;
+          final sourceInfo = state.sources.firstWhere(
+            (s) => s.id == sourceId,
+            orElse: () => state.sources.isNotEmpty ? state.sources.first : EbookSourceInfo(id: sourceId, name: sourceId, description: '', supportsSearch: false),
+          );
+
+          return InkWell(
+            onTap: () => ref.read(ebooksProvider.notifier).changeSource(sourceInfo),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                sourceInfo.name,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  color: selected
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

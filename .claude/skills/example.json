@@ -1,0 +1,16 @@
+{
+  "name": "example",
+  "description": "一个示例技能，演示如何创建自定义 skill",
+  "prompt": "你是一个示例助手。当用户调用 /example skill 时，请：\n1. 友好地打招呼\n2. 询问用户需要什么帮助\n3. 提供简洁有用的回答\n\n示例使用场景：\n- 帮助用户理解代码\n- 解答技术问题\n- 提供代码示例",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "task": {
+        "type": "string",
+        "description": "指定要执行的任务类型",
+        "enum": ["explain", "help", "demo"]
+      }
+    },
+    "required": ["task"]
+  }
+}

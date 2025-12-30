@@ -145,12 +145,57 @@ class ComicsRemoteService {
     if (resolvedSource != null) {
       params['source'] = resolvedSource;
     }
-    final response = await _api.get<dynamic>(
-      '/chapters/$chapterId/download-info',
-      query: params,
-      cancelToken: cancelToken,
-    );
-    return _parseDownloadInfo(_unwrap(response.data));
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (cancelToken?.isCancelled == true) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/chapters/$chapterId/download-info'),
+          type: DioExceptionType.cancel,
+        );
+      }
+      try {
+        final response = await _api.get<dynamic>(
+          '/chapters/$chapterId/download-info',
+          query: params,
+          cancelToken: cancelToken,
+        );
+        return _parseDownloadInfo(_unwrap(response.data));
+      } on DioException catch (e) {
+        final canRetry = _isRetriableDioError(e);
+        if (!canRetry || attempt >= maxAttempts) {
+          rethrow;
+        }
+        final delayMs = 400 * attempt;
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+    }
+    throw StateError('fetchChapterDownloadInfo unreachable');
+  }
+
+  bool _isRetriableDioError(DioException e) {
+    if (e.type == DioExceptionType.cancel) {
+      return false;
+    }
+    if (e.type == DioExceptionType.connectionTimeout) {
+      return true;
+    }
+    if (e.type == DioExceptionType.sendTimeout) {
+      return true;
+    }
+    if (e.type == DioExceptionType.receiveTimeout) {
+      return true;
+    }
+    if (e.type == DioExceptionType.connectionError) {
+      return true;
+    }
+    final status = e.response?.statusCode;
+    if (status == null) {
+      return true;
+    }
+    if (status >= 500) {
+      return true;
+    }
+    return false;
   }
 
   List<ComicChapter> _parseChapters(dynamic data) {
