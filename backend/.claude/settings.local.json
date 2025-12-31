@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python3:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(venv/Scripts/activate)",
+      "Bash(echo:*)",
+      "Bash(/mnt/c/coding/netcom/venv/bin/python:*)",
+      "Bash(find:*)",
+      "mcp__chrome-devtools__navigate_page",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(xargs grep:*)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__new_page"
+    ]
+  }
+}

@@ -5,10 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/network/network_providers.dart';
 import 'podcast_models.dart';
-import 'podcast_provider.dart';
 import 'data/podcast_remote_service.dart';
 import 'audio_player_provider.dart';
-import 'podcast_player_page.dart';
 
 /// 播客详情页
 class PodcastDetailPage extends ConsumerStatefulWidget {
@@ -350,7 +348,6 @@ class _PodcastDetailPageState extends ConsumerState<PodcastDetailPage> {
   }
 
   Future<void> _playEpisode(int index) async {
-    final episode = _episodes[index];
     final detail = _detail;
 
     if (detail == null) return;
@@ -411,7 +408,7 @@ class MiniPlayer extends ConsumerWidget {
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),

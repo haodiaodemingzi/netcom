@@ -294,22 +294,59 @@ class HuantingScraper(BasePodcastScraper):
         title = ''
         audio_url = ''
 
-        # 获取标题
-        title_tag = soup.select_one('h1, .title')
+        # 获取标题 - 从 h1 标签
+        title_tag = soup.select_one('h1')
         if title_tag:
             title = title_tag.text.strip()
 
-        # 尝试从audio标签获取
-        audio_tag = soup.select_one('audio[source], source[src]')
-        if audio_tag:
-            audio_url = audio_tag.get('src', '')
+        # 尝试从PTaudio2.php iframe获取真实的play URL
+        # 先找到iframe或者直接请求PTaudio2.php
+        player_url = f'{self.base_url}/PTaudio2.php?id={episode_id}'
+        player_response = self._make_request(player_url)
 
-        # 如果没有找到音频URL，尝试从script中提取
+        if player_response:
+            # 解析player页面
+            player_soup = BeautifulSoup(player_response.text, 'lxml')
+
+            # 方法1: 直接从audio标签获取src
+            audio_tag = player_soup.select_one('audio[src]')
+            if audio_tag:
+                audio_url = audio_tag.get('src', '')
+
+            # 方法2: 从source标签获取
+            if not audio_url:
+                source_tag = player_soup.select_one('source[src]')
+                if source_tag:
+                    audio_url = source_tag.get('src', '')
+
+            # 方法3: 从JavaScript中提取audio URL
+            if not audio_url:
+                scripts = player_soup.find_all('script')
+                for script in scripts:
+                    if script.string:
+                        # 多种匹配模式
+                        patterns = [
+                            r"""audio["']\s*,\s*\{\s*src:\s*["']([^"']+)["']""",  # audio,{src:"url"}
+                            r"""src:\s*["']([^"']+\.(?:mp3|m4a|m3u8)[^"']*)["']""",  # src:"url.mp3"
+                            r'(https?://[^\s"\'<>]+\.(?:mp3|m4a|m3u8)[^\s"\'<>]*)',  # 直接匹配http...mp3
+                            r'["\']audioUrl["\']:\s*["\']([^"\']+)["\']',  # audioUrl:"url"
+                            r'["\']playUrl["\']:\s*["\']([^"\']+)["\']',  # playUrl:"url"
+                            r'["\']url["\']:\s*["\']([^"']+\.mp3[^"\']*)["\']',  # url:"url.mp3"
+                        ]
+                        for pattern in patterns:
+                            match = re.search(pattern, script.string, re.IGNORECASE)
+                            if match:
+                                audio_url = match.group(1).strip()
+                                logger.info(f"Found audio URL via pattern: {audio_url[:50]}...")
+                                break
+                    if audio_url:
+                        break
+
+        # 如果仍然没有找到，尝试从主页面提取
         if not audio_url:
             scripts = soup.find_all('script')
             for script in scripts:
                 if script.string:
-                    # 查找各种可能的音频URL格式
                     patterns = [
                         r'(https?://[^\s"\'<>]+\.mp3[^\s"\'<>]*)',
                         r'(https?://[^\s"\'<>]+\.m4a[^\s"\'<>]*)',
@@ -321,11 +358,14 @@ class HuantingScraper(BasePodcastScraper):
                         if match:
                             audio_url = match.group(1)
                             break
-                    if audio_url:
-                        break
+                if audio_url:
+                    break
 
-        # 注意: 该网站音频URL通过JavaScript动态加载，可能无法直接抓取
-        # 前端需要处理空audioUrl的情况，可能需要使用其他方式播放
+        # 检查是否被限流
+        if not audio_url or '受限' in player_response.text if player_response else False:
+            logger.warning(f"Rate limited or no audio URL found for episode {episode_id}")
+            # 仍然返回结果，但audioUrl为空
+            pass
 
         return {
             'id': episode_id,

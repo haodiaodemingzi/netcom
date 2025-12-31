@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../components/podcast_card.dart';
-import '../../core/storage/storage_providers.dart';
 import 'podcast_models.dart';
 import 'podcast_provider.dart';
 
@@ -315,7 +314,7 @@ class _CategoryBar extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final category = categories[index];
                 final selected = category.id == state.selectedCategory?.id;
@@ -333,7 +332,7 @@ class _CategoryBar extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7),
+                        color: selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ),

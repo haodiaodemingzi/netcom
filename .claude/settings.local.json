@@ -9,7 +9,26 @@
       "Bash(curl:*)",
       "Bash(python app.py:*)",
       "Bash(timeout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(cat:*)",
+      "Bash(tr:*)",
+      "Bash(python3:*)",
+      "Bash(python3 -m pip:*)",
+      "Bash(. venv/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python3:*)",
+      "Bash(pip3:*)",
+      "Bash(apt-get list:*)",
+      "Bash(dir:*)",
+      "Bash(where:*)",
+      "Bash(npm install:*)",
+      "Bash(npm search:*)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__take_snapshot"
     ]
   },
   "model": "glm-4.7"

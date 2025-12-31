@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'audio_player_provider.dart';
-import 'podcast_models.dart';
 
 /// 播客播放器页面
 class PodcastPlayerPage extends ConsumerStatefulWidget {
@@ -124,7 +123,7 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
                 image: NetworkImage(coverUrl),
                 fit: BoxFit.cover,
                 colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.6),
+                  Colors.black.withValues(alpha: 0.6),
                   BlendMode.darken,
                 ),
               )
@@ -203,7 +202,7 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 20,
                 spreadRadius: 5,
               ),
@@ -338,7 +337,7 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            Colors.black.withOpacity(0.8),
+            Colors.black.withValues(alpha: 0.8),
           ],
         ),
       ),

@@ -24,8 +24,7 @@ class PodcastRemoteService {
       }
       final result = <String, PodcastSourceInfo>{};
       for (final entry in sourcesRaw.entries) {
-        if (entry.key is! String) continue;
-        result[entry.key as String] = PodcastSourceInfo.fromJson(entry.value as Map<String, dynamic>? ?? {});
+        result[entry.key] = PodcastSourceInfo.fromJson(entry.value as Map<String, dynamic>? ?? {});
       }
       return result;
     } catch (e) {
@@ -277,7 +276,7 @@ class PodcastRemoteService {
     for (int i = 1; i <= 20; i++) {
       episodes.add(PodcastEpisode(
         id: '${programId}_ep_$i',
-        title: '第${i}集 - ${_getEpisodeTitle(i)}',
+        title: '第$i集 - ${_getEpisodeTitle(i)}',
         duration: 1800 + i * 60,
         publishTime: '2024-01-${(i % 28 + 1).toString().padLeft(2, '0')}',
         order: i,

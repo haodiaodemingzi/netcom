@@ -150,6 +150,7 @@ class PodcastsNotifier extends StateNotifier<PodcastsState> {
   int _searchToken = 0;
   bool _initializing = false;
   DateTime? _lastFeedAt;
+  @override
   bool mounted = true;
 
   void _safeSetState(PodcastsState Function(PodcastsState) updater) {
@@ -413,6 +414,7 @@ class PodcastsNotifier extends StateNotifier<PodcastsState> {
     await _settingsRepository?.update({'viewMode': next == PodcastsViewMode.list ? 'list' : 'card'});
   }
 
+  @override
   void dispose() {
     mounted = false;
     super.dispose();
