@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Skill(codex)"
+      "Skill(codex)",
+      "Bash(flutter pub run build_runner build --delete-conflicting-outputs)",
+      "Bash(flutter pub get)",
+      "Bash(flutter analyze)",
+      "Bash(flutter analyze:*)",
+      "Bash(curl:*)",
+      "Bash(python app.py:*)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)"
     ]
-  }
+  },
+  "model": "glm-4.7"
 }

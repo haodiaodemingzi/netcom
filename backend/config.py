@@ -102,3 +102,22 @@ CACHE_TIMEOUT = {
     'chapters': 600,
     'images': 1800,
 }
+
+# 播客数据源配置
+PODCAST_SOURCES = {
+    'ximalaya': {
+        'name': '喜马拉雅',
+        'base_url': 'https://www.ximalaya.com',
+        'enabled': True,
+        'description': '喜马拉雅 - 有声书、相声评书、音乐等音频内容'
+    },
+    'lizhi': {
+        'name': '荔枝FM',
+        'base_url': 'https://www.lizhi.fm',
+        'enabled': True,
+        'description': '荔枝FM - 情感、音乐、故事等播客内容'
+    }
+}
+
+# 默认播客数据源
+DEFAULT_PODCAST_SOURCE = 'ximalaya'

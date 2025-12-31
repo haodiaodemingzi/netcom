@@ -22,6 +22,10 @@ import '../features/ebooks/ebook_detail_page.dart';
 import '../features/ebooks/ebook_reader_page.dart';
 import '../features/ebooks/ebook_offline_reader_page.dart';
 import '../features/market/market_page.dart';
+import '../features/podcast/podcast_page.dart';
+import '../features/podcast/podcast_provider.dart';
+import '../features/podcast/podcast_detail_page.dart';
+import '../features/podcast/podcast_player_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -47,6 +51,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/tabs/videos',
                 name: 'videos',
                 builder: (context, state) => const VideosPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tabs/podcasts',
+                name: 'podcasts',
+                builder: (context, state) => const PodcastsPage(),
               ),
             ],
           ),
@@ -197,6 +210,50 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      GoRoute(
+        path: '/podcast/:id',
+        name: 'podcastDetail',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          final source = extra?['source'] as String?;
+          return PodcastDetailPage(podcastId: id, source: source);
+        },
+      ),
+      GoRoute(
+        path: '/podcast-player',
+        name: 'podcastPlayer',
+        parentNavigatorKey: navigatorKey,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final podcastId = extra?['podcastId'] as String?;
+          final podcastTitle = extra?['podcastTitle'] as String?;
+          final podcastCover = extra?['podcastCover'] as String?;
+          final episodeIndex = extra?['episodeIndex'] as int? ?? 0;
+          final source = extra?['source'] as String?;
+          return CustomTransitionPage(
+            key: state.pageKey,
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(0.0, 1.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOut;
+              final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              final offsetAnimation = animation.drive(tween);
+              return SlideTransition(
+                position: offsetAnimation,
+                child: child,
+              );
+            },
+            child: PodcastPlayerPage(
+              podcastId: podcastId,
+              podcastTitle: podcastTitle,
+              podcastCover: podcastCover,
+              episodeIndex: episodeIndex,
+              source: source,
+            ),
+          );
+        },
+      ),
     ],
   );
 });
@@ -218,6 +275,8 @@ class AppShell extends ConsumerWidget {
       } else if (index == 1) {
         ref.read(videosProvider.notifier).ensureWarm();
       } else if (index == 2) {
+        ref.read(podcastsProvider.notifier).ensureWarm();
+      } else if (index == 3) {
         // 电子书页面预热（后续可补充 ensureWarm）
       }
     });
@@ -234,6 +293,7 @@ class AppShell extends ConsumerWidget {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: '漫画'),
           NavigationDestination(icon: Icon(Icons.movie_outlined), selectedIcon: Icon(Icons.movie), label: '视频'),
+          NavigationDestination(icon: Icon(Icons.podcasts_outlined), selectedIcon: Icon(Icons.podcasts), label: '播客'),
           NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: '电子书'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '我的'),
         ],
