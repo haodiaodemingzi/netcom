@@ -1,4 +1,5 @@
 from .podcast_scraper import XimalayaScraper, LizhiScraper
+from .huanting_scraper import HuantingScraper
 from config import PODCAST_SOURCES
 
 class PodcastScraperFactory:
@@ -7,6 +8,7 @@ class PodcastScraperFactory:
     _scrapers = {
         'ximalaya': XimalayaScraper,
         'lizhi': LizhiScraper,
+        'huanting': HuantingScraper,
     }
 
     _instances = {}

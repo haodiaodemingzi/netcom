@@ -12,7 +12,7 @@ logging.basicConfig(
 from routes.comic import comic_bp
 from routes.search import search_bp
 from routes.ebook import ebook_bp
-from routes.video import video_bp
+from routes.video import video_bhttps://www.huanting.cc/p
 from routes.market import market_bp
 from routes.podcast import podcast_bp
 from services.scraper_factory import ScraperFactory

@@ -116,6 +116,18 @@ PODCAST_SOURCES = {
         'base_url': 'https://www.lizhi.fm',
         'enabled': True,
         'description': '荔枝FM - 情感、音乐、故事等播客内容'
+    },
+    'huanting': {
+        'name': '一夜听书网',
+        'base_url': 'https://www.huanting.cc',
+        'enabled': True,
+        'description': '一夜听书网 - 有声小说,玄幻武侠,都市言情,恐怖悬疑等音频内容',
+        'download_config': {
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://www.huanting.cc/'
+            }
+        }
     }
 }
 
