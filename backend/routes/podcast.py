@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 podcast_bp = Blueprint('podcast', __name__)
 
 
-@podcast_bp.route('/sources', methods=['GET'])
+@podcast_bp.route('/podcast/sources', methods=['GET'])
 @handle_errors("获取数据源列表失败")
 def get_sources():
     """获取所有可用数据源"""
     return success_response(PodcastScraperFactory.get_available_sources())
 
 
-@podcast_bp.route('/categories', methods=['GET'])
+@podcast_bp.route('/podcast/categories', methods=['GET'])
 @handle_errors("获取分类列表失败")
 def get_categories():
     """获取分类列表"""
@@ -27,7 +27,7 @@ def get_categories():
     return success_response(scraper.get_categories())
 
 
-@podcast_bp.route('/programs', methods=['GET'])
+@podcast_bp.route('/podcast/programs', methods=['GET'])
 @handle_errors("获取播客列表失败")
 def get_programs():
     """获取播客节目列表（按分类）"""
@@ -38,7 +38,7 @@ def get_programs():
     return success_response(scraper.get_programs(category, page, limit))
 
 
-@podcast_bp.route('/programs/hot', methods=['GET'])
+@podcast_bp.route('/podcast/programs/hot', methods=['GET'])
 @handle_errors("获取热门播客失败")
 def get_hot_programs():
     """获取热门播客"""
@@ -48,7 +48,7 @@ def get_hot_programs():
     return success_response(scraper.get_hot_programs(page, limit))
 
 
-@podcast_bp.route('/programs/latest', methods=['GET'])
+@podcast_bp.route('/podcast/programs/latest', methods=['GET'])
 @handle_errors("获取最新播客失败")
 def get_latest_programs():
     """获取最新播客"""
@@ -58,7 +58,7 @@ def get_latest_programs():
     return success_response(scraper.get_latest_programs(page, limit))
 
 
-@podcast_bp.route('/programs/<program_id>', methods=['GET'])
+@podcast_bp.route('/podcast/programs/<program_id>', methods=['GET'])
 @handle_errors("获取播客详情失败")
 def get_program_detail(program_id):
     """获取播客详情"""
@@ -67,7 +67,7 @@ def get_program_detail(program_id):
     return success_response(scraper.get_program_detail(program_id))
 
 
-@podcast_bp.route('/programs/<program_id>/episodes', methods=['GET'])
+@podcast_bp.route('/podcast/programs/<program_id>/episodes', methods=['GET'])
 @handle_errors("获取单集列表失败")
 def get_episodes(program_id):
     """获取节目单集列表"""
@@ -77,7 +77,7 @@ def get_episodes(program_id):
     return success_response(scraper.get_episodes(program_id, page, limit))
 
 
-@podcast_bp.route('/episodes/<episode_id>', methods=['GET'])
+@podcast_bp.route('/podcast/episodes/<episode_id>', methods=['GET'])
 @handle_errors("获取单集详情失败")
 def get_episode_detail(episode_id):
     """获取单集详情（含音频地址）"""
@@ -86,7 +86,7 @@ def get_episode_detail(episode_id):
     return success_response(scraper.get_episode_detail(episode_id))
 
 
-@podcast_bp.route('/search', methods=['GET'])
+@podcast_bp.route('/podcast/search', methods=['GET'])
 @handle_errors("搜索播客失败")
 def search_programs():
     """搜索播客"""

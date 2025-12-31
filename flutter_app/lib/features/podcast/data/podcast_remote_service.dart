@@ -3,7 +3,7 @@ import '../podcast_models.dart';
 import '../../../core/utils/string_utils.dart';
 
 /// 是否使用Mock数据（后端未实现时设为true）
-const bool kUseMockData = true;
+const bool kUseMockData = false;
 
 class PodcastRemoteService {
   PodcastRemoteService(this._api);

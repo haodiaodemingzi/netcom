@@ -326,12 +326,12 @@ class HuantingScraper(BasePodcastScraper):
                     if script.string:
                         # 多种匹配模式
                         patterns = [
-                            r"""audio["']\s*,\s*\{\s*src:\s*["']([^"']+)["']""",  # audio,{src:"url"}
-                            r"""src:\s*["']([^"']+\.(?:mp3|m4a|m3u8)[^"']*)["']""",  # src:"url.mp3"
+                            r'''audio["']\s*,\s*\{\s*src:\s*["']([^"']+)["']''',  # audio,{src:"url"}
+                            r'''src:\s*["']([^"']+\.(?:mp3|m4a|m3u8)[^"']*)["']''',  # src:"url.mp3"
                             r'(https?://[^\s"\'<>]+\.(?:mp3|m4a|m3u8)[^\s"\'<>]*)',  # 直接匹配http...mp3
                             r'["\']audioUrl["\']:\s*["\']([^"\']+)["\']',  # audioUrl:"url"
                             r'["\']playUrl["\']:\s*["\']([^"\']+)["\']',  # playUrl:"url"
-                            r'["\']url["\']:\s*["\']([^"']+\.mp3[^"\']*)["\']',  # url:"url.mp3"
+                            r'''["']url["']:\s*["']([^"']+\.mp3[^"']*)["']''',  # url:"url.mp3"
                         ]
                         for pattern in patterns:
                             match = re.search(pattern, script.string, re.IGNORECASE)

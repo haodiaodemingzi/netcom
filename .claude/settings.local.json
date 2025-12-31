@@ -28,7 +28,15 @@
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__navigate_page",
       "mcp__chrome-devtools__evaluate_script",
-      "mcp__chrome-devtools__take_snapshot"
+      "mcp__chrome-devtools__take_snapshot",
+      "Bash(python:*)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -m py_compile:*)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c \"\nfrom services.podcast_scraper_factory import PodcastScraperFactory\nresult = PodcastScraperFactory.get_available_sources\\(\\)\nprint\\(''Available sources:'', result\\)\n\")",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" backend/app.py)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -m py_compile backend/routes/podcast.py)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c:*)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c \"\nfrom app import app\nprint\\(''Routes:''\\)\nfor rule in app.url_map.iter_rules\\(\\):\n    if ''podcast'' in str\\(rule\\):\n        print\\(f''  {rule.rule} -> {rule.endpoint}''\\)\n\")",
+      "Bash(netstat:*)"
     ]
   },
   "model": "glm-4.7"
