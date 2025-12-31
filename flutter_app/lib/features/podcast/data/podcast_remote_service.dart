@@ -134,17 +134,13 @@ class PodcastRemoteService {
     if (kUseMockData) {
       return mockDetail(programId);
     }
-    try {
-      if (isBlank(programId)) return null;
-      final params = <String, dynamic>{};
-      if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
-      final response = await _api.get<dynamic>('/podcast/programs/${programId.trim()}', query: params);
-      final data = _unwrap(response.data);
-      if (data is Map<String, dynamic>) return PodcastDetail.fromJson(data);
-      return null;
-    } catch (e) {
-      return mockDetail(programId);
-    }
+    if (isBlank(programId)) return null;
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
+    final response = await _api.get<dynamic>('/podcast/programs/${programId.trim()}', query: params);
+    final data = _unwrap(response.data);
+    if (data is Map<String, dynamic>) return PodcastDetail.fromJson(data);
+    return null;
   }
 
   /// 获取节目单集列表
@@ -152,26 +148,22 @@ class PodcastRemoteService {
     if (kUseMockData) {
       return mockEpisodes(programId);
     }
-    try {
-      if (isBlank(programId)) return const EpisodesResponse();
-      final params = <String, dynamic>{'page': page, 'limit': limit};
-      if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
-      final response = await _api.get<dynamic>('/podcast/programs/${programId.trim()}/episodes', query: params);
-      final data = _unwrap(response.data);
-      if (data is Map<String, dynamic>) {
-        final episodesJson = data['episodes'] as List?;
-        final episodes = episodesJson
-                ?.whereType<Map<String, dynamic>>()
-                .map(PodcastEpisode.fromJson)
-                .where((e) => isNotBlank(e.id))
-                .toList() ??
-            <PodcastEpisode>[];
-        return EpisodesResponse(episodes: episodes, hasMore: data['hasMore'] ?? false, total: data['total'] ?? episodes.length);
-      }
-      return const EpisodesResponse();
-    } catch (e) {
-      return mockEpisodes(programId);
+    if (isBlank(programId)) return const EpisodesResponse();
+    final params = <String, dynamic>{'page': page, 'limit': limit};
+    if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
+    final response = await _api.get<dynamic>('/podcast/programs/${programId.trim()}/episodes', query: params);
+    final data = _unwrap(response.data);
+    if (data is Map<String, dynamic>) {
+      final episodesJson = data['episodes'] as List?;
+      final episodes = episodesJson
+              ?.whereType<Map<String, dynamic>>()
+              .map(PodcastEpisode.fromJson)
+              .where((e) => isNotBlank(e.id))
+              .toList() ??
+          <PodcastEpisode>[];
+      return EpisodesResponse(episodes: episodes, hasMore: data['hasMore'] ?? false, total: data['total'] ?? episodes.length);
     }
+    return const EpisodesResponse();
   }
 
   /// 获取单集详情（含音频地址）
@@ -179,17 +171,13 @@ class PodcastRemoteService {
     if (kUseMockData) {
       return mockEpisodeDetail(episodeId);
     }
-    try {
-      if (isBlank(episodeId)) return null;
-      final params = <String, dynamic>{};
-      if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
-      final response = await _api.get<dynamic>('/podcast/episodes/${episodeId.trim()}', query: params);
-      final data = _unwrap(response.data);
-      if (data is Map<String, dynamic>) return PodcastEpisode.fromJson(data);
-      return null;
-    } catch (e) {
-      return mockEpisodeDetail(episodeId);
-    }
+    if (isBlank(episodeId)) return null;
+    final params = <String, dynamic>{};
+    if (isNotBlank(sourceId)) params['source'] = sourceId!.trim();
+    final response = await _api.get<dynamic>('/podcast/episodes/${episodeId.trim()}', query: params);
+    final data = _unwrap(response.data);
+    if (data is Map<String, dynamic>) return PodcastEpisode.fromJson(data);
+    return null;
   }
 
   // ========== Mock Data ==========

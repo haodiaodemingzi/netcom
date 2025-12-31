@@ -1,5 +1,6 @@
 from .podcast_scraper import XimalayaScraper, LizhiScraper
 from .huanting_scraper import HuantingScraper
+from .fm139_scraper import Fm139Scraper
 from config import PODCAST_SOURCES
 
 class PodcastScraperFactory:
@@ -9,6 +10,7 @@ class PodcastScraperFactory:
         'ximalaya': XimalayaScraper,
         'lizhi': LizhiScraper,
         'huanting': HuantingScraper,
+        'fm139': Fm139Scraper,
     }
 
     _instances = {}
@@ -17,7 +19,7 @@ class PodcastScraperFactory:
     def get_scraper(cls, source=None):
         """获取播客爬虫实例"""
         if source is None:
-            source = 'ximalaya'
+            source = 'fm139'
 
         # 检查数据源是否存在且启用
         if source not in PODCAST_SOURCES:

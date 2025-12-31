@@ -22,7 +22,7 @@ def get_sources():
 @handle_errors("获取分类列表失败")
 def get_categories():
     """获取分类列表"""
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_categories())
 
@@ -33,7 +33,7 @@ def get_programs():
     """获取播客节目列表（按分类）"""
     category = request.args.get('category', 'all')
     page, limit = get_pagination_params()
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_programs(category, page, limit))
 
@@ -43,7 +43,7 @@ def get_programs():
 def get_hot_programs():
     """获取热门播客"""
     page, limit = get_pagination_params()
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_hot_programs(page, limit))
 
@@ -53,7 +53,7 @@ def get_hot_programs():
 def get_latest_programs():
     """获取最新播客"""
     page, limit = get_pagination_params()
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_latest_programs(page, limit))
 
@@ -62,7 +62,7 @@ def get_latest_programs():
 @handle_errors("获取播客详情失败")
 def get_program_detail(program_id):
     """获取播客详情"""
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_program_detail(program_id))
 
@@ -72,7 +72,7 @@ def get_program_detail(program_id):
 def get_episodes(program_id):
     """获取节目单集列表"""
     page, limit = get_pagination_params(1, 50)
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_episodes(program_id, page, limit))
 
@@ -81,7 +81,7 @@ def get_episodes(program_id):
 @handle_errors("获取单集详情失败")
 def get_episode_detail(episode_id):
     """获取单集详情（含音频地址）"""
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.get_episode_detail(episode_id))
 
@@ -95,6 +95,6 @@ def search_programs():
         return jsonify({'error': '缺少keyword参数'}), 400
 
     page, limit = get_pagination_params()
-    source = get_source_param('ximalaya')
+    source = get_source_param('fm139')
     scraper = PodcastScraperFactory.get_scraper(source)
     return success_response(scraper.search(keyword, page, limit))

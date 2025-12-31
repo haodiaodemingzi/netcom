@@ -168,6 +168,8 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     List<PodcastEpisode> playlist = const [],
     int index = 0,
   }) async {
+    print('🎵 [AudioPlayer] playEpisode called: episodeId=$episodeId, podcastId=$podcastId, source=$source');
+
     state = state.copyWith(
       playerState: AudioPlayerState.loading,
       podcastId: podcastId,
@@ -178,9 +180,18 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     );
 
     // 获取单集详情（包含音频地址）
+    print('🎵 [AudioPlayer] Fetching episode detail...');
     final episode = await _remoteService.fetchEpisodeDetail(episodeId, source);
 
+    print('🎵 [AudioPlayer] Episode detail result: ${episode != null ? "FOUND" : "NULL"}');
+    if (episode != null) {
+      print('🎵 [AudioPlayer]   - title: ${episode.title}');
+      print('🎵 [AudioPlayer]   - audioUrl: ${episode.audioUrl ?? "EMPTY"}');
+      print('🎵 [AudioPlayer]   - audioUrlBackup: ${episode.audioUrlBackup ?? "EMPTY"}');
+    }
+
     if (episode == null || (episode.audioUrl?.isEmpty ?? true)) {
+      print('❌ [AudioPlayer] Cannot get audio URL!');
       state = state.copyWith(
         playerState: AudioPlayerState.error,
         errorMessage: '无法获取音频地址',
@@ -197,17 +208,22 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     // 播放音频
     try {
       final audioUrl = episode.audioUrl ?? '';
+      print('🎵 [AudioPlayer] Starting playback: $audioUrl');
       await _audioPlayer.play(UrlSource(audioUrl));
+      print('✅ [AudioPlayer] Playback started successfully');
       _startPositionTimer();
     } catch (e) {
+      print('❌ [AudioPlayer] Playback failed: $e');
       // 尝试备用地址
       if (episode.audioUrlBackup != null && episode.audioUrlBackup!.isNotEmpty) {
+        print('🎵 [AudioPlayer] Trying backup URL: ${episode.audioUrlBackup}');
         try {
           await _audioPlayer.play(UrlSource(episode.audioUrlBackup!));
+          print('✅ [AudioPlayer] Backup URL playback started');
           _startPositionTimer();
           return;
         } catch (e2) {
-          // ignore
+          print('❌ [AudioPlayer] Backup URL also failed: $e2');
         }
       }
       state = state.copyWith(
@@ -225,6 +241,8 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     String? source,
     int episodeIndex = 0,
   }) async {
+    print('🎵 [AudioPlayer] playPodcast called: podcastId=$podcastId, source=$source, episodeIndex=$episodeIndex');
+
     state = state.copyWith(
       playerState: AudioPlayerState.loading,
       podcastId: podcastId,
@@ -235,6 +253,7 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     );
 
     // 获取单集列表
+    print('🎵 [AudioPlayer] Fetching episodes list...');
     final episodesResponse = await _remoteService.fetchEpisodes(
       podcastId,
       limit: 100,
@@ -242,7 +261,14 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     );
     final episodes = episodesResponse.episodes;
 
+    print('🎵 [AudioPlayer] Episodes fetched: ${episodes.length} episodes');
+    if (episodes.isNotEmpty) {
+      print('🎵 [AudioPlayer] First episode: ${episodes.first.title} (id=${episodes.first.id})');
+      print('🎵 [AudioPlayer] First episode has audioUrl: ${episodes.first.audioUrl?.isNotEmpty ?? false}');
+    }
+
     if (episodes.isEmpty) {
+      print('❌ [AudioPlayer] No episodes available!');
       state = state.copyWith(
         playerState: AudioPlayerState.error,
         errorMessage: '暂无单集',
@@ -251,20 +277,27 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     }
 
     final episode = episodes[episodeIndex.clamp(0, episodes.length - 1)];
+    final actualIndex = episodeIndex.clamp(0, episodes.length - 1);
+
+    print('🎵 [AudioPlayer] Selected episode at index $actualIndex: ${episode.title}');
 
     state = state.copyWith(
       currentEpisode: episode,
       playlist: episodes,
-      currentIndex: episodeIndex.clamp(0, episodes.length - 1),
+      currentIndex: actualIndex,
     );
 
     // 播放音频
     try {
       final audioUrl = episode.audioUrl ?? '';
+      print('🎵 [AudioPlayer] Episode audioUrl: "$audioUrl"');
       if (audioUrl.isNotEmpty) {
+        print('🎵 [AudioPlayer] Playing directly with audioUrl from episode list');
         await _audioPlayer.play(UrlSource(audioUrl));
+        print('✅ [AudioPlayer] Playback started');
         _startPositionTimer();
       } else {
+        print('🎵 [AudioPlayer] No audioUrl in episode, fetching episode detail...');
         // 需要先获取单集详情
         await playEpisode(
           episodeId: episode.id,
@@ -277,6 +310,7 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
         );
       }
     } catch (e) {
+      print('❌ [AudioPlayer] Playback failed: $e');
       state = state.copyWith(
         playerState: AudioPlayerState.error,
         errorMessage: '播放失败: $e',
@@ -360,18 +394,32 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
 
   /// 指定位置播放
   Future<void> _playAtIndex(int index) async {
-    if (index < 0 || index >= state.playlist.length) return;
+    print('🎵 [AudioPlayer] _playAtIndex called: index=$index');
+
+    if (index < 0 || index >= state.playlist.length) {
+      print('❌ [AudioPlayer] Index out of bounds: $index (playlist size: ${state.playlist.length})');
+      return;
+    }
 
     final episode = state.playlist[index];
     state = state.copyWith(currentIndex: index);
 
+    print('🎵 [AudioPlayer] Playing episode at index $index: ${episode.title}');
+
     // 获取单集详情（包含音频地址）
+    print('🎵 [AudioPlayer] Fetching episode detail for ${episode.id}...');
     final episodeDetail = await _remoteService.fetchEpisodeDetail(
       episode.id,
       state.sourceId,
     );
 
+    print('🎵 [AudioPlayer] Episode detail result: ${episodeDetail != null ? "FOUND" : "NULL"}');
+    if (episodeDetail != null) {
+      print('🎵 [AudioPlayer]   - audioUrl: ${episodeDetail.audioUrl ?? "EMPTY"}');
+    }
+
     if (episodeDetail == null || (episodeDetail.audioUrl?.isEmpty ?? true)) {
+      print('❌ [AudioPlayer] Cannot get audio URL for episode!');
       state = state.copyWith(errorMessage: '无法获取音频');
       return;
     }
@@ -380,11 +428,16 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
 
     try {
       final audioUrl = episodeDetail.audioUrl ?? '';
+      print('🎵 [AudioPlayer] Starting playback: $audioUrl');
       await _audioPlayer.play(UrlSource(audioUrl));
+      print('✅ [AudioPlayer] Playback started');
       _startPositionTimer();
     } catch (e) {
+      print('❌ [AudioPlayer] Playback failed: $e');
       if (episodeDetail.audioUrlBackup != null && episodeDetail.audioUrlBackup!.isNotEmpty) {
+        print('🎵 [AudioPlayer] Trying backup URL...');
         await _audioPlayer.play(UrlSource(episodeDetail.audioUrlBackup!));
+        print('✅ [AudioPlayer] Backup playback started');
         _startPositionTimer();
       } else {
         state = state.copyWith(

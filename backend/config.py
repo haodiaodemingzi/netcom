@@ -128,6 +128,18 @@ PODCAST_SOURCES = {
                 'Referer': 'https://www.huanting.cc/'
             }
         }
+    },
+    'fm139': {
+        'name': '139FM',
+        'base_url': 'https://139fm.click',
+        'enabled': True,
+        'description': '139FM - 成人ASMR、有声小说、播客内容',
+        'download_config': {
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://139fm.click/'
+            }
+        }
     }
 }
 

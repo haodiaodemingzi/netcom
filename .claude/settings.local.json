@@ -36,7 +36,9 @@
       "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -m py_compile backend/routes/podcast.py)",
       "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c:*)",
       "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c \"\nfrom app import app\nprint\\(''Routes:''\\)\nfor rule in app.url_map.iter_rules\\(\\):\n    if ''podcast'' in str\\(rule\\):\n        print\\(f''  {rule.rule} -> {rule.endpoint}''\\)\n\")",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\":*)",
+      "Bash(\"C:/Users/me/AppData/Local/Programs/Python/Python313/python.exe\" -c \"\nimport sys\nimport io\nsys.stdout = io.TextIOWrapper\\(sys.stdout.buffer, encoding=''utf-8''\\)\nsys.path.insert\\(0, ''C:/coding/netcom/backend''\\)\n\nfrom services.podcast_scraper_factory import PodcastScraperFactory\n\n# 获取 fm139 爬虫实例\nscraper = PodcastScraperFactory.get_scraper\\(''fm139''\\)\n\nprint\\(''=== 测试获取单集详情（含解密的音频URL）===''\\)\ndetail = scraper.get_episode_detail\\(''3506_1''\\)\nif detail:\n    print\\(f''标题: {detail[\"\"title\"\"]}''\\)\n    print\\(f''音频URL: {detail[\"\"audioUrl\"\"]}''\\)\n    print\\(f''备用URL: {detail[\"\"audioUrlBackup\"\"]}''\\)\n    print\\(f''封面: {detail[\"\"cover\"\"][:60]}...'' if len\\(detail[\"\"cover\"\"]\\) > 60 else f''封面: {detail[\"\"cover\"\"]}''\\)\nelse:\n    print\\(''获取失败''\\)\n\")"
     ]
   },
   "model": "glm-4.7"

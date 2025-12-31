@@ -138,7 +138,7 @@ class PodcastsNotifier extends StateNotifier<PodcastsState> {
   }
 
   static const int _pageSize = 20;
-  static const String _defaultSource = 'ximalaya';
+  static const String _defaultSource = 'fm139';
 
   final PodcastRemoteService _remoteService;
   final SourceRepository? _sourceRepository;
