@@ -171,7 +171,6 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SourceTabBar(),
                   _CategoryBar(expanded: _categoriesExpanded, onToggle: _toggleCategories),
                   if (state.error != null && state.error!.isNotEmpty)
                     Padding(
@@ -391,56 +390,6 @@ class _SearchBar extends StatelessWidget {
                 : null,
         hintText: '搜索播客',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-}
-
-/// 源 TabBar
-class _SourceTabBar extends ConsumerWidget {
-  const _SourceTabBar();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(podcastsProvider);
-    // 从全局 sources 获取已安装的播客源
-    final sources = state.sources;
-    final installedSources = sources.keys.toList();
-
-    if (installedSources.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: installedSources.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final sourceId = installedSources[index];
-          final selected = sourceId == state.selectedSource;
-          final sourceInfo = sources[sourceId];
-
-          return InkWell(
-            onTap: () => ref.read(podcastsProvider.notifier).changeSource(sourceId),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                sourceInfo?.name ?? sourceId,
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                  color: selected ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../components/video_card.dart';
-import '../../core/storage/storage_providers.dart';
 import 'video_models.dart';
 import 'videos_provider.dart';
 
@@ -197,19 +195,14 @@ class _VideosPageState extends ConsumerState<VideosPage> {
               )
             else
               SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    _SourceTabBar(),
-                    _CategoryBar(
-                      categories: state.categories,
-                      selectedCategory: state.selectedCategory,
-                      expanded: _categoriesExpanded,
-                      onToggle: _toggleCategories,
-                      onSelect: (category) {
-                        ref.read(videosProvider.notifier).selectCategory(category);
-                      },
-                    ),
-                  ],
+                child: _CategoryBar(
+                  categories: state.categories,
+                  selectedCategory: state.selectedCategory,
+                  expanded: _categoriesExpanded,
+                  onToggle: _toggleCategories,
+                  onSelect: (category) {
+                    ref.read(videosProvider.notifier).selectCategory(category);
+                  },
                 ),
               ),
             if ((state.loading || state.sourceSwitching) && items.isNotEmpty)
@@ -430,60 +423,6 @@ class _SearchBar extends StatelessWidget {
         border: const OutlineInputBorder(),
       ),
       onSubmitted: onSubmitted,
-    );
-  }
-}
-
-/// 源 TabBar - 显示已安装的视频源
-class _SourceTabBar extends ConsumerWidget {
-  const _SourceTabBar();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(videosProvider);
-    final installedSources = ref.watch(sourceRepositoryProvider)?.listInstalled()['video'] ?? [];
-
-    if (installedSources.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: installedSources.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final sourceId = installedSources[index];
-          final selected = sourceId == state.selectedSource;
-          final sourceInfo = state.sources[sourceId];
-
-          return InkWell(
-            onTap: () => ref.read(videosProvider.notifier).changeSource(sourceId),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                sourceInfo?.name ?? sourceId,
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                  color: selected
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 }
