@@ -286,17 +286,48 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: shell,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: Container(
         height: 56,
-        selectedIndex: shell.currentIndex,
-        onDestinationSelected: (index) => _onTap(ref, index),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: '漫画'),
-          NavigationDestination(icon: Icon(Icons.movie_outlined), selectedIcon: Icon(Icons.movie), label: '视频'),
-          NavigationDestination(icon: Icon(Icons.podcasts_outlined), selectedIcon: Icon(Icons.podcasts), label: '播客'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: '电子书'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '我的'),
-        ],
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).dividerColor,
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            _buildNavItem(context, 0, '漫画', ref),
+            _buildNavItem(context, 1, '视频', ref),
+            _buildNavItem(context, 2, '播客', ref),
+            _buildNavItem(context, 3, '电子书', ref),
+            _buildNavItem(context, 4, '我的', ref),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(BuildContext context, int index, String label, WidgetRef ref) {
+    final isSelected = shell.currentIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => _onTap(ref, index),
+        child: Container(
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+        ),
       ),
     );
   }
