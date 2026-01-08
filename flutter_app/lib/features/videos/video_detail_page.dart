@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
-import '../../core/network/image_proxy.dart';
 import '../downloads/download_center_provider.dart';
 import 'video_detail_provider.dart';
 import 'video_models.dart';
@@ -59,18 +57,18 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     final notifier = ref.read(videoDetailProvider(args).notifier);
     await notifier.selectEpisode(episode);
     final state = ref.read(videoDetailProvider(args));
-    
+
     if (!mounted) return;
-    
+
     // 清理之前的控制器
     await _inlineController?.dispose();
-    
+
     if (state.playSource != null && state.playSource!.url.isNotEmpty) {
       final controller = VideoPlayerController.networkUrl(
         Uri.parse(state.playSource!.url),
         httpHeaders: state.playSource!.headers,
       );
-      
+
       await controller.initialize();
       if (mounted) {
         setState(() {
@@ -211,20 +209,6 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     final grouped = _groupEpisodes(episodes, size: 50);
     final currentGroup = grouped.isEmpty ? <VideoEpisode>[] : grouped[_groupIndex.clamp(0, grouped.length - 1)];
 
-    final topActions = Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        const Spacer(),
-        IconButton(
-          icon: Icon(state.isFavorite ? Icons.favorite : Icons.favorite_border),
-          onPressed: notifier.toggleFavorite,
-        ),
-      ],
-    );
-
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -253,38 +237,18 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                     )
                   : Container(
                       color: Colors.black,
-                      child: Stack(
-                        children: [
-                          CachedNetworkImage(
-                            imageUrl: proxyImageUrl(detail.cover),
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: Colors.grey.shade900,
-                              child: const Center(
-                                child: CircularProgressIndicator(color: Colors.white54),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: Colors.grey.shade900,
-                              child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                            ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            if (episodes.isNotEmpty) {
+                              _playInline(episodes.first);
+                            }
+                          },
+                          child: const Center(
+                            child: Icon(Icons.play_circle_outline, color: Colors.white54, size: 80),
                           ),
-                          Positioned.fill(
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  if (episodes.isNotEmpty) {
-                                    _playInline(episodes.first);
-                                  }
-                                },
-                                child: const Center(
-                                  child: Icon(Icons.play_circle_filled, color: Colors.white70, size: 64),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
             ),
@@ -309,10 +273,10 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                   Text(
                     detail.title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       const Icon(Icons.star, color: Colors.amber, size: 18),
@@ -367,7 +331,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                       children: detail.tags.map((tag) {
                         return Chip(
                           label: Text(tag),
-                          backgroundColor: colorScheme.surfaceVariant,
+                          backgroundColor: colorScheme.surfaceContainerHighest,
                           side: BorderSide(color: colorScheme.outlineVariant),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           visualDensity: VisualDensity.compact,
@@ -660,21 +624,6 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     });
   }
 
-  void _downloadAll(
-    VideoDetail detail,
-    List<VideoEpisode> allEpisodes,
-    DownloadCenterNotifier notifier,
-  ) {
-    if (allEpisodes.isEmpty) {
-      return;
-    }
-    final currentSource = widget.source;
-    final detailWithSource = (currentSource != null && currentSource.isNotEmpty)
-        ? detail.copyWith(source: currentSource)
-        : detail;
-    notifier.enqueueVideoEpisodes(detail: detailWithSource, episodes: allEpisodes);
-  }
-
   void _downloadSingle(
     VideoDetail detail,
     VideoEpisode episode,
@@ -824,27 +773,5 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       return scheme.onSurfaceVariant;
     }
     return scheme.onSurfaceVariant;
-  }
-
-  Widget _buildCover(String url) {
-    final raw = url.trim();
-    if (raw.isEmpty) {
-      return const Icon(Icons.broken_image_outlined, size: 48);
-    }
-    final fallback = proxyImageUrl(raw, useProxy: true);
-    return Image.network(
-      raw,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        if (raw == fallback) {
-          return const Icon(Icons.broken_image_outlined, size: 48);
-        }
-        return Image.network(
-          fallback,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48),
-        );
-      },
-    );
   }
 }

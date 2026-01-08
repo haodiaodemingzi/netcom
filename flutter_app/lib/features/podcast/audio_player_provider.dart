@@ -392,6 +392,11 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerStateModel> {
     await _playAtIndex(newIndex);
   }
 
+  /// 跳转到指定集播放（公开方法）
+  Future<void> playAtIndex(int index) async {
+    await _playAtIndex(index);
+  }
+
   /// 指定位置播放
   Future<void> _playAtIndex(int index) async {
     print('🎵 [AudioPlayer] _playAtIndex called: index=$index');

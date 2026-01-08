@@ -37,12 +37,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
   double _currentSpeed = 1.0;
   VideoFitMode _fitMode = VideoFitMode.contain;
   bool _wasPlaying = false;
-  
+
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-  
+
   late AnimationController _coverAnimationController;
   late Animation<double> _coverFadeAnimation;
-  
+
   Timer? _hideControlsTimer;
 
   @override
@@ -50,13 +50,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
     super.initState();
     widget.controller.addListener(_updateState);
     _wasPlaying = widget.controller.value.isPlaying;
-    
+
     // 初始化封面动画控制器
     _coverAnimationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _coverFadeAnimation = Tween<double>(
       begin: 1.0,
       end: 0.0,
@@ -64,7 +64,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
       parent: _coverAnimationController,
       curve: Curves.easeInOut,
     ));
-    
+
     // 监听视频初始化状态，初始化完成后淡出封面
     if (widget.controller.value.isInitialized) {
       _coverAnimationController.forward();
@@ -84,6 +84,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
       return;
     }
     final isPlaying = widget.controller.value.isPlaying;
+    final isInitialized = widget.controller.value.isInitialized;
+
     if (isPlaying && !_wasPlaying) {
       if (_showControls) {
         _startHideControlsTimer();
@@ -95,8 +97,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
     setState(() {});
 
     // 视频初始化完成后淡出封面
-    if (widget.controller.value.isInitialized &&
-        !_coverAnimationController.isCompleted) {
+    if (isInitialized && !_coverAnimationController.isCompleted) {
       _coverAnimationController.forward();
     }
   }
@@ -247,19 +248,43 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildIconButton({
-    required IconData icon,
+  String _getFitModeText() {
+    switch (_fitMode) {
+      case VideoFitMode.contain:
+        return '原比例';
+      case VideoFitMode.cover:
+        return '填充';
+      case VideoFitMode.fill:
+        return '拉伸';
+    }
+  }
+
+  Widget _buildTextButton({
+    required String text,
     required VoidCallback onPressed,
+    bool enabled = true,
   }) {
-    return IconButton(
-      onPressed: onPressed,
-      icon: Icon(icon, color: Colors.white),
-      style: IconButton.styleFrom(
-        padding: const EdgeInsets.all(10),
-        shape: const CircleBorder(side: BorderSide(color: Colors.white54)),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return SizedBox(
+      height: 36,
+      child: ElevatedButton(
+        onPressed: enabled ? onPressed : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white24,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -308,7 +333,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
                   ),
                 ),
               ),
-            
+
             // 视频播放器层
             if (isInitialized)
               Center(
@@ -351,24 +376,23 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
                   },
                 ),
               ),
-            
+
             // 加载指示器层
-            if (!isInitialized || isBuffering)
+            if (!isInitialized)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                ),
+              ),
+            if (isInitialized && isBuffering)
               Positioned.fill(
                 child: Container(
                   color: Colors.black.withOpacity(0.3),
                   child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(color: Colors.white),
-                        SizedBox(height: 16),
-                        Text(
-                          '缓冲中...',
-                          style: TextStyle(color: Colors.white, fontSize: 14),
-                        ),
-                      ],
-                    ),
+                    child: CircularProgressIndicator(color: Colors.white),
                   ),
                 ),
               ),
@@ -450,33 +474,51 @@ class _CustomVideoControlsState extends State<CustomVideoControls> with TickerPr
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildIconButton(
-                                icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                                onPressed: _togglePlayPause,
-                              ),
-                              const SizedBox(width: 16),
-                              _buildIconButton(
-                                icon: _fitMode == VideoFitMode.contain
-                                    ? Icons.fit_screen
-                                    : _fitMode == VideoFitMode.cover
-                                        ? Icons.photo_size_select_large
-                                        : Icons.crop_16_9,
-                                onPressed: _showFitModeDialog,
-                              ),
-                              const SizedBox(width: 8),
-                              _buildIconButton(
-                                icon: _isPortrait ? Icons.screen_rotation : Icons.screen_lock_rotation,
-                                onPressed: _toggleOrientation,
+                              // 播放按钮 - 保持图标
+                              SizedBox(
+                                width: 56,
+                                height: 56,
+                                child: IconButton(
+                                  onPressed: _togglePlayPause,
+                                  icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 32),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white24,
+                                    shape: const CircleBorder(),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              _buildIconButton(
-                                icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                                onPressed: _toggleFullscreen,
+                              // 屏幕比例 - 改为文字
+                              Flexible(
+                                child: _buildTextButton(
+                                  text: _getFitModeText(),
+                                  onPressed: _showFitModeDialog,
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              _buildIconButton(
-                                icon: Icons.speed,
-                                onPressed: _showSpeedDialog,
+                              const SizedBox(width: 4),
+                              // 横屏/竖屏 - 改为文字
+                              Flexible(
+                                child: _buildTextButton(
+                                  text: _isPortrait ? '横屏' : '竖屏',
+                                  onPressed: _toggleOrientation,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              // 全屏 - 改为文字
+                              Flexible(
+                                child: _buildTextButton(
+                                  text: _isFullscreen ? '退出' : '全屏',
+                                  onPressed: _toggleFullscreen,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              // 播放速度 - 改为文字
+                              Flexible(
+                                child: _buildTextButton(
+                                  text: '${_currentSpeed}x',
+                                  onPressed: _showSpeedDialog,
+                                ),
                               ),
                             ],
                           ),

@@ -98,6 +98,10 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
                   child: _buildContent(state),
                 ),
 
+                // 播放列表
+                if (state.playlist.isNotEmpty)
+                  _buildPlaylist(state),
+
                 // 底部控制
                 _buildControls(state),
               ],
@@ -109,6 +113,25 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
             Container(
               color: Colors.black54,
               child: const Center(child: CircularProgressIndicator()),
+            ),
+
+          // 错误提示
+          if (state.errorMessage != null)
+            Positioned(
+              top: 80,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  state.errorMessage!,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
             ),
         ],
       ),
@@ -193,32 +216,71 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
     final coverUrl = state.podcastCover ?? widget.podcastCover;
 
     return Center(
-      child: RotationTransition(
-        turns: Tween(begin: 0.0, end: 1.0).animate(_rotateController),
-        child: Container(
-          width: 280,
-          height: 280,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 5,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // 封面旋转
+          RotationTransition(
+            turns: Tween(begin: 0.0, end: 1.0).animate(_rotateController),
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
               ),
-            ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: coverUrl != null && coverUrl.isNotEmpty
+                    ? Image.network(
+                        coverUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _buildPlaceholder(),
+                      )
+                    : _buildPlaceholder(),
+              ),
+            ),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: coverUrl != null && coverUrl.isNotEmpty
-                ? Image.network(
-                    coverUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildPlaceholder(),
-                  )
-                : _buildPlaceholder(),
-          ),
-        ),
+
+          // 加载动画叠加层
+          if (state.isLoading)
+            Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.black.withValues(alpha: 0.5),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 50,
+                    height: 50,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '加载中...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -352,62 +414,59 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // 播放模式
-              IconButton(
-                icon: Icon(_getModeIcon(state.playbackMode)),
-                color: Colors.white,
-                onPressed: () {
-                  final modes = PlaybackMode.values;
-                  final currentIndex = modes.indexOf(state.playbackMode);
-                  final nextIndex = (currentIndex + 1) % modes.length;
-                  ref.read(audioPlayerProvider.notifier).setPlaybackMode(modes[nextIndex]);
-                },
-              ),
-
               // 上一集
-              IconButton(
-                icon: const Icon(Icons.skip_previous_rounded, size: 36),
-                color: Colors.white,
-                onPressed: state.playlist.length > 1
-                    ? () => ref.read(audioPlayerProvider.notifier).playPrevious()
-                    : null,
+              _buildTextButton(
+                '上一集',
+                state.playlist.length > 1,
+                onPressed: () => ref.read(audioPlayerProvider.notifier).playPrevious(),
               ),
 
               // 播放/暂停
-              FloatingActionButton.large(
-                onPressed: () => ref.read(audioPlayerProvider.notifier).togglePlay(),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Icon(
-                  state.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 40,
+              SizedBox(
+                width: 90,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () => ref.read(audioPlayerProvider.notifier).togglePlay(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: Text(state.isPlaying ? '暂停' : '播放'),
                 ),
               ),
 
               // 下一集
-              IconButton(
-                icon: const Icon(Icons.skip_next_rounded, size: 36),
-                color: Colors.white,
-                onPressed: state.playlist.length > 1
-                    ? () => ref.read(audioPlayerProvider.notifier).playNext()
-                    : null,
-              ),
-
-              // 播放速度
-              IconButton(
-                icon: Text(
-                  '${state.playbackRate}x',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                onPressed: () => _showSpeedSelector(context, ref, state),
+              _buildTextButton(
+                '下一集',
+                state.playlist.length > 1,
+                onPressed: () => ref.read(audioPlayerProvider.notifier).playNext(),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTextButton(String text, bool enabled, {required VoidCallback onPressed}) {
+    return TextButton(
+      onPressed: enabled ? onPressed : null,
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white,
+        textStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      child: Text(text),
     );
   }
 
@@ -425,17 +484,6 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
     );
   }
 
-  IconData _getModeIcon(PlaybackMode mode) {
-    switch (mode) {
-      case PlaybackMode.sequence:
-        return Icons.repeat;
-      case PlaybackMode.single:
-        return Icons.repeat_one;
-      case PlaybackMode.shuffle:
-        return Icons.shuffle;
-    }
-  }
-
   String _getModeText(PlaybackMode mode) {
     switch (mode) {
       case PlaybackMode.sequence:
@@ -447,34 +495,101 @@ class _PodcastPlayerPageState extends ConsumerState<PodcastPlayerPage> with Sing
     }
   }
 
-  void _showSpeedSelector(BuildContext context, WidgetRef ref, AudioPlayerStateModel state) {
-    final speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (ctx) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: speeds.map((speed) {
-              return ListTile(
-                title: Text(
-                  '${speed}x',
-                  style: TextStyle(
-                    fontWeight: speed == state.playbackRate ? FontWeight.bold : FontWeight.normal,
-                    color: speed == state.playbackRate ? Theme.of(context).colorScheme.primary : null,
+  /// 构建播放列表
+  Widget _buildPlaylist(AudioPlayerStateModel state) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+      ),
+      child: Column(
+        children: [
+          // 列表标题
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Text(
+                  '播放列表 (${state.playlist.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                trailing: speed == state.playbackRate ? const Icon(Icons.check_rounded) : null,
-                onTap: () {
-                  ref.read(audioPlayerProvider.notifier).setPlaybackRate(speed);
-                  Navigator.of(ctx).pop();
-                },
-              );
-            }).toList(),
+                const Spacer(),
+                Text(
+                  '当前第 ${state.currentIndex + 1} 集',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+
+          // 列表内容
+          Expanded(
+            child: ListView.builder(
+              itemCount: state.playlist.length,
+              itemBuilder: (context, index) {
+                final episode = state.playlist[index];
+                final isCurrent = index == state.currentIndex;
+
+                return ListTile(
+                  dense: true,
+                  leading: isCurrent
+                      ? Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        )
+                      : Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 14,
+                          ),
+                        ),
+                  title: Text(
+                    episode.title,
+                    style: TextStyle(
+                      color: isCurrent ? Theme.of(context).colorScheme.primary : Colors.white,
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    episode.formattedDuration,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 11,
+                    ),
+                  ),
+                  onTap: () {
+                    if (index != state.currentIndex) {
+                      ref.read(audioPlayerProvider.notifier).playAtIndex(index);
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
